@@ -1,0 +1,80 @@
+/*
+Plugin name: Duplicate Killer
+Version: 1.1.8
+*/
+
+.dk-fieldset {
+    border: 1px solid grey;
+	padding:10px;
+	margin:10px;
+}
+.dk-settings-form-row{
+	background-color:white;
+	border:1px solid grey;
+	margin-bottom:25px;
+}
+.dk-single-form{
+	box-shadow: 1px 2px 5px grey;
+    border-radius: 8px;
+    padding: 10px;
+    margin: 10px;
+	display:inline-table;
+	max-width:90%;
+	width:350px;
+}
+.dk-single-form:hover{
+	box-shadow: 1px 2px 15px grey;
+	transition-duration: 0.5s;
+	position:relative;
+	top:3px;
+}
+.dk-form-header{
+	text-align: center;
+    border-bottom: 3px double grey;
+    font-size: 17px;
+    padding-bottom: 10px;
+    font-weight: 600;
+	box-shadow: 0 4px 2px -2px grey;
+}
+.dk-input-checkbox-callback input {
+  position: absolute;
+  opacity: 0;
+  height: 0;
+  width: 0;
+}
+.dk-input-checkbox-callback label {
+  position: relative;
+  display: block;
+  padding-left: 30px;
+  cursor: pointer;
+}
+.dk-input-checkbox-callback label:before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  margin-top: -10px;
+  left: 0;
+  display: block;
+  height: 20px;
+  width: 20px;
+  background-color: #3D3D3D;
+  border-radius: 3px;
+}
+.dk-input-checkbox-callback label:hover:before {
+  background-color: black;
+}
+.dk-input-checkbox-callback label:after {
+  content: '';
+  position: absolute;
+  left: 7px;
+  top: 1px;
+  width: 5px;
+  height: 10px;
+  border: solid #FCC224;
+  border-width: 0 3px 3px 0;
+  transform: rotate(45deg);
+  opacity: 0;
+}
+.dk-input-checkbox-callback input:checked + label:after {
+  opacity: 1;
+}
