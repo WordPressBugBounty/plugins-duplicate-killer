@@ -153,21 +153,28 @@ function duplicateKiller_cf7_validate_input($input){
 	$output = array();
 	// Create our array for storing the validated options
     foreach($input as $key =>$value){
-		foreach($value as $arr => $asc){
-			//check if someone putting in ‘dog’ when the only valid values are numbers
-			if($asc !== "1"){
-				$value[$arr] = "1";
-				$output[$key] = $value;
-			}else{
-				$output[$key] = $value;
+		if(is_array($value)){
+			foreach($value as $arr => $asc){
+				//check if someone putting in ‘dog’ when the only valid values are numbers
+				if($asc !== "1"){
+					$value[$arr] = "1";
+					$output[$key] = $value;
+				}else{
+					$output[$key] = $value;
+				}
 			}
 		}
 	}
-	if($input['cf7_cookie_option'] !== "1"){
-		$output['cf7_cookie_option'] = "0";
+	if(isset($input['cf7_cookie_option'])){
+		if($input['cf7_cookie_option'] !== "1"){
+			$output['cf7_cookie_option'] = "0";
+		}else{
+			$output['cf7_cookie_option'] = "1";
+		}
 	}else{
-		$output['cf7_cookie_option'] = "1";
+		$output['cf7_cookie_option'] = "0";
 	}
+	
 	if(filter_var($input['cf7_cookie_option_days'], FILTER_VALIDATE_INT) === false){
 		$output['cf7_cookie_option_days'] = 365;
 	}else{

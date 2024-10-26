@@ -103,11 +103,13 @@ function duplicateKiller_wpforms_before_send_email($fields, $entry, $form_data){
 function duplicateKiller_wpforms_get_forms(){
 	$wpforms_posts = get_posts([
 		'post_type' => 'wpforms',
-		'order' => 'ASC'
+		'order' => 'ASC',
+		'nopaging' => true
 	]);
 	$output = array();
+
 	foreach($wpforms_posts as $form){
-		$form_data = json_decode(stripslashes($form->post_content), true);
+		$form_data = json_decode($form->post_content, true);
 		if (!empty( $form_data['fields'])){
 			foreach((array) $form_data['fields'] as $key => $field){
 				if($field['type'] == "name" OR
@@ -118,6 +120,7 @@ function duplicateKiller_wpforms_get_forms(){
 			}
 		}
 	}
+	
 	return $output;
 }
 /*********************************
