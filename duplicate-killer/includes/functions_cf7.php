@@ -16,6 +16,9 @@ function dk_cf7_is_cookie_set(){
 	if(isset($cf7_page['cf7_cookie_option']) AND $cf7_page['cf7_cookie_option'] == "1"){
 		dk_checked_defined_constants('dk_cookie_unique_time',md5(microtime(true).mt_Rand()));
 		dk_checked_defined_constants('dk_cookie_days_persistence',$cf7_page['cf7_cookie_option_days']);
+		
+		
+
 		add_action( 'wp_footer', function(){?>
 		<script id="duplicate-killer-wpcf7-form" type="text/javascript">
 			(function($){
@@ -44,7 +47,6 @@ function dk_cf7_is_cookie_set(){
 	}
 	}
 }
-
 function duplicateKiller_cf7_before_send_email($contact_form, &$abort, $object) {
     global $wpdb;
     $table_name = $wpdb->prefix.'dk_forms_duplicate';
@@ -127,15 +129,24 @@ function duplicate_killer_CF7_get_forms(){
 		$output = array();
 		foreach($CF7Query as $form){
 			$tagsArray = explode(" ",$form['post_content']);
+			
+			
 			for($i=0;$i<count($tagsArray);$i++){
+				
 				if(str_contains($tagsArray[$i],"[text")){
-					$output[$form['post_title']][] = trim($tagsArray[$i+1],"]");
+					//splits a string into an array based on a specified delimiter
+					$result = explode(']', $tagsArray[$i+1]);
+					
+					//return the first element of the resulting array
+					$output[$form['post_title']][] = $result[0];
 				}
 				if(str_contains($tagsArray[$i],"[email")){
-					$output[$form['post_title']][] = trim($tagsArray[$i+1],"]");
+					$result = explode(']', $tagsArray[$i+1]);
+					$output[$form['post_title']][] = $result[0];
 				}
 				if(str_contains($tagsArray[$i],"[tel")){
-					$output[$form['post_title']][] = trim($tagsArray[$i+1],"]");
+					$result = explode(']', $tagsArray[$i+1]);
+					$output[$form['post_title']][] = $result[0];
 				}
 				if(str_contains($tagsArray[$i],"[submit")){
 					break;
