@@ -44,26 +44,71 @@ function dk_forminator_is_cookie_set(){
 	}
 	}
 }
+add_action( 'forminator_custom_form_submit_before_set_fields', 'duplicateKiller_forminator_save_fields', 10, 3 );
+function duplicateKiller_forminator_save_fields($entry, $id, $field_data) {
+	global $wpdb;
+	$table_name = $wpdb->prefix.'dk_forms_duplicate';
+	$form_title = get_the_title($id);
+	$form_cookie = isset($_COOKIE['dk_form_cookie'])? $form_cookie=$_COOKIE['dk_form_cookie']: $form_cookie='NULL';
+	foreach($field_data as $data){
+		if(is_array($data['value']) AND isset($data['value']['file'])){
+			$storage_fields[] = [
+				"name" => $data['name'],
+				"value" => array(
+					"file_name" => $data['value']['file']['file_name'],
+					"file_url" => $data['value']['file']['file_url'])
+			]; 
+		}else{
+			$storage_fields[] = [
+				"name" => $data['name'],
+				"value" => $data['value']
+			];
+		}
+		
+	}
+	$form_value = serialize($storage_fields);
+		$wpdb->insert(
+			$table_name, 
+			array(
+				'form_plugin' => "Forminator",
+				'form_name' => $form_title,
+				'form_value'   => $form_value,
+				'form_cookie' => $form_cookie
+			) 
+		);
+	//error_log( print_r( $field_data, true ) );
+}
 
 add_action( 'forminator_custom_form_submit_errors','duplicateKiller_forminator_before_send_email',10,3);
 function duplicateKiller_forminator_before_send_email($submit_errors, $form_id, $field_data_array){
 	global $wpdb;
     $table_name = $wpdb->prefix.'dk_forms_duplicate';
 	$forminator_page = get_option("forminator_page");
+	
 	$form_title = get_the_title( $form_id );
-	$form_data = array();
+	$result = duplicateKiller_check_duplicate("Forminator",$form_title);
+	
 	$abort = false;
-	$no_form = false;
 	$form_cookie = isset($_COOKIE['dk_form_cookie'])? $form_cookie=$_COOKIE['dk_form_cookie']: $form_cookie='NULL';
+	$storage_fields = array();
+	$no_form = true;
+	if($result){
+	//$form_data = array(); deprecated from 1.2.1
+	
 	foreach($field_data_array as $data){
+		//store form values
+		$storage_fields[] = [
+			"name" => $data['name'],
+			"value" => $data['value']
+		];
 		foreach($forminator_page as $form => $value){
 			if($form_title == $form){
 				if(isset($value[$data['name']]) and $value[$data['name']] == 1){
-					$no_form = true;
-					if($result = duplicateKiller_check_duplicate("Forminator",$form_title)){
 						foreach($result as $row){
 							$form_value = unserialize($row->form_value);
-								if(isset($form_value[$data['name']]) AND duplicateKiller_check_values_with_lowercase_filter($form_value[$data['name']],$data['value'])){
+							//inserted from v1.2.1
+							$res = duplicateKiller_check_values($form_value,$data['name'],$data['value']);
+								if($res){
 									$cookies_setup = [
 										'plugin_name' => "forminator_cookie_option",
 										'get_option' => $forminator_page,
@@ -81,21 +126,31 @@ function duplicateKiller_forminator_before_send_email($submit_errors, $form_id, 
 											$abort = true;
 										}
 									}
-								}else{
-									if(!empty($data['value']))
-									$form_data[$data['name']] = $data['value'];
+								}/* deprecated from 1.2.1
+								else{
+									if(!empty($data['value'])){
+										$form_data[$data['name']] = $data['value'];
+									}
+									
 								}
+								*/
 						}
-					}else{
-						if(!empty($data['value']))
-						$form_data[$data['name']] = $data['value'];
+					}/* deprecated from 1.2.1
+					else{
+						if(!empty($data['value'])){
+							$form_data[$data['name']] = $data['value'];
+						}
+						
 					}
+					*/
 				}
 			}
 		}
 	}
+	/*deprecated from 1.2.1
+	
 	if(!$abort and $no_form){
-		$form_value = serialize($form_data);
+		$form_value = serialize($storage_fields);
 		$wpdb->insert(
 			$table_name, 
 			array(
@@ -104,10 +159,9 @@ function duplicateKiller_forminator_before_send_email($submit_errors, $form_id, 
 				'form_value'   => $form_value,
 				'form_cookie' => $form_cookie
 			) 
-		);
-		$x = "asd";
-									
+		);							
 	}
+	*/
 	return $submit_errors;
 }
 
@@ -143,20 +197,23 @@ function duplicateKiller_forminator_get_forms(){
  * Callbacks
 **********************************/
 function duplicateKiller_forminator_validate_input($input){
+	
 	$output = array();
 	// Create our array for storing the validated options
     foreach($input as $key =>$value){
-		foreach($value as $arr => $asc){
-			//check if someone putting in ‘dog’ when the only valid values are numbers
-			if($asc != "1"){
-				$value[$arr] = "1";
-				$output[$key] = $value;
-			}else{
-				$output[$key] = $value;
-			}
-		}	
+		if(is_array($value)){
+			foreach($value as $arr => $asc){
+				//check if someone putting in ‘dog’ when the only valid values are numbers
+				if($asc != "1"){
+					$value[$arr] = "1";
+					$output[$key] = $value;
+				}else{
+					$output[$key] = $value;
+				}
+			}	
+		}
 	}
-	if($input['forminator_cookie_option'] !== "1"){
+	if(!isset($input['forminator_cookie_option']) || $input['forminator_cookie_option'] !== "1"){
 		$output['forminator_cookie_option'] = "0";
 	}else{
 		$output['forminator_cookie_option'] = "1";

@@ -120,10 +120,14 @@ class DK_Main_List_Table extends WP_List_Table{
 				$data_value['form_id'] = esc_attr($row->form_id);
 				$data_value['form_plugin']  = esc_attr($row->form_plugin);
 				$data_value['form_name'] =  esc_attr($row->form_name);
-				$store = "";
 				$form_value = unserialize($row->form_value);
-				foreach($form_value as $arr => $value){
-					$store .= $arr.' - '.$value.'</br>';
+				
+				if($data_value['form_plugin'] == "CF7"){
+					$store = $this->organize_array_cf7($form_value);
+				}elseif($data_value['form_plugin'] == "Forminator"){
+					$store = $this->organize_array_forminator($form_value);
+				}elseif($data_value['form_plugin'] == "WPForms"){
+					$store = $this->organize_array_wpforms($form_value);
 				}
 				$data_value['form_value'] =  wp_kses_post($store);
 				$data[] = $data_value;
@@ -133,6 +137,74 @@ class DK_Main_List_Table extends WP_List_Table{
 			}
         return;
     }
+	private function organize_array_cf7($array){
+		$store = "";
+		foreach($array as $arr => $value){
+			//inserted in 1.2.1
+			if(is_array($value)){
+				$store .= $arr.' - ';
+				foreach($value as $row){
+					$store .= $row.', ';
+				}
+				$store .= '</br>';
+			//for version under 1.2.1
+			}else{
+				$store .= $arr.' - '.$value.'</br>';
+			}
+		}
+		return $store;
+	}
+	private function organize_array_wpforms($array){
+		$store = "";
+		foreach($array as $arr => $value){
+			//inserted in 1.2.1
+			if(is_array($value)){
+				//check if $value have multiple values (checkboxes,uploads)
+				if(is_array($value['value'])){
+					//check if upload
+						$store .= $value['name'].' - ';
+						foreach($value['value'] as $subrow){
+							$store .= $subrow.', ';	
+						}
+						$store .='</br>';
+				}else{
+					$store .= $value['name'].' - '.$value['value'].'</br>';
+				}
+			//for version under 1.2.1
+			}else{
+				$store .= $arr.' - '.$value.'</br>';
+			}
+		}
+		return $store;
+	}	
+	private function organize_array_forminator($array){
+		$store = "";
+		foreach($array as $arr => $value){
+			//inserted in 1.2.1
+			if(is_array($value)){
+				//check if $value have multiple values (checkboxes,uploads)
+				if(is_array($value['value'])){
+					//check if upload
+					if(isset($value['value']['file_name'])){
+						$link_url = '<a href="'.$value['value']['file_url'].'" target="_blank">'.$value['value']['file_name'].'</a>';
+						$store .= $value['name'].' - '. $link_url.'</br>';
+					}else{
+						$store .= $value['name'].' - ';
+						foreach($value['value'] as $subrow){
+							$store .= $subrow.', ';	
+						}
+						$store .='</br>';
+					}
+				}else{
+					$store .= $value['name'].' - '.$value['value'].'</br>';
+				}
+			//for version under 1.2.1
+			}else{
+				$store .= $arr.' - '.$value.'</br>';
+			}
+		}
+		return $store;
+	}
 	
     //Define bulk action
     public function process_bulk_action(){

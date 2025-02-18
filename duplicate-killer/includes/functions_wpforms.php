@@ -48,22 +48,31 @@ function dk_wpforms_is_cookie_set(){
 add_action( 'wpforms_process', 'duplicateKiller_wpforms_before_send_email', 10, 3 );
 function duplicateKiller_wpforms_before_send_email($fields, $entry, $form_data){
 	$form_title = $form_data['settings']['form_title'];
+	$result = duplicateKiller_check_duplicate("WPForms",$form_title);
+	
 	global $wpdb;
 	$table_name = $wpdb->prefix.'dk_forms_duplicate';
 	$wpforms_page = get_option("WPForms_page");
 	$form_cookie = isset($_COOKIE['dk_form_cookie'])? $form_cookie=$_COOKIE['dk_form_cookie']: $form_cookie='NULL';
-	$data_for_insert = array();
 	$abort = false;
-	$no_form = false;
+	$storage_fields = array();
+	
+	$no_form = true;
 	foreach($fields as $data){
+		$storage_fields[] = [
+			"name" => $data['name'],
+			"value" => $data['value']
+		];
 		foreach($wpforms_page as $form => $value){
 			if($form_title == $form){
 				if(isset($value[$data['name']]) and $value[$data['name']] == 1){
-					$no_form = true;
-					if($result = duplicateKiller_check_duplicate("WPForms",$form_title)){
+					if($result){
 						foreach($result as $row){
 							$form_value = unserialize($row->form_value);
-							if(isset($form_value[$data['name']]) AND duplicateKiller_check_values_with_lowercase_filter($form_value[$data['name']],$data['value'])){
+							//inserted from v1.2.1
+							$res = duplicateKiller_check_values($form_value,$data['name'],$data['value']);
+
+								if($res){
 								$cookies_setup = [
 										'plugin_name' => "wpforms_cookie_option",
 										'get_option' => $wpforms_page,
@@ -74,21 +83,24 @@ function duplicateKiller_wpforms_before_send_email($fields, $entry, $form_data){
 									wpforms()->process->errors[ $form_data[ 'id' ]][$data[ 'id' ]] = $wpforms_page['wpforms_error_message'];
 									$abort = true;
 								}
-							}else{
+							}/* deprecated from 1.2.1else{
 								if(!empty($data['value']))
 								$data_for_insert[$data['name']] = $data['value'];
 							}
+							*/
 						}
-					}else{
+					}/* deprecated from 1.2.1
+					else{
 						if(!empty($data['value']))
 						$data_for_insert[$data['name']] = $data['value'];
 					}
+					*/
 				}
 			}
 		}
 	}
 	if(!$abort and $no_form){
-		$form_value = serialize($data_for_insert);
+		$form_value = serialize($storage_fields);
 		$wpdb->insert(
 			$table_name, 
 			array(

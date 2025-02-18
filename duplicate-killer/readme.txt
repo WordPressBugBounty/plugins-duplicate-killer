@@ -1,14 +1,14 @@
-=== Duplicate Killer - This extension prevent double entry submissions for Contact Form 7, Forminator and WPForms Lite plugins. ===
+=== Duplicate Killer - Prevent spam and stop double entry submissions for Contact Form 7, Forminator and WPForms Lite plugins. ===
 Plugin Name: Duplicate Killer
-Version: 1.2.0
+Version: 1.2.1
 Author: NIA
 Author URI: https://profiles.wordpress.org/wpnia/
 Contributors: wpnia
 Tags: forms, contact form, duplicate, CF7, double entry
 Donate link: https://www.paypal.com/paypalme/wpnia
 Requires at least: 5.2
-Tested up to: 6.7.1
-Stable tag: 1.2.0
+Tested up to: 6.7.2
+Stable tag: 1.2.1
 Requires PHP: 5.6.20
 License: GPL v2 - http://www.gnu.org/licenses/old-licenses/gpl-2.0.html
 
@@ -37,6 +37,10 @@ Duplicate Killer will prevent double entry submissions for Contact Form 7, Formi
 ### Unique entries per user
 - You can prevent duplicates at the user level, not global.
 - Multiple users can submit the same entry, but a single user cannot submit values they have already submitted before.
+
+### Store and display submissions 
+- Store all submissions from Contact Form 7/Forminator/WPForms to your wordpress database
+- Display and manage the entries direct from your wordpress admin panel
 
 == Installation ==
 
@@ -70,6 +74,9 @@ Unique values won't be able to be submitted by any another user.
 This feature use cookies and prevent duplicates at the user level, not global.
 Multiple users can submit the same entry, but a single user cannot submit values they have already submitted before.
 
+= Store and display submissions =
+New feature. Store, display and manage all entries forms direct from your wordpress admin panel
+
 == Screenshots ==
 
 1. Settings page.
@@ -79,6 +86,10 @@ Multiple users can submit the same entry, but a single user cannot submit values
 == Upgrade Notice ==
 
 == Changelog ==
+
+= 1.2.1 =
+* Feature: Store CF7/Forminator/WPForms submissions to your WordPress database
+* Tested up to 6.7.2 Wordpress'
 
 = 1.2.0 =
 * Bug: Fixed - Custom HTML in CF7 form – issue with detection

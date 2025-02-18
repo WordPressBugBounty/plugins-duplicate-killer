@@ -105,7 +105,7 @@ function duplicateKiller_cf7_before_send_email($contact_form, &$abort, $object) 
 				}
         }
 		if(!$abort AND $no_form){
-			$form_value = serialize($form_data);
+			$form_value = serialize($data);
 			$wpdb->insert(
 			$table_name,
 			array(

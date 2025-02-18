@@ -2,7 +2,7 @@
 
 /**
  * Plugin Name: Duplicate Killer
- * Version: 1.2.0
+ * Version: 1.2.1
  * Description: Stop your duplicate entries  for Contact Form 7, Forminator and WPForms plugins. Pprevent duplicate entries from being created when users submit the form. The best example of its use is to limit one submission per Email address
  * Author: NIA
  * Author URI: https://profiles.wordpress.org/wpnia/
@@ -14,6 +14,7 @@
 	defined('ABSPATH') or die('You shall not pass!');
 	define('DuplicateKiller_PLUGIN',__FILE__);
 	define('DuplicateKiller_PLUGIN_DIR', untrailingslashit(dirname(DuplicateKiller_PLUGIN )));
+	define('DuplicateKiller_PLUGIN_VERSION',"1.2.1");
 	require_once DuplicateKiller_PLUGIN_DIR.'/includes/functions_cf7.php';
 	require_once DuplicateKiller_PLUGIN_DIR.'/includes/functions_forminator.php';
 	require_once DuplicateKiller_PLUGIN_DIR.'/includes/functions_wpforms.php';
@@ -23,10 +24,10 @@
 /**
  * Create a new table in db
  */
-function duplicateKiller_create_table(){
+function duplicateKiller_create_table($update=false){
     global $wpdb;
     $table_name = $wpdb->prefix.'dk_forms_duplicate';
-    if( $wpdb->get_var("SHOW TABLES LIKE '$table_name'") != $table_name ) {
+    if($wpdb->get_var("SHOW TABLES LIKE '$table_name'") != $table_name) {
 
         $charset_collate = $wpdb->get_charset_collate();
 
@@ -35,7 +36,7 @@ function duplicateKiller_create_table(){
 			form_plugin varchar(50) NOT NULL,
 			form_name varchar(50) NOT NULL,
             form_value longtext NOT NULL,
-			form_cookie longtext NOT NULL,
+			form_cookie longtext NOT NULL
             PRIMARY KEY  (form_id)
         ) $charset_collate;";
 
@@ -49,6 +50,7 @@ function dk_checked_defined_constants($name,$var){
 		DEFINE($name,$var);
 	}
 }
+
 /**
  * Activation function hook
  */
@@ -90,8 +92,8 @@ add_filter("plugin_action_links_$plugin", 'duplicateKiller_settings_link' );
  */
 function duplicateKiller_check_duplicate($form_plugin, $form_name){
 	global $wpdb;
-	$table_name    = $wpdb->prefix.'dk_forms_duplicate';
-    $sql = $wpdb->prepare( "SELECT form_value,form_cookie FROM {$table_name} WHERE form_plugin = %s AND form_name = %s" , $form_plugin, $form_name );
+	$table_name = $wpdb->prefix.'dk_forms_duplicate';
+    $sql = $wpdb->prepare( "SELECT form_value,form_cookie FROM {$table_name} WHERE form_plugin = %s AND form_name = %s ORDER BY form_id DESC" , $form_plugin, $form_name );
     return $wpdb->get_results($sql);
 }
 
@@ -106,6 +108,37 @@ function dk_check_cookie($data){
 	}else{
 		return true;
 	}
+}
+//inserted from v1.2.1
+function duplicateKiller_check_values($db_values, $form_name, $form_value){
+	if(is_array($db_values)){
+		foreach($db_values as $row){
+			if(is_array($row)){
+				if($row['name'] == $form_name){
+					//check for forminator name field(Prefix,FirstName,MiddleName,LastName)
+					if(is_array($row['value']) AND is_array($form_value)){
+						$var1 = array_map('strtolower', $row['value']);
+						$var2 = array_map('strtolower', $form_value);
+							if($var1 == $var2){
+								return true;
+							}
+					}
+					elseif(strtolower($row['value']) == strtolower($form_value)){
+						return true;
+					}
+				}
+			}else{
+				//for version under 1.2.1
+				if($row == $form_value){
+					if(strtolower($row) == strtolower($form_value)){
+						return true;
+					}
+				}
+			}
+			
+		}
+	}
+	return false;
 }
 
 function duplicateKiller_check_values_with_lowercase_filter($var1, $var2){
@@ -130,7 +163,8 @@ function duplicateKiller_callback_for_setting_up_scripts() {
     wp_register_style( 'duplicateKillerStyle', plugins_url('/assets/style.css',DuplicateKiller_PLUGIN));
     wp_enqueue_style( 'duplicateKillerStyle' );
 }
-
+//for testing purpose
+/*
 $x = 11;
 if($x==12){
 	add_action( 'wp_footer', function(){?>
@@ -149,7 +183,7 @@ document.cookie = "username=John Smith; expires=Thu, 18 Dec 2024 12:00:00 UTC; p
 	<?php
 }, 999 );
 }
-
+*/
 
 /* Base Menu */
 add_action('admin_menu', 'duplicateKiller_admin');
@@ -170,8 +204,10 @@ function duplicateKiller_admin(){
         'duplicateKiller_db_display_page' //callback function
     );
 }
+
 add_action('admin_init', 'duplicateKiller_options');
 function duplicateKiller_options() {
+	
 	$settings = array(
 		'CF7_page' => array(
 		  'title'=>'Contact Form 7',
@@ -369,7 +405,7 @@ function duplicateKiller_display_page() {
 			</a>  
 			<a href="?page=duplicateKiller&tab=second" class="nav-tab <?php echo esc_attr($active_tab == 'second' ? 'nav-tab-active' : ''); ?>"><?php esc_html_e('Forminator','duplicatekiller');?>
 			</a>
-			<a href="?page=duplicateKiller&tab=third" class="nav-tab <?php echo esc_attr($active_tab == 'third' ? 'nav-tab-active' : ''); ?>"><?php esc_html_e('WPForms','duplicatekiller');?></a>
+			<a href="?page=duplicateKiller&tab=third" class="nav-tab <?php echo esc_attr($active_tab == 'third' ? 'nav-tab-active' : ''); ?>"><?php esc_html_e('WPForms Free','duplicatekiller');?></a>
 			<a href="?page=duplicateKiller&tab=about" class="nav-tab <?php echo esc_attr($active_tab == 'about' ? 'nav-tab-active' : ''); ?>"><?php esc_html_e('About','duplicatekiller');?></a>
         </h2>  
         <form method="post" action="options.php">  
