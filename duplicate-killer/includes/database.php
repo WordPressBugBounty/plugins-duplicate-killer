@@ -74,6 +74,7 @@ class DK_Main_List_Table extends WP_List_Table{
 			'form_plugin'=> __( 'Form plugin', 'duplicate_killer_database' ),
             'form_name' => __( 'Form Name', 'duplicate_killer_database' ),
             'form_value'=> __( 'Form Value', 'duplicate_killer_database' ),
+			'form_date'=> __( 'Form Date', 'duplicate_killer_database' )
         );
 
         return $columns;
@@ -100,7 +101,7 @@ class DK_Main_List_Table extends WP_List_Table{
 	
 	private function table_data(){
         global $wpdb;
-		$search = empty($_REQUEST['s'])?false: esc_sql($_REQUEST['s']);
+		$search = empty($_REQUEST['s'])? false: esc_sql($_REQUEST['s']);
         $table_name = $wpdb->prefix.'dk_forms_duplicate';
         $page = $this->get_pagenum();
         $page = $page - 1;
@@ -130,6 +131,7 @@ class DK_Main_List_Table extends WP_List_Table{
 					$store = $this->organize_array_wpforms($form_value);
 				}
 				$data_value['form_value'] =  wp_kses_post($store);
+				$data_value['form_date'] =  esc_attr($row->form_date);
 				$data[] = $data_value;
 			}
 			if(!empty($data)){

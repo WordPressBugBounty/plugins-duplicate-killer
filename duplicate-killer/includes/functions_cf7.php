@@ -54,7 +54,7 @@ function duplicateKiller_cf7_before_send_email($contact_form, &$abort, $object) 
     $submission = WPCF7_Submission::get_instance();
 	$form_name = $contact_form->title();
 	$form_cookie = isset($_COOKIE['dk_form_cookie'])? $form_cookie=$_COOKIE['dk_form_cookie']: $form_cookie='NULL';
-    if($submission){
+    if($submission AND $cf7_page){
 		$abort = false;
 		$no_form = false;
         $data = $submission->get_posted_data();
@@ -106,13 +106,15 @@ function duplicateKiller_cf7_before_send_email($contact_form, &$abort, $object) 
         }
 		if(!$abort AND $no_form){
 			$form_value = serialize($data);
+			$form_date = current_time('Y-m-d H:i:s');
 			$wpdb->insert(
 			$table_name,
 			array(
 				'form_plugin' => "CF7",
 				'form_name' => $form_name,
 				'form_value'   => $form_value,
-				'form_cookie' => $form_cookie
+				'form_cookie' => $form_cookie,
+				'form_date' => $form_date
 			) 
 		);
 		}

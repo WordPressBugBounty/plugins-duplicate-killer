@@ -67,13 +67,15 @@ function duplicateKiller_forminator_save_fields($entry, $id, $field_data) {
 		
 	}
 	$form_value = serialize($storage_fields);
+	$form_date = current_time('Y-m-d H:i:s');
 		$wpdb->insert(
 			$table_name, 
 			array(
 				'form_plugin' => "Forminator",
 				'form_name' => $form_title,
 				'form_value'   => $form_value,
-				'form_cookie' => $form_cookie
+				'form_cookie' => $form_cookie,
+				'form_date' => $form_date
 			) 
 		);
 	//error_log( print_r( $field_data, true ) );
@@ -92,7 +94,7 @@ function duplicateKiller_forminator_before_send_email($submit_errors, $form_id, 
 	$form_cookie = isset($_COOKIE['dk_form_cookie'])? $form_cookie=$_COOKIE['dk_form_cookie']: $form_cookie='NULL';
 	$storage_fields = array();
 	$no_form = true;
-	if($result){
+	if($result AND $forminator_page){
 	//$form_data = array(); deprecated from 1.2.1
 	
 	foreach($field_data_array as $data){

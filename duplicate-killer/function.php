@@ -2,7 +2,7 @@
 
 /**
  * Plugin Name: Duplicate Killer
- * Version: 1.2.1
+ * Version: 1.2.2
  * Description: Stop your duplicate entries  for Contact Form 7, Forminator and WPForms plugins. Pprevent duplicate entries from being created when users submit the form. The best example of its use is to limit one submission per Email address
  * Author: NIA
  * Author URI: https://profiles.wordpress.org/wpnia/
@@ -14,21 +14,19 @@
 	defined('ABSPATH') or die('You shall not pass!');
 	define('DuplicateKiller_PLUGIN',__FILE__);
 	define('DuplicateKiller_PLUGIN_DIR', untrailingslashit(dirname(DuplicateKiller_PLUGIN )));
-	define('DuplicateKiller_PLUGIN_VERSION',"1.2.1");
 	require_once DuplicateKiller_PLUGIN_DIR.'/includes/functions_cf7.php';
 	require_once DuplicateKiller_PLUGIN_DIR.'/includes/functions_forminator.php';
 	require_once DuplicateKiller_PLUGIN_DIR.'/includes/functions_wpforms.php';
 	require_once DuplicateKiller_PLUGIN_DIR.'/includes/database.php';
 	require_once DuplicateKiller_PLUGIN_DIR.'/includes/about.php';
 
+
 /**
  * Create a new table in db
  */
-function duplicateKiller_create_table($update=false){
+function duplicateKiller_create_table(){
     global $wpdb;
     $table_name = $wpdb->prefix.'dk_forms_duplicate';
-    if($wpdb->get_var("SHOW TABLES LIKE '$table_name'") != $table_name) {
-
         $charset_collate = $wpdb->get_charset_collate();
 
         $sql = "CREATE TABLE $table_name (
@@ -36,13 +34,13 @@ function duplicateKiller_create_table($update=false){
 			form_plugin varchar(50) NOT NULL,
 			form_name varchar(50) NOT NULL,
             form_value longtext NOT NULL,
-			form_cookie longtext NOT NULL
+			form_cookie longtext NOT NULL,
+			form_date datetime NOT NULL,
             PRIMARY KEY  (form_id)
         ) $charset_collate;";
 
         require_once( ABSPATH . 'wp-admin/includes/upgrade.php' );
         dbDelta( $sql );
-    }
 }
 
 function dk_checked_defined_constants($name,$var){
@@ -59,6 +57,11 @@ function duplicateKiller_on_activate(){
 }
 register_activation_hook( __FILE__, 'duplicateKiller_on_activate' );
 
+//Fires when the upgrader process is complete
+function duplicateKiller_upgrade_function( $upgrader_object, $options ) {
+	dupplicateKiller_check_folder_and_database();
+}
+add_action( 'upgrader_process_complete', 'duplicateKiller_upgrade_function',10, 2);
 
 /**
  * Delete custom tables
@@ -71,6 +74,7 @@ function duplicateKiller_drop_table_uninstall(){
     delete_option('CF7_page');
 	delete_option('Forminator_page');
 	delete_option('WPForms_page');
+	delete_option('DuplicateKillerSettings');
 }
 register_uninstall_hook(__FILE__, 'duplicateKiller_drop_table_uninstall');
 
@@ -204,9 +208,54 @@ function duplicateKiller_admin(){
         'duplicateKiller_db_display_page' //callback function
     );
 }
-
+//add or update plugin settings
+function updateDuplicateKillerSettings($string,$value){
+	$options = get_option('DuplicateKillerSettings');
+	if($options){
+		$options[$string] = $value;
+		update_option("DuplicateKillerSettings",$options);
+	}else{
+		$options = [
+			$string => $value
+		];
+		add_option("DuplicateKillerSettings",$options);
+	}
+}
+function getDuplicateKillerSetting($string = ""){
+	$options = get_option('DuplicateKillerSettings');
+	if($options){
+		if(empty($string)){
+				return $options;
+		}else{
+			if(isset($options[$string])){
+				return $options[$string];
+			}
+			
+		}
+	}
+	return false;
+}
+function createDuplicateKillerFolder(){
+	$upload_dir = wp_upload_dir();
+    $dkcf7_folder = $upload_dir['basedir'].'/dkcf7_uploads';
+    if(!file_exists($dkcf7_folder)){
+        wp_mkdir_p($dkcf7_folder);
+        $file = fopen($dkcf7_folder.'/index.php', 'w');
+        fwrite($file,"<?php \n\t // Silence is golden.");
+        fclose($file);
+    }
+}
+function dupplicateKiller_check_folder_and_database(){
+	 $plugin_version = getDuplicateKillerSetting("plugin_version");
+	 if($plugin_version != "1.2.1"){
+		 updateDuplicateKillerSettings("plugin_version","1.2.1");
+		 duplicateKiller_create_table();
+		 createDuplicateKillerFolder();
+	 }
+}
 add_action('admin_init', 'duplicateKiller_options');
 function duplicateKiller_options() {
+	dupplicateKiller_check_folder_and_database();
 	
 	$settings = array(
 		'CF7_page' => array(

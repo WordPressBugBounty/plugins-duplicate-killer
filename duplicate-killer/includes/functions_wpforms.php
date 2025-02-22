@@ -101,13 +101,15 @@ function duplicateKiller_wpforms_before_send_email($fields, $entry, $form_data){
 	}
 	if(!$abort and $no_form){
 		$form_value = serialize($storage_fields);
+		$form_date = current_time('Y-m-d H:i:s');
 		$wpdb->insert(
 			$table_name, 
 			array(
 				'form_plugin' => "WPForms",
 				'form_name' => $form_title,
 				'form_value'   => $form_value,
-				'form_cookie' => $form_cookie
+				'form_cookie' => $form_cookie,
+				'form_date' => $form_date
 			) 
 		);
 	}
