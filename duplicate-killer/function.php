@@ -2,7 +2,7 @@
 
 /**
  * Plugin Name: Duplicate Killer
- * Version: 1.2.2
+ * Version: 1.2.3
  * Description: Stop your duplicate entries  for Contact Form 7, Forminator and WPForms plugins. Pprevent duplicate entries from being created when users submit the form. The best example of its use is to limit one submission per Email address
  * Author: NIA
  * Author URI: https://profiles.wordpress.org/wpnia/

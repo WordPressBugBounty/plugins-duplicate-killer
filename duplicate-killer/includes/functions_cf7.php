@@ -52,21 +52,25 @@ function duplicateKiller_cf7_before_send_email($contact_form, &$abort, $object) 
     $table_name = $wpdb->prefix.'dk_forms_duplicate';
 	$cf7_page = get_option("CF7_page");
     $submission = WPCF7_Submission::get_instance();
+	//upload files if any
+	$files = $submission->uploaded_files();
+	$upload_dir = wp_upload_dir();
+    $dkcf7_folder = $upload_dir['basedir'].'/dkcf7_uploads';
+	$dkcf7_folder_url = $upload_dir['baseurl'].'/dkcf7_uploads';
+	
 	$form_name = $contact_form->title();
 	$form_cookie = isset($_COOKIE['dk_form_cookie'])? $form_cookie=$_COOKIE['dk_form_cookie']: $form_cookie='NULL';
     if($submission AND $cf7_page){
 		$abort = false;
 		$no_form = false;
         $data = $submission->get_posted_data();
-        $form_data = array();
         foreach ($data as $key => $d) {
             $tmpD = $d;
-				if (!is_array($d)){
-					$bl   = array('\"',"\'",'/','\\','"',"'");
-					$wl   = array('&quot;','&#039;','&#047;', '&#092;','&quot;','&#039;');
-                    $tmpD = str_replace($bl, $wl, $tmpD );
+				if(!is_array($d)){
+					$bl = array('\"',"\'",'/','\\','"',"'");
+					$wl = array('&quot;','&#039;','&#047;', '&#092;','&quot;','&#039;');
+                    $tmpD = str_replace($bl, $wl, $tmpD);
                 }
-                //$form_data[$key] = $tmpD;
 				foreach($cf7_page as $cf7_form => $cf7_tag){
 					if($form_name == $cf7_form){
 						if(array_key_exists($key,$cf7_tag)){
@@ -91,20 +95,29 @@ function duplicateKiller_cf7_before_send_email($contact_form, &$abort, $object) 
 											$abort = true;
 											$object->set_response($cf7_page['cf7_error_message']);
 										}
-									}else{
-										if(!empty($tmpD))
-										$form_data[$key] = $tmpD;
 									}
 								}
-							}else{
-								if(!empty($tmpD))
-								$form_data[$key] = $tmpD;
 							}
 						}
 					}
 				}
         }
+		
 		if(!$abort AND $no_form){
+			//upload files if any
+			if($files){
+				$random_number = uniqid(time());
+				foreach ($files as $file_key => $file) {
+					$file = is_array( $file ) ? reset( $file ) : $file;
+					if( empty($file) ) continue;
+					$file_path = $dkcf7_folder.'/'.$file_key.'-'.$random_number.'-'.basename($file);
+					$file_url = $dkcf7_folder_url.'/'.$file_key.'-'.$random_number.'-'.basename($file);
+					copy($file, $file_path);
+					if(array_key_exists($file_key, $data)){
+						$data[$file_key] = $file_url;
+					}
+				}
+			}
 			$form_value = serialize($data);
 			$form_date = current_time('Y-m-d H:i:s');
 			$wpdb->insert(
@@ -121,7 +134,6 @@ function duplicateKiller_cf7_before_send_email($contact_form, &$abort, $object) 
     }
 }
 add_action( 'wpcf7_before_send_mail', 'duplicateKiller_cf7_before_send_email', 1,3 );
-
 function duplicate_killer_CF7_get_forms(){
 	global $wpdb;	
 	$CF7Query = $wpdb->get_results( "SELECT * FROM $wpdb->posts WHERE post_type = 'wpcf7_contact_form'", ARRAY_A );

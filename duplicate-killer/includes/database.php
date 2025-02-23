@@ -151,7 +151,13 @@ class DK_Main_List_Table extends WP_List_Table{
 				$store .= '</br>';
 			//for version under 1.2.1
 			}else{
-				$store .= $arr.' - '.$value.'</br>';
+				if(strpos($arr, 'file') !== false ){
+					$escaped_url = esc_url($value);
+					$link_url = '<a href="'.$escaped_url.'" target="_blank">'.basename($value).'</a>';
+					$store .= $arr.' - '. $link_url.'</br>';
+				}else{
+					$store .= $arr.' - '. $value.'</br>';
+				}
 			}
 		}
 		return $store;
@@ -188,7 +194,8 @@ class DK_Main_List_Table extends WP_List_Table{
 				if(is_array($value['value'])){
 					//check if upload
 					if(isset($value['value']['file_name'])){
-						$link_url = '<a href="'.$value['value']['file_url'].'" target="_blank">'.$value['value']['file_name'].'</a>';
+						$escaped_url = esc_url($value['value']['file_url']);
+						$link_url = '<a href="'.$escaped_url.'" target="_blank">'.$value['value']['file_name'].'</a>';
 						$store .= $value['name'].' - '. $link_url.'</br>';
 					}else{
 						$store .= $value['name'].' - ';

@@ -1,6 +1,6 @@
 === Duplicate Killer - Prevent spam and stop double entry submissions for Contact Form 7, Forminator and WPForms Lite plugins. ===
 Plugin Name: Duplicate Killer
-Version: 1.2.2
+Version: 1.2.3
 Author: NIA
 Author URI: https://profiles.wordpress.org/wpnia/
 Contributors: wpnia
@@ -8,7 +8,7 @@ Tags: forms, contact form, duplicate, CF7, double entry
 Donate link: https://www.paypal.com/paypalme/wpnia
 Requires at least: 5.2
 Tested up to: 6.7.2
-Stable tag: 1.2.2
+Stable tag: 1.2.3
 Requires PHP: 5.6.20
 License: GPL v2 - http://www.gnu.org/licenses/old-licenses/gpl-2.0.html
 
@@ -86,6 +86,9 @@ New feature. Store, display and manage all entries forms direct from your wordpr
 == Upgrade Notice ==
 
 == Changelog ==
+
+= 1.2.3 =
+* Feature: Store CF7 files submitted
 
 = 1.2.2 =
 * Bug: Problem with table creation
