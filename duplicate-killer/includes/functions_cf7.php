@@ -48,6 +48,7 @@ function dk_cf7_is_cookie_set(){
 	}
 }
 function duplicateKiller_cf7_before_send_email($contact_form, &$abort, $object) {
+
     global $wpdb;
     $table_name = $wpdb->prefix.'dk_forms_duplicate';
 	$cf7_page = get_option("CF7_page");
@@ -57,53 +58,80 @@ function duplicateKiller_cf7_before_send_email($contact_form, &$abort, $object) 
 	$upload_dir = wp_upload_dir();
     $dkcf7_folder = $upload_dir['basedir'].'/dkcf7_uploads';
 	$dkcf7_folder_url = $upload_dir['baseurl'].'/dkcf7_uploads';
-	
 	$form_name = $contact_form->title();
+	
 	$form_cookie = isset($_COOKIE['dk_form_cookie'])? $form_cookie=$_COOKIE['dk_form_cookie']: $form_cookie='NULL';
-    if($submission AND $cf7_page){
-		$abort = false;
-		$no_form = false;
-        $data = $submission->get_posted_data();
-        foreach ($data as $key => $d) {
-            $tmpD = $d;
-				if(!is_array($d)){
-					$bl = array('\"',"\'",'/','\\','"',"'");
-					$wl = array('&quot;','&#039;','&#047;', '&#092;','&quot;','&#039;');
-                    $tmpD = str_replace($bl, $wl, $tmpD);
-                }
-				foreach($cf7_page as $cf7_form => $cf7_tag){
-					if($form_name == $cf7_form){
-						if(array_key_exists($key,$cf7_tag)){
-							$no_form = true;
-							if($result = duplicateKiller_check_duplicate("CF7",$form_name)){
-								foreach($result as $row){
-									$form_value = unserialize($row->form_value);
-									if(isset($form_value[$key]) AND duplicateKiller_check_values_with_lowercase_filter($form_value[$key],$tmpD)){
-										if(function_exists('cfdb7_before_send_mail')){
-											remove_action('wpcf7_before_send_mail', 'cfdb7_before_send_mail');
-										}
-										if(function_exists('vsz_cf7_before_send_email')){
-											remove_action('wpcf7_before_send_mail', 'vsz_cf7_before_send_email');
-										}
-										$cookies_setup = [
-											'plugin_name' => "cf7_cookie_option",
-											'get_option' => $cf7_page,
-											'cookie_stored' => $form_cookie,
-											'cookie_db_set' => $row->form_cookie
-										];
-										if(dk_check_cookie($cookies_setup)){
-											$abort = true;
-											$object->set_response($cf7_page['cf7_error_message']);
+	$abort = false;
+	$no_form = false;
+	$data = $submission->get_posted_data();
+	
+	$form_ip = "";
+	//check if IP limit feature is active
+	if($cf7_page['cf7_user_ip'] == "1"){
+		$no_form = true;
+		$form_ip = dk_get_user_ip();
+		$dk_check_ip_feature = dk_check_ip_feature("CF7",$form_name,$form_ip);
+		if($dk_check_ip_feature){
+			$message = $cf7_page['cf7_error_message_limit_ip'];
+			//change the general error message with the dk_custom_error_message
+			add_filter('cf7_custom_form_invalid_form_message',function($invalid_form_message, $contact_form) use($message){
+				$invalid_form_message = $message;
+				return $invalid_form_message = $message;
+			},15,2);
+			//stop form for submission if IP limit is triggered
+				$abort = true;
+				$object->set_response($message);
+		}
+	}else{
+		if($data AND $cf7_page){
+			foreach ($data as $key => $d) {
+				$tmpD = $d;
+					if(!is_array($d)){
+						$bl = array('\"',"\'",'/','\\','"',"'");
+						$wl = array('&quot;','&#039;','&#047;', '&#092;','&quot;','&#039;');
+						$tmpD = str_replace($bl, $wl, $tmpD);
+					}
+					foreach($cf7_page as $cf7_form => $cf7_tag){
+						if($form_name == $cf7_form){
+							if(array_key_exists($key,$cf7_tag)){
+								$no_form = true;
+								if($result = duplicateKiller_check_duplicate("CF7",$form_name)){
+									foreach($result as $row){
+										$form_value = unserialize($row->form_value);
+										if(isset($form_value[$key]) AND duplicateKiller_check_values_with_lowercase_filter($form_value[$key],$tmpD)){
+											if(function_exists('cfdb7_before_send_mail')){
+												remove_action('wpcf7_before_send_mail', 'cfdb7_before_send_mail');
+											}
+											if(function_exists('vsz_cf7_before_send_email')){
+												remove_action('wpcf7_before_send_mail', 'vsz_cf7_before_send_email');
+											}
+											$cookies_setup = [
+												'plugin_name' => "cf7_cookie_option",
+												'get_option' => $cf7_page,
+												'cookie_stored' => $form_cookie,
+												'cookie_db_set' => $row->form_cookie
+											];
+											if(dk_check_cookie($cookies_setup)){
+												$abort = true;
+												$object->set_response($cf7_page['cf7_error_message']);
+											}
 										}
 									}
 								}
 							}
 						}
 					}
-				}
-        }
+			}
+			
+		}
+	}
+	if(!$abort AND $no_form){
 		
-		if(!$abort AND $no_form){
+		//check if IP limit feature is active and store it
+		if(!$form_ip){
+			$dk_check_ip_feature = getDuplicateKillerSetting("CF7","forminator_user_ip");
+			$form_ip = ($dk_check_ip_feature)? $form_ip=dk_get_user_ip(): $form_ip='NULL';
+		}
 			//upload files if any
 			if($files){
 				$random_number = uniqid(time());
@@ -127,11 +155,11 @@ function duplicateKiller_cf7_before_send_email($contact_form, &$abort, $object) 
 				'form_name' => $form_name,
 				'form_value'   => $form_value,
 				'form_cookie' => $form_cookie,
-				'form_date' => $form_date
+				'form_date' => $form_date,
+				'form_ip' => $form_ip
 			) 
 		);
-		}
-    }
+	}
 }
 add_action( 'wpcf7_before_send_mail', 'duplicateKiller_cf7_before_send_email', 1,3 );
 function duplicate_killer_CF7_get_forms(){
@@ -199,7 +227,17 @@ function duplicateKiller_cf7_validate_input($input){
 	}else{
 		$output['cf7_cookie_option'] = "0";
 	}
-	
+	//validate ip limit feature
+	if(!isset($input['cf7_user_ip']) || $input['cf7_user_ip'] !== "1"){
+		$output['cf7_user_ip'] = "0";
+	}else{
+		$output['cf7_user_ip'] = "1";
+	}
+	if(empty($input['cf7_error_message_limit_ip'])){
+		$output['cf7_error_message_limit_ip'] = "You already submitted this form!";
+	}else{
+		$output['cf7_error_message_limit_ip'] = sanitize_text_field($input['cf7_error_message_limit_ip']);
+	}
 	if(filter_var($input['cf7_cookie_option_days'], FILTER_VALIDATE_INT) === false){
 		$output['cf7_cookie_option_days'] = 365;
 	}else{
@@ -234,7 +272,10 @@ function duplicateKiller_cf7_settings_callback($args){
 	$options = get_option($args[0]);
 	$checked_cookie = isset($options['cf7_cookie_option']) AND ($options['cf7_cookie_option'] == "1")?: $checked_cookie='';
 	$stored_cookie_days = isset($options['cf7_cookie_option_days'])? $options['cf7_cookie_option_days']:"365";
-	$stored_error_message = isset($options['cf7_error_message'])? $options['cf7_error_message']:"Please check all fields! These values has been submitted already!"; ?>
+	$stored_error_message = isset($options['cf7_error_message'])? $options['cf7_error_message']:"Please check all fields! These values has been submitted already!"; 
+	$checkbox_ip = isset($options['cf7_user_ip']) AND ($options['cf7_user_ip'] == "1")?: $checkbox_ip='';
+	$stored_error_message_limit_ip = isset($options['cf7_error_message_limit_ip'])? $options['cf7_error_message_limit_ip']:"You already submitted this form!";
+	?>
 	<h4 class="dk-form-header">Duplicate Killer settings</h4>
 	<div class="dk-set-error-message">
 		<fieldset class="dk-fieldset">
@@ -272,6 +313,36 @@ function duplicateKiller_cf7_settings_callback($args){
 			});
 			if (checkbox.checked == true) {
 				document.getElementById("dk-unique-entries-cookie").style.display = "block";
+			}
+		</script>
+	</div>
+		<div class="dk-limit_submission_by_ip">
+		<fieldset class="dk-fieldset">
+		<legend><strong>Limit submissions by IP address for 7 days for all forms!</strong></legend>
+		<strong>This feature </strong><span> restrict form entries based on IP address for 7 days</span>
+		</br>
+		</br>
+		<div class="dk-input-checkbox-callback">
+			<input type="checkbox" id="user_ip" name="<?php echo esc_attr($args[0].'[cf7_user_ip]');?>" value="1" <?php echo esc_attr($checkbox_ip ? 'checked' : '');?>></input>
+			<label for="user_ip">Activate this function</label>
+		</div>
+		</br>
+		<div id="dk-limit-ip" style="display:none">
+		<span>Ser error message:</span><input type="text" size="70" name="<?php echo esc_attr($args[0].'[cf7_error_message_limit_ip]');?>" value="<?php echo esc_attr($stored_error_message_limit_ip);?>"></input>
+		</br>
+		</div>
+		</fieldset>
+		<script>
+			var checkbox = document.getElementById("user_ip");
+			checkbox.addEventListener('change', function() {
+				if (this.checked) {
+					document.getElementById("dk-limit-ip").style.display = "block";
+				}else{
+					document.getElementById("dk-limit-ip").style.display = "none";
+				}
+			});
+			if (checkbox.checked == true) {
+				document.getElementById("dk-limit-ip").style.display = "block";
 			}
 		</script>
 	</div>

@@ -2,7 +2,7 @@
 
 /**
  * Plugin Name: Duplicate Killer
- * Version: 1.2.3
+ * Version: 1.3.0
  * Description: Stop your duplicate entries  for Contact Form 7, Forminator and WPForms plugins. Pprevent duplicate entries from being created when users submit the form. The best example of its use is to limit one submission per Email address
  * Author: NIA
  * Author URI: https://profiles.wordpress.org/wpnia/
@@ -13,6 +13,7 @@
 
 	defined('ABSPATH') or die('You shall not pass!');
 	define('DuplicateKiller_PLUGIN',__FILE__);
+	define ('DuplicateKiller_VERSION','1.3.0');
 	define('DuplicateKiller_PLUGIN_DIR', untrailingslashit(dirname(DuplicateKiller_PLUGIN )));
 	require_once DuplicateKiller_PLUGIN_DIR.'/includes/functions_cf7.php';
 	require_once DuplicateKiller_PLUGIN_DIR.'/includes/functions_forminator.php';
@@ -35,6 +36,7 @@ function duplicateKiller_create_table(){
 			form_name varchar(50) NOT NULL,
             form_value longtext NOT NULL,
 			form_cookie longtext NOT NULL,
+			form_ip varchar(50) NOT NULL,
 			form_date datetime NOT NULL,
             PRIMARY KEY  (form_id)
         ) $charset_collate;";
@@ -100,7 +102,115 @@ function duplicateKiller_check_duplicate($form_plugin, $form_name){
     $sql = $wpdb->prepare( "SELECT form_value,form_cookie FROM {$table_name} WHERE form_plugin = %s AND form_name = %s ORDER BY form_id DESC" , $form_plugin, $form_name );
     return $wpdb->get_results($sql);
 }
+//inserted from 1.3.0
+function dk_check_ip_feature($form_plugin,$form_name,$form_ip){
+	$flag = false;
+	global $wpdb;
+	$table_name = $wpdb->prefix.'dk_forms_duplicate';
+	$result = $wpdb->get_row($wpdb->prepare("SELECT form_ip,form_date FROM $table_name WHERE form_plugin = %s AND form_name = %s AND form_ip = %s ORDER by form_id DESC", $form_plugin, $form_name,$form_ip));
+	
+    //$sql = $wpdb->prepare( "SELECT form_ip FROM {$table_name} WHERE form_plugin = %s AND form_name = %s ORDER BY form_id DESC" , $form_plugin, $form_name );
+    if($result){
+		$created_at = new DateTime($result->form_date, new DateTimeZone('UTC'));
 
+        // Current date minus 7 days
+        $seven_days_ago = new DateTime('-7 days', new DateTimeZone('UTC'));
+
+        if ($created_at > $seven_days_ago) {
+			//The row is newer than 7 days.
+            $flag = true;
+        }
+		
+	}
+	return $flag;
+}
+
+//inserted from 1.3.0
+function dk_get_user_ip(){
+	$ip_from_cloudflare = isCloudflare();
+	if($ip_from_cloudflare){
+		$ip_unvalided = sanitize_text_field(wp_unslash($_SERVER['HTTP_CF_CONNECTING_IP']));
+			if(filter_var($ip_unvalided, FILTER_VALIDATE_IP)){
+				$ip_valid = $ip_unvalided;
+				return apply_filters( 'dk_get_user_ip', $ip_valid );
+			}
+		} else {
+			$ip_unvalided = sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR']));
+		}
+	if(!empty($_SERVER['HTTP_CLIENT_IP'])){
+	//check ip from share internet
+		$ip_unvalided = sanitize_text_field(wp_unslash($_SERVER['HTTP_CLIENT_IP']));
+
+	}elseif(!empty($_SERVER['HTTP_X_FORWARDED_FOR'])){
+	//to check ip is pass from proxy
+		$ip_unvalided = sanitize_text_field(wp_unslash($_SERVER['HTTP_X_FORWARDED_FOR']));
+	}else{
+		$ip_unvalided = sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR']));
+	}
+	if(filter_var( $ip_unvalided, FILTER_VALIDATE_IP)){
+		$ip_valid = $ip_unvalided;
+	}else{
+		$ip_valid = "undefined";
+	}
+	return apply_filters( 'dk_get_user_ip', $ip_valid );
+}
+
+//Validates that the IP is from cloudflare
+function ip_in_range($ip, $range) {
+    if (strpos($range, '/') == false)
+        $range .= '/32';
+
+    // $range is in IP/CIDR format eg 127.0.0.1/24
+    list($range, $netmask) = explode('/', $range, 2);
+    $range_decimal = ip2long($range);
+    $ip_decimal = ip2long($ip);
+    $wildcard_decimal = pow(2, (32 - $netmask)) - 1;
+    $netmask_decimal = ~ $wildcard_decimal;
+    return (($ip_decimal & $netmask_decimal) == ($range_decimal & $netmask_decimal));
+}
+
+function _cloudflare_CheckIP($ip) {
+    $cf_ips = array(
+        '173.245.48.0/20',
+		'103.21.244.0/22',
+		'103.22.200.0/22',
+		'103.31.4.0/22',
+		'141.101.64.0/18',
+		'108.162.192.0/18',
+		'190.93.240.0/20',
+		'188.114.96.0/20',
+		'197.234.240.0/22',
+		'198.41.128.0/17',
+		'162.158.0.0/15',
+		'104.16.0.0/13',
+		'104.24.0.0/14',
+		'172.64.0.0/13',
+		'131.0.72.0/22'
+    );
+    $is_cf_ip = false;
+    foreach ($cf_ips as $cf_ip) {
+        if (ip_in_range($ip, $cf_ip)) {
+            $is_cf_ip = true;
+            break;
+        }
+    } return $is_cf_ip;
+}
+
+function _cloudflare_Requests_Check() {
+    $flag = true;
+
+    if(!isset($_SERVER['HTTP_CF_CONNECTING_IP']))   $flag = false;
+    if(!isset($_SERVER['HTTP_CF_IPCOUNTRY']))       $flag = false;
+    if(!isset($_SERVER['HTTP_CF_RAY']))             $flag = false;
+    if(!isset($_SERVER['HTTP_CF_VISITOR']))         $flag = false;
+    return $flag;
+}
+
+function isCloudflare(){
+    $ipCheck = _cloudflare_CheckIP($_SERVER['REMOTE_ADDR']);
+    $requestCheck = _cloudflare_Requests_Check();
+    return ($ipCheck && $requestCheck);
+}
 function dk_check_cookie($data){
 	$option = $data['get_option'];
 	if(isset($option[$data['plugin_name']]) AND $option[$data['plugin_name']] == "1"){
@@ -221,18 +331,57 @@ function updateDuplicateKillerSettings($string,$value){
 		add_option("DuplicateKillerSettings",$options);
 	}
 }
-function getDuplicateKillerSetting($string = ""){
-	$options = get_option('DuplicateKillerSettings');
-	if($options){
-		if(empty($string)){
-				return $options;
-		}else{
-			if(isset($options[$string])){
-				return $options[$string];
+function getDuplicateKillerSetting($page,$string = ""){
+	if($page == "settings"){
+		$options = get_option('DuplicateKillerSettings');
+		if($options){
+			if(empty($string)){
+					return $options;
+			}else{
+				if(isset($options[$string])){
+					return $options[$string];
+				}
+				
 			}
-			
+		}
+	}elseif($page == "Forminator_page"){
+		$options = get_option('Forminator_page');
+		if($options){
+			if(empty($string)){
+					return $options;
+			}else{
+				if(isset($options[$string])){
+					return $options[$string];
+				}
+				
+			}
+		}
+	}elseif($page == "CF7_page"){
+		$options = get_option('CF7_page');
+		if($options){
+			if(empty($string)){
+					return $options;
+			}else{
+				if(isset($options[$string])){
+					return $options[$string];
+				}
+				
+			}
+		}
+	}elseif($page == "WPForms_page"){
+		$options = get_option('WPForms_page');
+		if($options){
+			if(empty($string)){
+					return $options;
+			}else{
+				if(isset($options[$string])){
+					return $options[$string];
+				}
+				
+			}
 		}
 	}
+	
 	return false;
 }
 function createDuplicateKillerFolder(){
@@ -245,10 +394,11 @@ function createDuplicateKillerFolder(){
         fclose($file);
     }
 }
+
 function dupplicateKiller_check_folder_and_database(){
-	 $plugin_version = getDuplicateKillerSetting("plugin_version");
-	 if($plugin_version != "1.2.1"){
-		 updateDuplicateKillerSettings("plugin_version","1.2.1");
+	 $plugin_version = getDuplicateKillerSetting("settings","plugin_version");
+	 if($plugin_version != DuplicateKiller_VERSION){
+		 updateDuplicateKillerSettings("plugin_version",DuplicateKiller_VERSION);
 		 duplicateKiller_create_table();
 		 createDuplicateKillerFolder();
 	 }

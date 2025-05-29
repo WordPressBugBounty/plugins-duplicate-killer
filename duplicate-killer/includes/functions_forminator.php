@@ -50,8 +50,11 @@ function duplicateKiller_forminator_save_fields($entry, $id, $field_data) {
 	$table_name = $wpdb->prefix.'dk_forms_duplicate';
 	$form_title = get_the_title($id);
 	$form_cookie = isset($_COOKIE['dk_form_cookie'])? $form_cookie=$_COOKIE['dk_form_cookie']: $form_cookie='NULL';
+	$dk_check_ip_feature = getDuplicateKillerSetting("Forminator_page","forminator_user_ip");
+	$form_ip = ($dk_check_ip_feature)? $form_ip=dk_get_user_ip(): $form_ip='NULL';
+
 	foreach($field_data as $data){
-		if(is_array($data['value']) AND isset($data['value']['file'])){
+		if(is_array($data['value']) AND isset($data['value']['file']) AND (!empty($data['value']['file']))){
 			$storage_fields[] = [
 				"name" => $data['name'],
 				"value" => array(
@@ -75,7 +78,8 @@ function duplicateKiller_forminator_save_fields($entry, $id, $field_data) {
 				'form_name' => $form_title,
 				'form_value'   => $form_value,
 				'form_cookie' => $form_cookie,
-				'form_date' => $form_date
+				'form_date' => $form_date,
+				'form_ip' => $form_ip
 			) 
 		);
 	//error_log( print_r( $field_data, true ) );
@@ -88,12 +92,29 @@ function duplicateKiller_forminator_before_send_email($submit_errors, $form_id, 
 	$forminator_page = get_option("forminator_page");
 	
 	$form_title = get_the_title( $form_id );
-	$result = duplicateKiller_check_duplicate("Forminator",$form_title);
 	
+	//check if IP limit feature is active
+	if($forminator_page['forminator_user_ip'] == "1"){
+		$form_ip = dk_get_user_ip();
+		$dk_check_ip_feature = dk_check_ip_feature("Forminator",$form_title,$form_ip);
+		if($dk_check_ip_feature){
+			$message = $forminator_page['forminator_error_message_limit_ip'];
+			//change the general error message with the dk_custom_error_message
+			add_filter('forminator_custom_form_invalid_form_message',function($invalid_form_message, $form_id) use($message){
+				$invalid_form_message = $message;
+				return $invalid_form_message = $message;
+			},15,2);
+			//stop form for submission if IP limit is triggered
+				$submit_errors[] = $message;
+				return $submit_errors;
+		}
+	}
 	$abort = false;
 	$form_cookie = isset($_COOKIE['dk_form_cookie'])? $form_cookie=$_COOKIE['dk_form_cookie']: $form_cookie='NULL';
 	$storage_fields = array();
 	$no_form = true;
+	
+	$result = duplicateKiller_check_duplicate("Forminator",$form_title);
 	if($result AND $forminator_page){
 	//$form_data = array(); deprecated from 1.2.1
 	
@@ -215,6 +236,7 @@ function duplicateKiller_forminator_validate_input($input){
 			}	
 		}
 	}
+	//validate cookies feature
 	if(!isset($input['forminator_cookie_option']) || $input['forminator_cookie_option'] !== "1"){
 		$output['forminator_cookie_option'] = "0";
 	}else{
@@ -225,6 +247,20 @@ function duplicateKiller_forminator_validate_input($input){
 	}else{
 		$output['forminator_cookie_option_days'] = sanitize_text_field($input['forminator_cookie_option_days']);
 	}
+	
+	//validate ip limit feature
+	if(!isset($input['forminator_user_ip']) || $input['forminator_user_ip'] !== "1"){
+		$output['forminator_user_ip'] = "0";
+	}else{
+		$output['forminator_user_ip'] = "1";
+	}
+	if(empty($input['forminator_error_message_limit_ip'])){
+		$output['forminator_error_message_limit_ip'] = "You already submitted this form!";
+	}else{
+		$output['forminator_error_message_limit_ip'] = sanitize_text_field($input['forminator_error_message_limit_ip']);
+	}
+	
+	//validate standard error message
     if(empty($input['forminator_error_message'])){
 		$output['forminator_error_message'] = "Please check all fields! These values has been submitted already!";
 	}else{
@@ -255,6 +291,10 @@ function duplicateKiller_forminator_settings_callback($args){
 	$options = get_option($args[0]);
 	$checked_cookie = isset($options['forminator_cookie_option']) AND ($options['forminator_cookie_option'] == "1")?: $checked_cookie='';
 	$stored_cookie_days = isset($options['forminator_cookie_option_days'])? $options['forminator_cookie_option_days']:"365";
+	
+	$checkbox_ip = isset($options['forminator_user_ip']) AND ($options['forminator_user_ip'] == "1")?: $checkbox_ip='';
+	$stored_error_message_limit_ip = isset($options['forminator_error_message_limit_ip'])? $options['forminator_error_message_limit_ip']:"You already submitted this form!";
+	
 	$stored_error_message = isset($options['forminator_error_message'])? $options['forminator_error_message']:"Please check all fields! These values has been submitted already!"; ?>
 	<h4 class="dk-form-header">Duplicate Killer settings</h4>
 	<div class="dk-set-error-message">
@@ -293,6 +333,36 @@ function duplicateKiller_forminator_settings_callback($args){
 			});
 			if (checkbox.checked == true) {
 				document.getElementById("dk-unique-entries-cookie").style.display = "block";
+			}
+		</script>
+	</div>
+	<div class="dk-limit_submission_by_ip">
+		<fieldset class="dk-fieldset">
+		<legend><strong>Limit submissions by IP address for 7 days for all forms!</strong></legend>
+		<strong>This feature </strong><span> restrict form entries based on IP address for 7 days</span>
+		</br>
+		</br>
+		<div class="dk-input-checkbox-callback">
+			<input type="checkbox" id="user_ip" name="<?php echo esc_attr($args[0].'[forminator_user_ip]');?>" value="1" <?php echo esc_attr($checkbox_ip ? 'checked' : '');?>></input>
+			<label for="user_ip">Activate this function</label>
+		</div>
+		</br>
+		<div id="dk-limit-ip" style="display:none">
+		<span>Ser error message:</span><input type="text" size="70" name="<?php echo esc_attr($args[0].'[forminator_error_message_limit_ip]');?>" value="<?php echo esc_attr($stored_error_message_limit_ip);?>"></input>
+		</br>
+		</div>
+		</fieldset>
+		<script>
+			var checkbox = document.getElementById("user_ip");
+			checkbox.addEventListener('change', function() {
+				if (this.checked) {
+					document.getElementById("dk-limit-ip").style.display = "block";
+				}else{
+					document.getElementById("dk-limit-ip").style.display = "none";
+				}
+			});
+			if (checkbox.checked == true) {
+				document.getElementById("dk-limit-ip").style.display = "block";
 			}
 		</script>
 	</div>

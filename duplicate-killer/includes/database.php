@@ -74,7 +74,8 @@ class DK_Main_List_Table extends WP_List_Table{
 			'form_plugin'=> __( 'Form plugin', 'duplicate_killer_database' ),
             'form_name' => __( 'Form Name', 'duplicate_killer_database' ),
             'form_value'=> __( 'Form Value', 'duplicate_killer_database' ),
-			'form_date'=> __( 'Form Date', 'duplicate_killer_database' )
+			'form_date'=> __( 'Form Date', 'duplicate_killer_database' ),
+			'form_ip'=> __( 'Form IP', 'duplicate_killer_database' )
         );
 
         return $columns;
@@ -132,6 +133,7 @@ class DK_Main_List_Table extends WP_List_Table{
 				}
 				$data_value['form_value'] =  wp_kses_post($store);
 				$data_value['form_date'] =  esc_attr($row->form_date);
+				$data_value['form_ip']  = esc_attr($row->form_ip);
 				$data[] = $data_value;
 			}
 			if(!empty($data)){
