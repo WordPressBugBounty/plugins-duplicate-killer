@@ -2,7 +2,7 @@
 
 /**
  * Plugin Name: Duplicate Killer
- * Version: 1.3.0
+ * Version: 1.3.1
  * Description: Stop your duplicate entries  for Contact Form 7, Forminator and WPForms plugins. Pprevent duplicate entries from being created when users submit the form. The best example of its use is to limit one submission per Email address
  * Author: NIA
  * Author URI: https://profiles.wordpress.org/wpnia/
@@ -273,31 +273,30 @@ function duplicateKiller_check_values_with_lowercase_filter($var1, $var2){
  * Include plugin style
  */
 add_action('admin_enqueue_scripts', 'duplicateKiller_callback_for_setting_up_scripts');
+
 function duplicateKiller_callback_for_setting_up_scripts() {
-    wp_register_style( 'duplicateKillerStyle', plugins_url('/assets/style.css',DuplicateKiller_PLUGIN));
-    wp_enqueue_style( 'duplicateKillerStyle' );
-}
-//for testing purpose
-/*
-$x = 11;
-if($x==12){
-	add_action( 'wp_footer', function(){?>
-	<script type="text/javascript">
-var wpcf7Elm = document.querySelector( '.wpcf7' );
- 
-wpcf7Elm.addEventListener( 'wpcf7mailsent', function( event ) {
-  document.cookie = "username=John Smith; expires=Thu, 18 Dec 2024 12:00:00 UTC; path=/";
-}, false );
-	jQuery(document).on('forminator:form:submit:success', function (e, formData) {
-document.cookie = "username=John Smith; expires=Thu, 18 Dec 2024 12:00:00 UTC; path=/";
-});
+    // Verificăm dacă suntem pe pagina unde vrem să încărcăm fișierele
+    if (!isset($_GET['page']) || $_GET['page'] !== 'duplicateKiller') {
+        return;
+    }
 
-	</script>
+    // Înregistrăm și încărcăm fișierul CSS
+    wp_register_style(
+        'duplicateKillerStyle',
+        plugins_url('assets/style.css', DuplicateKiller_PLUGIN)
+    );
+    wp_enqueue_style('duplicateKillerStyle');
 
-	<?php
-}, 999 );
+    // Înregistrăm și încărcăm fișierul JS
+	wp_enqueue_script(
+        'duplicateKiller-admin',
+        plugins_url('assets/admin-settings.js', DuplicateKiller_PLUGIN),
+        array(),
+        '1.0',
+        true
+    );
 }
-*/
+
 
 /* Base Menu */
 add_action('admin_menu', 'duplicateKiller_admin');

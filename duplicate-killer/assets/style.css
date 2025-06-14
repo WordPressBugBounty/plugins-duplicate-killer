@@ -78,3 +78,35 @@ Version: 1.1.1
 .dk-input-checkbox-callback input:checked + label:after {
   opacity: 1;
 }
+.dk-box.dk-delete-records {
+	background-color: #f0f4f8;
+	border: 1px solid #d1d9e0;
+	border-radius: 8px;
+	padding: 12px 16px;
+	margin-top: 15px;
+}
+
+.dk-record-count {
+	margin: 0 0 10px;
+	font-weight: 600;
+	color: #333;
+}
+
+.dk-delete-label {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	cursor: pointer;
+	color: #c0392b;
+	font-weight: 500;
+}
+
+.dk-delete-checkbox {
+	transform: scale(1.2);
+	cursor: pointer;
+}
+.dk-count-number {
+	font-size: 1.25em;
+	font-weight: bold;
+	color: #000;
+}

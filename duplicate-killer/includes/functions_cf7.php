@@ -132,17 +132,20 @@ function duplicateKiller_cf7_before_send_email($contact_form, &$abort, $object) 
 			$dk_check_ip_feature = getDuplicateKillerSetting("CF7","forminator_user_ip");
 			$form_ip = ($dk_check_ip_feature)? $form_ip=dk_get_user_ip(): $form_ip='NULL';
 		}
-			//upload files if any
-			if($files){
-				$random_number = uniqid(time());
-				foreach ($files as $file_key => $file) {
-					$file = is_array( $file ) ? reset( $file ) : $file;
-					if( empty($file) ) continue;
-					$file_path = $dkcf7_folder.'/'.$file_key.'-'.$random_number.'-'.basename($file);
-					$file_url = $dkcf7_folder_url.'/'.$file_key.'-'.$random_number.'-'.basename($file);
-					copy($file, $file_path);
-					if(array_key_exists($file_key, $data)){
-						$data[$file_key] = $file_url;
+			//check if user want to save the files locally
+			if (!isset($cf7_page['cf7_save_image']) || $cf7_page['cf7_save_image'] == 1) {
+				//upload files if any
+				if($files){
+					$random_number = uniqid(time());
+					foreach ($files as $file_key => $file) {
+						$file = is_array( $file ) ? reset( $file ) : $file;
+						if( empty($file) ) continue;
+						$file_path = $dkcf7_folder.'/'.$file_key.'-'.$random_number.'-'.basename($file);
+						$file_url = $dkcf7_folder_url.'/'.$file_key.'-'.$random_number.'-'.basename($file);
+						copy($file, $file_path);
+						if(array_key_exists($file_key, $data)){
+							$data[$file_key] = $file_url;
+						}
 					}
 				}
 			}
@@ -203,7 +206,38 @@ function duplicate_killer_CF7_get_forms(){
  * Callbacks
 **********************************/
 function duplicateKiller_cf7_validate_input($input){
+	global $wpdb;
 	$output = array();
+	
+	
+	// DELETE if checkbox is checked
+	if (isset($_POST['CF7_delete_records'])) {
+		$table = $wpdb->prefix . 'dk_forms_duplicate';
+
+		// If there is only one checkbox checked and it is NOT an array (ex: name="CF7_delete_records[Some Form]")
+		if (!is_array($_POST['CF7_delete_records'])) {
+
+			$form_name = sanitize_text_field($_POST['CF7_delete_records']);
+			$wpdb->delete($table, [
+				'form_plugin' => 'CF7',
+				'form_name'   => $form_name,
+			]);
+
+		} else {
+
+			// If there are multiple checkboxes checked
+			foreach ($_POST['CF7_delete_records'] as $raw_form_name => $delete_flag) {
+				if ($delete_flag === "1") {
+					$form_name = sanitize_text_field($raw_form_name);
+					$wpdb->delete($table, [
+						'form_plugin' => 'CF7',
+						'form_name'   => $form_name,
+					]);
+				}
+			}
+		}
+	}
+
 	// Create our array for storing the validated options
     foreach($input as $key =>$value){
 		if(is_array($value)){
@@ -248,6 +282,13 @@ function duplicateKiller_cf7_validate_input($input){
 	}else{
 		$output['cf7_error_message'] = sanitize_text_field($input['cf7_error_message']);
 	}
+	
+	//validate save image option
+	if(!isset($input['cf7_save_image']) || $input['cf7_save_image'] !== "1"){
+		$output['cf7_save_image'] = "0";
+	}else{
+		$output['cf7_save_image'] = "1";
+	}
     // Return the array processing any additional functions filtered by this action
     return apply_filters('duplicate_killer_cf7_validate_input', $output, $input);
 }
@@ -275,6 +316,8 @@ function duplicateKiller_cf7_settings_callback($args){
 	$stored_error_message = isset($options['cf7_error_message'])? $options['cf7_error_message']:"Please check all fields! These values has been submitted already!"; 
 	$checkbox_ip = isset($options['cf7_user_ip']) AND ($options['cf7_user_ip'] == "1")?: $checkbox_ip='';
 	$stored_error_message_limit_ip = isset($options['cf7_error_message_limit_ip'])? $options['cf7_error_message_limit_ip']:"You already submitted this form!";
+	
+	$checkbox_save_image = (!isset($options['cf7_save_image']) || $options['cf7_save_image'] == "1") ? 1 : 0;
 	?>
 	<h4 class="dk-form-header">Duplicate Killer settings</h4>
 	<div class="dk-set-error-message">
@@ -302,19 +345,6 @@ function duplicateKiller_cf7_settings_callback($args){
 		</br>
 		</div>
 		</fieldset>
-		<script>
-			var checkbox = document.getElementById("cookie");
-			checkbox.addEventListener('change', function() {
-				if (this.checked) {
-					document.getElementById("dk-unique-entries-cookie").style.display = "block";
-				}else{
-					document.getElementById("dk-unique-entries-cookie").style.display = "none";
-				}
-			});
-			if (checkbox.checked == true) {
-				document.getElementById("dk-unique-entries-cookie").style.display = "block";
-			}
-		</script>
 	</div>
 		<div class="dk-limit_submission_by_ip">
 		<fieldset class="dk-fieldset">
@@ -332,27 +362,48 @@ function duplicateKiller_cf7_settings_callback($args){
 		</br>
 		</div>
 		</fieldset>
-		<script>
-			var checkbox = document.getElementById("user_ip");
-			checkbox.addEventListener('change', function() {
-				if (this.checked) {
-					document.getElementById("dk-limit-ip").style.display = "block";
-				}else{
-					document.getElementById("dk-limit-ip").style.display = "none";
-				}
-			});
-			if (checkbox.checked == true) {
-				document.getElementById("dk-limit-ip").style.display = "block";
-			}
-		</script>
+	</div>
+	<div class="dk-save-image-to-server">
+	<fieldset class="dk-fieldset">
+		<legend><strong>Save images on server</strong></legend>
+		<strong>Stores images submitted through the form.</strong>
+		<span> Warning: This will use your server storage space.</span>
+		<br><br>
+
+		<div class="dk-input-checkbox-callback">
+			<input type="checkbox" id="save_image" name="<?php echo esc_attr($args[0] . '[cf7_save_image]'); ?>" value="1" <?php echo esc_attr($checkbox_save_image ? 'checked' : ''); ?>>
+			<label for="save_image">Enable image saving</label>
+		</div>
+
+		<div id="dk-save-image-path" style="display:none">
+			<p><strong>Images will be saved in the default folder:</strong> <code>/wp-content/uploads/dkcf7_uploads</code></p>
+			<p><em>This location will be used automatically. No additional configuration is needed.</em></p>
+		</div>
+	</fieldset>
 	</div>
 <?php
 }
 function duplicateKiller_cf7_select_form_tag_callback($args){
-	$options = get_option($args[0]); ?>
+	global $wpdb;
+
+	$options = get_option($args[0]);
+	$table   = $wpdb->prefix . 'dk_forms_duplicate';
+
+	// Get all counts in a single query
+	$counts = $wpdb->get_results(
+		$wpdb->prepare(
+			"SELECT form_name, COUNT(*) as total FROM $table WHERE form_plugin = %s GROUP BY form_name",
+			'CF7'
+		),
+		OBJECT_K // => will return an array with key form_name
+	);
+	?>
 	<h4 class="dk-form-header">CF7 forms list</h4>
 <?php
-	foreach(duplicate_killer_CF7_get_forms() as $form => $tag): ?>
+	foreach(duplicate_killer_CF7_get_forms() as $form => $tag):
+		//get all counts for this form
+		$count = isset($counts[$form]) ? (int)$counts[$form]->total : 0;
+	?>
 		<div class="dk-single-form"><h4 class="dk-form-header"><?php esc_html_e($form,'duplicatekiller');?></h4>
 		<h4 style="text-align:center">Choose the unique fields</h4>
 <?php
@@ -365,7 +416,24 @@ function duplicateKiller_cf7_select_form_tag_callback($args){
 			</div>
 
 <?php
-		endfor; ?>
+		endfor;
+		?>
+		<!-- New checkbox from v1.3.1: delete submissions -->
+		<div class="dk-box dk-delete-records">
+				<p class="dk-record-count">
+					📦 <span class="dk-count-number"><?php echo esc_html($count); ?></span> saved submissions found for this form
+				</p>
+				<?php if ($count > 0) : ?>
+					<label for="<?php echo esc_attr('delete_records_' . $form); ?>" class="dk-delete-label">
+						<input type="checkbox"
+							id="<?php echo esc_attr('delete_records_' . $form); ?>"
+							name="<?php echo esc_attr('CF7_delete_records[' . $form . ']'); ?>"
+							value="1"
+							class="dk-delete-checkbox">
+						🗑️ <span>Delete all saved entries for this form <small>(this action cannot be undone)</small></span>
+					</label>
+				<?php endif; ?>
+			</div>
 		</div>
 <?php endforeach; ?>
 

@@ -1,6 +1,6 @@
 === Duplicate Killer - Prevent spam and stop double entry submissions for Contact Form 7, Forminator and WPForms Lite plugins. ===
 Plugin Name: Duplicate Killer
-Version: 1.3.0
+Version: 1.3.1
 Author: NIA
 Author URI: https://profiles.wordpress.org/wpnia/
 Contributors: wpnia
@@ -8,7 +8,7 @@ Tags: forms, contact form, duplicate, CF7, double entry
 Donate link: https://www.paypal.com/paypalme/wpnia
 Requires at least: 5.2
 Tested up to: 6.8.1
-Stable tag: 1.3.0
+Stable tag: 1.3.1
 Requires PHP: 5.6.20
 License: GPL v2 - http://www.gnu.org/licenses/old-licenses/gpl-2.0.html
 
@@ -45,6 +45,9 @@ Duplicate Killer will prevent double entry submissions for Contact Form 7, Formi
 ### Limit submissions by IP address
 - This feature restrict form entries based on IP address for 7 days
 - Warn the user that the value inserted has been already submitted!
+
+### Stores your files and images submitted through the form for Contact Form 7
+- Enable this option to automatically store uploaded files from the form on your server.
 
 
 == Installation ==
@@ -85,6 +88,9 @@ New feature. Store, display and manage all entries forms direct from your wordpr
 = Limit submissions by IP address =
 New feature. Restrict form entries based on IP address
 
+= Limit submissions by IP address =
+New feature. Stores files submitted through the form for Contact Form 7
+
 == Screenshots ==
 
 1. Settings page.
@@ -94,6 +100,9 @@ New feature. Restrict form entries based on IP address
 == Upgrade Notice ==
 
 == Changelog ==
+
+= 1.3.1 =
+* Feature: Automatically store uploaded files from the form (CF7) on your server
 
 = 1.3.0 =
 * Tested up to 6.8.1

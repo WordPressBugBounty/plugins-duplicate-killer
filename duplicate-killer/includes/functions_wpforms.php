@@ -1,47 +1,51 @@
 <?php
 defined( 'ABSPATH' ) or die( 'You shall not pass!' );
 
-/**
- * check if WPForms load the stylesheets and call the custom function (dk_wpforms_is_cookie_set) if so
- */
- add_filter( 'the_content', 'dk_check_wpforms_enqueue' );
-function dk_check_wpforms_enqueue( $content ) {
-	if(has_shortcode($content, 'wpforms') OR ( function_exists( 'has_block' ) && has_block( 'wpforms/form-selector' ) )){
-		dk_wpforms_is_cookie_set();
-	}
-	return $content;
-}
-function dk_wpforms_is_cookie_set(){
-	if($forminator_page = get_option("WPForms_page")){
-	if(isset($forminator_page['wpforms_cookie_option']) AND $forminator_page['wpforms_cookie_option'] == "1"){
-		dk_checked_defined_constants('dk_cookie_unique_time',md5(microtime(true).mt_Rand()));
-		dk_checked_defined_constants('dk_cookie_days_persistence',$forminator_page['wpforms_cookie_option_days']);
-		add_action( 'wp_footer', function(){?>
-		<script id="duplicate-killer-wpforms-form" type="text/javascript">
-			(function($){
-			if($('button').hasClass('wpforms-submit')){
-				if(!getCookie('dk_form_cookie')){
-					var date = new Date();
-					date.setDate(date.getDate()+<?php echo esc_attr(dk_cookie_days_persistence);?>);
-					var dk_wpforms_form_cookie_days = date.toUTCString();
-					document.cookie = "dk_form_cookie=<?php echo esc_attr(dk_cookie_unique_time);?>; expires="+dk_wpforms_form_cookie_days+"; path=/";
-				}
+// Inject JS that sets the cookie AND set the valuea as hidden input field
+add_action('wp_footer', 'dk_inject_wpforms_cookie_with_hidden_field', 20);
+function dk_inject_wpforms_cookie_with_hidden_field() {
+	$wpforms_page = get_option("WPForms_page");
+
+	if (!empty($wpforms_page['wpforms_cookie_option']) && $wpforms_page['wpforms_cookie_option'] === "1") {
+		$days = (int) $wpforms_page['wpforms_cookie_option_days'];
+		$cookie_value = md5(microtime(true) . mt_rand());
+		?>
+		<script id="dk-wpforms-cookie-handler" type="text/javascript">
+		document.addEventListener("DOMContentLoaded", function () {
+			var cookieName = "dk_form_cookie";
+			var cookieValue = getCookie(cookieName);
+			if (!cookieValue) {
+				var date = new Date();
+				date.setDate(date.getDate() + <?php echo $days; ?>);
+				var expires = "expires=" + date.toUTCString();
+				document.cookie = cookieName + "=<?php echo esc_js($cookie_value); ?>; " + expires + "; path=/";
+				cookieValue = "<?php echo esc_js($cookie_value); ?>";
 			}
-			})(jQuery);
-			function getCookie(ck_name) {
+
+			// Add hidden input to each form
+			document.querySelectorAll("form.wpforms-form").forEach(function(form) {
+				if (!form.querySelector('input[name="dk_form_cookie"]')) {
+					var input = document.createElement('input');
+					input.type = 'hidden';
+					input.name = 'dk_form_cookie';
+					input.value = cookieValue;
+					form.appendChild(input);
+				}
+			});
+
+			function getCookie(name) {
 				var cookieArr = document.cookie.split(";");
-				for(var i = 0; i < cookieArr.length; i++) {
+				for (var i = 0; i < cookieArr.length; i++) {
 					var cookiePair = cookieArr[i].split("=");
-					if(ck_name == cookiePair[0].trim()) {
+					if (name === cookiePair[0].trim()) {
 						return decodeURIComponent(cookiePair[1]);
 					}
 				}
 				return null;
 			}
+		});
 		</script>
-<?php
-		}, 999 );
-	}
+		<?php
 	}
 }
 
@@ -53,7 +57,7 @@ function duplicateKiller_wpforms_before_send_email($fields, $entry, $form_data){
 	global $wpdb;
 	$table_name = $wpdb->prefix.'dk_forms_duplicate';
 	$wpforms_page = get_option("WPForms_page");
-	$form_cookie = isset($_COOKIE['dk_form_cookie'])? $form_cookie=$_COOKIE['dk_form_cookie']: $form_cookie='NULL';
+	$form_cookie = isset($_POST['dk_form_cookie']) ? sanitize_text_field($_POST['dk_form_cookie']) : 'NULL';
 	$abort = false;
 	$storage_fields = array();
 	$form_ip="";
@@ -69,9 +73,17 @@ function duplicateKiller_wpforms_before_send_email($fields, $entry, $form_data){
 				$invalid_form_message = $message;
 				return $invalid_form_message = $message;
 			},15,2);
-			//stop form for submission if IP limit is triggered
+				//stop form for submission if IP limit is triggered
 				wpforms()->process->errors[ $form_data[ 'id' ]][0] = $message;
 				$abort = true;
+		}else{
+			//store fields in custom table dk
+				foreach($fields as $data){
+					$storage_fields[] = [
+						"name" => $data['name'],
+						"value" => $data['value']
+					];
+				}
 		}
 	}else{
 		foreach($fields as $data){
@@ -88,18 +100,12 @@ function duplicateKiller_wpforms_before_send_email($fields, $entry, $form_data){
 								//inserted from v1.2.1
 								$res = duplicateKiller_check_values($form_value,$data['name'],$data['value']);
 
-									if($res){
-									$cookies_setup = [
-											'plugin_name' => "wpforms_cookie_option",
-											'get_option' => $wpforms_page,
-											'cookie_stored' => $form_cookie,
-											'cookie_db_set' => $row->form_cookie
-										];
-									if(dk_check_cookie($cookies_setup)){
-										wpforms()->process->errors[ $form_data[ 'id' ]][$data[ 'id' ]] = $wpforms_page['wpforms_error_message'];
+									if($res && $form_cookie === $row->form_cookie){
+										wpforms()->process->errors[$form_data['id']][$data['id']] = $wpforms_page['wpforms_error_message'];
 										$abort = true;
-									}
-								}/* deprecated from 1.2.1else{
+										break; // stop search, already found
+								}
+								/* deprecated from 1.2.1else{
 									if(!empty($data['value']))
 									$data_for_insert[$data['name']] = $data['value'];
 								}
@@ -116,8 +122,7 @@ function duplicateKiller_wpforms_before_send_email($fields, $entry, $form_data){
 			}
 		}
 	}
-	if(!$abort and $no_form){
-		
+	if(!$abort AND $no_form){
 		//check if IP limit feature is active and store it
 		if(!$form_ip){
 			$dk_check_ip_feature = getDuplicateKillerSetting("WPForms","wpforms_user_ip");
@@ -166,7 +171,34 @@ function duplicateKiller_wpforms_get_forms(){
  * Callbacks
 **********************************/
 function duplicateKiller_wpforms_validate_input($input){
+	global $wpdb;
 	$output = array();
+	
+	// DELETE if checkbox is checked
+	if (isset($_POST['WPForms_delete_records'])) {
+		$table = $wpdb->prefix . 'dk_forms_duplicate';
+
+		// If there is only one checkbox checked and it is NOT an array (ex: name="WPForms_delete_records[Some Form]")
+		if (!is_array($_POST['WPForms_delete_records'])) {
+			$form_name = sanitize_text_field($_POST['WPForms_delete_records']);
+			$wpdb->delete($table, [
+				'form_plugin' => 'WPForms',
+				'form_name'   => $form_name,
+			]);
+
+		} else {
+			// If there are multiple checkboxes checked
+			foreach ($_POST['WPForms_delete_records'] as $raw_form_name => $delete_flag) {
+				if ($delete_flag === "1") {
+					$form_name = sanitize_text_field($raw_form_name);
+					$wpdb->delete($table, [
+						'form_plugin' => 'WPForms',
+						'form_name'   => $form_name,
+					]);
+				}
+			}
+		}
+	}
 	// Create our array for storing the validated options
        foreach($input as $key =>$value){
 		if(is_array($value)){
@@ -268,19 +300,6 @@ function duplicateKiller_wpforms_settings_callback($args){
 		</br>
 		</div>
 		</fieldset>
-		<script>
-			var checkbox = document.getElementById("cookie");
-			checkbox.addEventListener('change', function() {
-				if (this.checked) {
-					document.getElementById("dk-unique-entries-cookie").style.display = "block";
-				}else{
-					document.getElementById("dk-unique-entries-cookie").style.display = "none";
-				}
-			});
-			if (checkbox.checked == true) {
-				document.getElementById("dk-unique-entries-cookie").style.display = "block";
-			}
-		</script>
 	</div>
 	<div class="dk-limit_submission_by_ip">
 		<fieldset class="dk-fieldset">
@@ -298,29 +317,30 @@ function duplicateKiller_wpforms_settings_callback($args){
 		</br>
 		</div>
 		</fieldset>
-		<script>
-			var checkbox = document.getElementById("user_ip");
-			checkbox.addEventListener('change', function() {
-				if (this.checked) {
-					document.getElementById("dk-limit-ip").style.display = "block";
-				}else{
-					document.getElementById("dk-limit-ip").style.display = "none";
-				}
-			});
-			if (checkbox.checked == true) {
-				document.getElementById("dk-limit-ip").style.display = "block";
-			}
-		</script>
 	</div>
 <?php
 }
 function duplicateKiller_wpforms_select_form_tag_callback($args){
+	global $wpdb;
+
 	$options = get_option($args[0]);
+	$table   = $wpdb->prefix . 'dk_forms_duplicate';
+
+	// Get all counts in a single query
+	$counts = $wpdb->get_results(
+		$wpdb->prepare(
+			"SELECT form_name, COUNT(*) as total FROM $table WHERE form_plugin = %s GROUP BY form_name",
+			'WPForms'
+		),
+		OBJECT_K // => will return an array with key form_name
+	);
 ?>
 	<h4 class="dk-form-header">WPForms forms list</h4>
 <?php
 	$wp_forms = duplicateKiller_wpforms_get_forms();
 	foreach($wp_forms as $form => $tag):
+	//get all counts for this form
+		$count = isset($counts[$form]) ? (int)$counts[$form]->total : 0;
 ?>
 		<div class="dk-single-form"><h4 class="dk-form-header"><?php esc_html_e($form,'duplicatekiller');?></h4>
 		<h4 style="text-align:center">Choose the unique fields</h4>
@@ -333,6 +353,22 @@ function duplicateKiller_wpforms_select_form_tag_callback($args){
 			</div>
 <?php
 		endfor; ?>
+		<!-- New checkbox from v1.3.1: delete submissions -->
+		<div class="dk-box dk-delete-records">
+				<p class="dk-record-count">
+					📦 <span class="dk-count-number"><?php echo esc_html($count); ?></span> saved submissions found for this form
+				</p>
+				<?php if ($count > 0) : ?>
+				<label for="<?php echo esc_attr('delete_records_' . $form); ?>" class="dk-delete-label">
+					<input type="checkbox"
+						id="<?php echo esc_attr('delete_records_' . $form); ?>"
+						name="<?php echo esc_attr('WPForms_delete_records[' . $form . ']'); ?>"
+						value="1"
+						class="dk-delete-checkbox">
+					🗑️ <span>Delete all saved entries for this form <small>(this action cannot be undone)</small></span>
+				</label>
+				<?php endif; ?>
+			</div>
 		</div>
 <?php endforeach;
 }

@@ -220,8 +220,37 @@ function duplicateKiller_forminator_get_forms(){
  * Callbacks
 **********************************/
 function duplicateKiller_forminator_validate_input($input){
-	
+	global $wpdb;
 	$output = array();
+	
+	// DELETE if checkbox is checked
+	if (isset($_POST['Forminator_delete_records'])) {
+		$table = $wpdb->prefix . 'dk_forms_duplicate';
+
+		// If there is only one checkbox checked and it is NOT an array (ex: name="Forminator_delete_records[Some Form]")
+		if (!is_array($_POST['Forminator_delete_records'])) {
+
+			$form_name = sanitize_text_field($_POST['Forminator_delete_records']);
+			$wpdb->delete($table, [
+				'form_plugin' => 'Forminator',
+				'form_name'   => $form_name,
+			]);
+
+		} else {
+
+			// If there are multiple checkboxes checked
+			foreach ($_POST['Forminator_delete_records'] as $raw_form_name => $delete_flag) {
+				if ($delete_flag === "1") {
+					$form_name = sanitize_text_field($raw_form_name);
+					$wpdb->delete($table, [
+						'form_plugin' => 'Forminator',
+						'form_name'   => $form_name,
+					]);
+				}
+			}
+		}
+	}
+	
 	// Create our array for storing the validated options
     foreach($input as $key =>$value){
 		if(is_array($value)){
@@ -266,7 +295,6 @@ function duplicateKiller_forminator_validate_input($input){
 	}else{
 		$output['forminator_error_message'] = sanitize_text_field($input['forminator_error_message']);
 	}
-     
     // Return the array processing any additional functions filtered by this action
       return apply_filters( 'forminator_error_message', $output, $input );
 }
@@ -295,7 +323,8 @@ function duplicateKiller_forminator_settings_callback($args){
 	$checkbox_ip = isset($options['forminator_user_ip']) AND ($options['forminator_user_ip'] == "1")?: $checkbox_ip='';
 	$stored_error_message_limit_ip = isset($options['forminator_error_message_limit_ip'])? $options['forminator_error_message_limit_ip']:"You already submitted this form!";
 	
-	$stored_error_message = isset($options['forminator_error_message'])? $options['forminator_error_message']:"Please check all fields! These values has been submitted already!"; ?>
+	$stored_error_message = isset($options['forminator_error_message'])? $options['forminator_error_message']:"Please check all fields! These values has been submitted already!";
+	?>
 	<h4 class="dk-form-header">Duplicate Killer settings</h4>
 	<div class="dk-set-error-message">
 		<fieldset class="dk-fieldset">
@@ -322,19 +351,6 @@ function duplicateKiller_forminator_settings_callback($args){
 		</br>
 		</div>
 		</fieldset>
-		<script>
-			var checkbox = document.getElementById("cookie");
-			checkbox.addEventListener('change', function() {
-				if (this.checked) {
-					document.getElementById("dk-unique-entries-cookie").style.display = "block";
-				}else{
-					document.getElementById("dk-unique-entries-cookie").style.display = "none";
-				}
-			});
-			if (checkbox.checked == true) {
-				document.getElementById("dk-unique-entries-cookie").style.display = "block";
-			}
-		</script>
 	</div>
 	<div class="dk-limit_submission_by_ip">
 		<fieldset class="dk-fieldset">
@@ -352,29 +368,30 @@ function duplicateKiller_forminator_settings_callback($args){
 		</br>
 		</div>
 		</fieldset>
-		<script>
-			var checkbox = document.getElementById("user_ip");
-			checkbox.addEventListener('change', function() {
-				if (this.checked) {
-					document.getElementById("dk-limit-ip").style.display = "block";
-				}else{
-					document.getElementById("dk-limit-ip").style.display = "none";
-				}
-			});
-			if (checkbox.checked == true) {
-				document.getElementById("dk-limit-ip").style.display = "block";
-			}
-		</script>
 	</div>
 <?php
 }
 function duplicateKiller_forminator_select_form_tag_callback($args){
+	global $wpdb;
+
 	$options = get_option($args[0]);
-?>
+	$table   = $wpdb->prefix . 'dk_forms_duplicate';
+
+	// Get all counts in a single query
+	$counts = $wpdb->get_results(
+		$wpdb->prepare(
+			"SELECT form_name, COUNT(*) as total FROM $table WHERE form_plugin = %s GROUP BY form_name",
+			'Forminator'
+		),
+		OBJECT_K // => will return an array with key form_name
+	);
+	?>
 	<h4 class="dk-form-header">Forminator forms list</h4>
 <?php
 	$forminator_forms = duplicateKiller_forminator_get_forms();
 	foreach($forminator_forms as $form => $tag):
+	//get all counts for this form
+		$count = isset($counts[$form]) ? (int)$counts[$form]->total : 0;
 ?>
 		<div class="dk-single-form"><h4 class="dk-form-header"><?php esc_html_e($form,'duplicatekiller');?></h4>
 		<h4 style="text-align:center">Choose the unique fields</h4>
@@ -387,6 +404,22 @@ function duplicateKiller_forminator_select_form_tag_callback($args){
 			</div>
 <?php
 		endfor; ?>
+		<!-- New checkbox from v1.3.1: delete submissions -->
+		<div class="dk-box dk-delete-records">
+				<p class="dk-record-count">
+					📦 <span class="dk-count-number"><?php echo esc_html($count); ?></span> saved submissions found for this form
+				</p>
+				<?php if ($count > 0) : ?>
+				<label for="<?php echo esc_attr('delete_records_' . $form); ?>" class="dk-delete-label">
+					<input type="checkbox"
+						id="<?php echo esc_attr('delete_records_' . $form); ?>"
+						name="<?php echo esc_attr('Forminator_delete_records[' . $form . ']'); ?>"
+						value="1"
+						class="dk-delete-checkbox">
+					🗑️ <span>Delete all saved entries for this form <small>(this action cannot be undone)</small></span>
+				</label>
+				<?php endif; ?>
+			</div>
 		</div>
 <?php endforeach;
 }
