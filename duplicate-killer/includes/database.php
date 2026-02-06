@@ -118,22 +118,74 @@ class DK_Main_List_Table extends WP_List_Table{
                        ORDER BY form_id DESC
                         LIMIT $start,20", OBJECT);
         }
-			foreach($result as $row){
-				$data_value['form_id'] = esc_attr($row->form_id);
-				$data_value['form_plugin']  = esc_attr($row->form_plugin);
-				$data_value['form_name'] =  esc_attr($row->form_name);
-				$form_value = unserialize($row->form_value);
-				
-				if($data_value['form_plugin'] == "CF7"){
+			// Cache options once (cheap + clean)
+			$formidable_page = get_option('Formidable_page', []);
+			if (!is_array($formidable_page)) {
+				$formidable_page = [];
+			}
+			
+			// Cache Ninja Forms options once (cheap + clean)
+			$ninjaforms_page = get_option('NinjaForms_page', []);
+			if (!is_array($ninjaforms_page)) {
+				$ninjaforms_page = [];
+			}
+			foreach ($result as $row) {
+
+				// Reset per row (prevents leaking values across iterations)
+				$data_value = [];
+				$store = '';
+
+				$data_value['form_id']     = esc_attr($row->form_id);
+				$data_value['form_plugin'] = esc_attr($row->form_plugin);
+				$data_value['form_name']   = esc_attr($row->form_name);
+
+				$form_value = maybe_unserialize($row->form_value);
+
+				if ($data_value['form_plugin'] === 'CF7') {
 					$store = $this->organize_array_cf7($form_value);
-				}elseif($data_value['form_plugin'] == "Forminator"){
+
+				} elseif ($data_value['form_plugin'] === 'Forminator') {
 					$store = $this->organize_array_forminator($form_value);
-				}elseif($data_value['form_plugin'] == "WPForms"){
+
+				} elseif ($data_value['form_plugin'] === 'WPForms') {
 					$store = $this->organize_array_wpforms($form_value);
+
+				} elseif ($data_value['form_plugin'] === 'breakdance') {
+					$store = $this->organize_array_cf7($form_value);
+
+				} elseif ($data_value['form_plugin'] === 'Formidable') {
+					$store = $this->organize_array_formidable($form_value, $data_value['form_name'], $formidable_page);
+				
+				} elseif ($data_value['form_plugin'] === 'NinjaForms') {
+					$store = $this->organize_array_ninjaforms($form_value, $data_value['form_name'], $ninjaforms_page);
+	
+				} elseif ($data_value['form_plugin'] === 'elementor') {
+					$store = $this->organize_array_cf7($form_value);
+
+				} else {
+					// Fallback for unknown plugins (prevents reusing previous $store)
+					$store = is_string($form_value) ? $form_value : print_r($form_value, true);
 				}
-				$data_value['form_value'] =  wp_kses_post($store);
-				$data_value['form_date'] =  esc_attr($row->form_date);
-				$data_value['form_ip']  = esc_attr($row->form_ip);
+
+				$allowed_html = [
+					'div' => ['class' => true],
+					'p'   => [],
+					'strong' => [],
+					'small'  => ['style' => true],
+					'em'     => [],
+					'img' => [
+						'src'   => true,
+						'alt'   => true,
+						'style' => true,
+					],
+				];
+
+				$allowed_protocols = array_merge(wp_allowed_protocols(), ['data']);
+
+				$data_value['form_value'] = wp_kses($store, $allowed_html, $allowed_protocols);
+				$data_value['form_date']  = esc_attr($row->form_date);
+				$data_value['form_ip']    = esc_attr($row->form_ip);
+
 				$data[] = $data_value;
 			}
 			if(!empty($data)){
@@ -216,7 +268,203 @@ class DK_Main_List_Table extends WP_List_Table{
 		}
 		return $store;
 	}
+	/**
+	 * Render Ninja Forms values in a human-readable way.
+	 *
+	 * @param mixed  $form_value        Stored values (usually array: [field_id => value]).
+	 * @param string $form_name         e.g. "contact-form.12"
+	 * @param array  $ninjaforms_page   Cached NinjaForms_page option
+	 * @return string Safe HTML (caller should still wrap with wp_kses_post if needed).
+	 */
+	private function organize_array_ninjaforms($form_value, string $form_name, array $ninjaforms_page): string {
+
+		$form_value = maybe_unserialize($form_value);
+
+		if (!is_array($form_value) || empty($form_value)) {
+			return '';
+		}
+
+		// Fetch config and labels map
+		$cfg    = (isset($ninjaforms_page[$form_name]) && is_array($ninjaforms_page[$form_name])) ? $ninjaforms_page[$form_name] : [];
+		$labels = (isset($cfg['labels']) && is_array($cfg['labels'])) ? $cfg['labels'] : [];
+
+		$out = '<div class="dk-form-values dk-form-values--ninjaforms">';
+
+		foreach ($form_value as $fid => $val) {
+
+			// Ninja Forms field IDs are typically numeric, but be tolerant.
+			$fid_key_int = is_numeric($fid) ? (int)$fid : null;
+
+			// Normalize value
+			if (is_array($val)) {
+				$val = wp_json_encode($val, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+			} else {
+				$val = trim(wp_unslash((string) $val));
+			}
+
+			if ($val === '') {
+				continue;
+			}
+
+			// Resolve label: prefer int key when possible (matches how you saved labels)
+			if ($fid_key_int !== null && isset($labels[$fid_key_int])) {
+				$label = (string) $labels[$fid_key_int];
+			} elseif (isset($labels[$fid])) {
+				$label = (string) $labels[$fid];
+			} else {
+				$label = 'Field ' . (string) $fid;
+			}
+
+			$label = trim($label);
+			if ($label === '') {
+				$label = 'Field ' . (string) $fid;
+			}
+
+			// Special: signature field (NF often stores JSON with signature_data as base64 data URL)
+			if (is_string($val) && $val !== '' && $this->dk_looks_like_signature_payload($val)) {
+
+				$sig = $this->dk_extract_signature_from_payload($val);
+
+				if (!empty($sig['data_url'])) {
+
+					$thumb = '<img src="' . esc_attr($sig['data_url']) . '" style="max-width:220px; height:auto; display:block; margin-top:6px; border:1px solid #ddd; padding:6px; background:#fff;" alt="Signature" />';
+
+					$meta = '';
+					if (!empty($sig['width']) && !empty($sig['height'])) {
+						$meta = ' <small style="opacity:.7;">(' . (int) $sig['width'] . '×' . (int) $sig['height'] . ')</small>';
+					}
+
+					$out .= '<p><strong>' . esc_html($label) . ':</strong>' . $meta . $thumb . '</p>';
+					continue;
+				}
+
+				// Fallback: if it’s signature-ish but we can’t parse, don’t dump the whole payload
+				$out .= '<p><strong>' . esc_html($label) . ':</strong> <em>Signature data stored (hidden to keep table readable).</em></p>';
+				continue;
+			}
+
+			// Default rendering
+			$out .= '<p><strong>' . esc_html($label) . ':</strong> ' . esc_html($val) . '</p>';
+		}
+
+		$out .= '</div>';
+
+		return $out;
+	}
 	
+	/**
+	 * Quick heuristic: is this value likely a Ninja Forms signature JSON payload?
+	 */
+	private function dk_looks_like_signature_payload(string $val): bool {
+		// cheap checks first
+		if (strpos($val, 'signature_data') === false) return false;
+		if (strpos($val, 'data:image') === false) return false;
+		return true;
+	}
+
+	/**
+	 * Extract signature data URL + optional canvas dimensions from a stored payload.
+	 *
+	 * @return array{data_url:string,width:int,height:int}
+	 */
+	private function dk_extract_signature_from_payload(string $val): array {
+
+		$out = [
+			'data_url' => '',
+			'width'    => 0,
+			'height'   => 0,
+		];
+
+		$decoded = json_decode($val, true);
+		if (!is_array($decoded)) {
+			return $out;
+		}
+
+		if (!empty($decoded['signature_data']) && is_string($decoded['signature_data'])) {
+			$out['data_url'] = $decoded['signature_data'];
+		}
+
+		if (!empty($decoded['canvas_dimensions']) && is_array($decoded['canvas_dimensions'])) {
+			$w = $decoded['canvas_dimensions']['width'] ?? 0;
+			$h = $decoded['canvas_dimensions']['height'] ?? 0;
+			$out['width']  = is_numeric($w) ? (int)$w : 0;
+			$out['height'] = is_numeric($h) ? (int)$h : 0;
+		}
+
+		return $out;
+	}
+	/**
+	 * Render Formidable values in a human-readable way.
+	 *
+	 * @param mixed  $form_value        Stored values (usually array: [field_id => value]).
+	 * @param string $form_name         e.g. "contact-us.2"
+	 * @param array  $formidable_page   Cached Formidable_page option
+	 * @return string Safe HTML (caller should still wrap with wp_kses_post if needed).
+	 */
+	private function organize_array_formidable($form_value, string $form_name, array $formidable_page): string {
+
+		// Accept legacy stored values (string) safely
+		$form_value = maybe_unserialize($form_value);
+
+		if (!is_array($form_value) || empty($form_value)) {
+			return '';
+		}
+
+		// Fetch config and labels map (new structure: Formidable_page[$form_name]['labels'])
+		$cfg = array();
+		if (isset($formidable_page[$form_name]) && is_array($formidable_page[$form_name])) {
+			$cfg = $formidable_page[$form_name];
+		} else {
+			// Fallback: sometimes DB has "contact-us.2" but option key might be different
+			// Try to match by normalizing whitespace
+			$normalized = trim((string)$form_name);
+			if ($normalized !== $form_name && isset($formidable_page[$normalized]) && is_array($formidable_page[$normalized])) {
+				$cfg = $formidable_page[$normalized];
+			}
+		}
+
+		$labels = (isset($cfg['labels']) && is_array($cfg['labels'])) ? $cfg['labels'] : array();
+
+		$out = '<div class="dk-form-values dk-form-values--formidable">';
+
+		foreach ($form_value as $fid => $val) {
+
+			// Formidable field IDs are numeric
+			if (!is_numeric($fid)) {
+				continue;
+			}
+
+			$fid = (int) $fid;
+			if ($fid <= 0) {
+				continue;
+			}
+
+			// Normalize value (arrays -> JSON, strings -> unslash + trim)
+			if (is_array($val)) {
+				$val = wp_json_encode($val, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+			} else {
+				$val = trim(wp_unslash((string) $val));
+			}
+
+			// Skip empty values
+			if ($val === '') {
+				continue;
+			}
+
+			// Resolve label by field ID (saved keys are usually ints, so $labels[$fid] works)
+			$label = isset($labels[$fid]) ? (string) $labels[$fid] : ('Field ' . $fid);
+			$label = trim($label);
+			if ($label === '') {
+				$label = 'Field ' . $fid;
+			}
+
+			$out .= '<p><strong>' . esc_html($label) . ':</strong> ' . esc_html($val) . '</p>';
+		}
+
+		$out .= '</div>';
+
+		return $out;
+	}
     //Define bulk action
     public function process_bulk_action(){
 

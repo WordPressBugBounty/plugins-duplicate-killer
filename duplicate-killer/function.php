@@ -1,26 +1,32 @@
 <?php
-
 /**
  * Plugin Name: Duplicate Killer
- * Version: 1.3.1
- * Description: Stop your duplicate entries  for Contact Form 7, Forminator and WPForms plugins. Pprevent duplicate entries from being created when users submit the form. The best example of its use is to limit one submission per Email address
+ * Version: 1.4.7
+ * Description: Stop duplicate form entries for Contact Form 7, Forminator, WPForms, Elementor Forms, Formidable Forms, and Breakdance Page Builder. Prevent duplicate submissions when users submit your forms and limit one submission per email address or other selected fields.
  * Author: NIA
  * Author URI: https://profiles.wordpress.org/wpnia/
  * Text Domain: duplicate killer
  * Domain Path: /languages/
- *
  */
 
 	defined('ABSPATH') or die('You shall not pass!');
+	
 	define('DuplicateKiller_PLUGIN',__FILE__);
-	define ('DuplicateKiller_VERSION','1.3.0');
+	define ('DuplicateKiller_VERSION','1.4.7');
 	define('DuplicateKiller_PLUGIN_DIR', untrailingslashit(dirname(DuplicateKiller_PLUGIN )));
+	
+	require_once DuplicateKiller_PLUGIN_DIR.'/includes/helpers.php';
+	require_once DuplicateKiller_PLUGIN_DIR.'/includes/dk-cookie-loader.php';
 	require_once DuplicateKiller_PLUGIN_DIR.'/includes/functions_cf7.php';
 	require_once DuplicateKiller_PLUGIN_DIR.'/includes/functions_forminator.php';
 	require_once DuplicateKiller_PLUGIN_DIR.'/includes/functions_wpforms.php';
+	require_once DuplicateKiller_PLUGIN_DIR.'/includes/functions_breakdance.php';
+	require_once DuplicateKiller_PLUGIN_DIR.'/includes/functions_elementor.php';
+	require_once DuplicateKiller_PLUGIN_DIR.'/includes/functions_formidable.php';
+	require_once DuplicateKiller_PLUGIN_DIR.'/includes/functions_ninjaforms.php';
 	require_once DuplicateKiller_PLUGIN_DIR.'/includes/database.php';
-	require_once DuplicateKiller_PLUGIN_DIR.'/includes/about.php';
-
+	require_once DuplicateKiller_PLUGIN_DIR.'/includes/pro.php';
+	require_once DuplicateKiller_PLUGIN_DIR.'/includes/support.php';
 
 /**
  * Create a new table in db
@@ -76,6 +82,10 @@ function duplicateKiller_drop_table_uninstall(){
     delete_option('CF7_page');
 	delete_option('Forminator_page');
 	delete_option('WPForms_page');
+	delete_option('Breakdance_page');
+	delete_option('Elementor_page');
+	delete_option('Formidable_page');
+	delete_option('NinjaForms_page');
 	delete_option('DuplicateKillerSettings');
 }
 register_uninstall_hook(__FILE__, 'duplicateKiller_drop_table_uninstall');
@@ -101,115 +111,6 @@ function duplicateKiller_check_duplicate($form_plugin, $form_name){
 	$table_name = $wpdb->prefix.'dk_forms_duplicate';
     $sql = $wpdb->prepare( "SELECT form_value,form_cookie FROM {$table_name} WHERE form_plugin = %s AND form_name = %s ORDER BY form_id DESC" , $form_plugin, $form_name );
     return $wpdb->get_results($sql);
-}
-//inserted from 1.3.0
-function dk_check_ip_feature($form_plugin,$form_name,$form_ip){
-	$flag = false;
-	global $wpdb;
-	$table_name = $wpdb->prefix.'dk_forms_duplicate';
-	$result = $wpdb->get_row($wpdb->prepare("SELECT form_ip,form_date FROM $table_name WHERE form_plugin = %s AND form_name = %s AND form_ip = %s ORDER by form_id DESC", $form_plugin, $form_name,$form_ip));
-	
-    //$sql = $wpdb->prepare( "SELECT form_ip FROM {$table_name} WHERE form_plugin = %s AND form_name = %s ORDER BY form_id DESC" , $form_plugin, $form_name );
-    if($result){
-		$created_at = new DateTime($result->form_date, new DateTimeZone('UTC'));
-
-        // Current date minus 7 days
-        $seven_days_ago = new DateTime('-7 days', new DateTimeZone('UTC'));
-
-        if ($created_at > $seven_days_ago) {
-			//The row is newer than 7 days.
-            $flag = true;
-        }
-		
-	}
-	return $flag;
-}
-
-//inserted from 1.3.0
-function dk_get_user_ip(){
-	$ip_from_cloudflare = isCloudflare();
-	if($ip_from_cloudflare){
-		$ip_unvalided = sanitize_text_field(wp_unslash($_SERVER['HTTP_CF_CONNECTING_IP']));
-			if(filter_var($ip_unvalided, FILTER_VALIDATE_IP)){
-				$ip_valid = $ip_unvalided;
-				return apply_filters( 'dk_get_user_ip', $ip_valid );
-			}
-		} else {
-			$ip_unvalided = sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR']));
-		}
-	if(!empty($_SERVER['HTTP_CLIENT_IP'])){
-	//check ip from share internet
-		$ip_unvalided = sanitize_text_field(wp_unslash($_SERVER['HTTP_CLIENT_IP']));
-
-	}elseif(!empty($_SERVER['HTTP_X_FORWARDED_FOR'])){
-	//to check ip is pass from proxy
-		$ip_unvalided = sanitize_text_field(wp_unslash($_SERVER['HTTP_X_FORWARDED_FOR']));
-	}else{
-		$ip_unvalided = sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR']));
-	}
-	if(filter_var( $ip_unvalided, FILTER_VALIDATE_IP)){
-		$ip_valid = $ip_unvalided;
-	}else{
-		$ip_valid = "undefined";
-	}
-	return apply_filters( 'dk_get_user_ip', $ip_valid );
-}
-
-//Validates that the IP is from cloudflare
-function ip_in_range($ip, $range) {
-    if (strpos($range, '/') == false)
-        $range .= '/32';
-
-    // $range is in IP/CIDR format eg 127.0.0.1/24
-    list($range, $netmask) = explode('/', $range, 2);
-    $range_decimal = ip2long($range);
-    $ip_decimal = ip2long($ip);
-    $wildcard_decimal = pow(2, (32 - $netmask)) - 1;
-    $netmask_decimal = ~ $wildcard_decimal;
-    return (($ip_decimal & $netmask_decimal) == ($range_decimal & $netmask_decimal));
-}
-
-function _cloudflare_CheckIP($ip) {
-    $cf_ips = array(
-        '173.245.48.0/20',
-		'103.21.244.0/22',
-		'103.22.200.0/22',
-		'103.31.4.0/22',
-		'141.101.64.0/18',
-		'108.162.192.0/18',
-		'190.93.240.0/20',
-		'188.114.96.0/20',
-		'197.234.240.0/22',
-		'198.41.128.0/17',
-		'162.158.0.0/15',
-		'104.16.0.0/13',
-		'104.24.0.0/14',
-		'172.64.0.0/13',
-		'131.0.72.0/22'
-    );
-    $is_cf_ip = false;
-    foreach ($cf_ips as $cf_ip) {
-        if (ip_in_range($ip, $cf_ip)) {
-            $is_cf_ip = true;
-            break;
-        }
-    } return $is_cf_ip;
-}
-
-function _cloudflare_Requests_Check() {
-    $flag = true;
-
-    if(!isset($_SERVER['HTTP_CF_CONNECTING_IP']))   $flag = false;
-    if(!isset($_SERVER['HTTP_CF_IPCOUNTRY']))       $flag = false;
-    if(!isset($_SERVER['HTTP_CF_RAY']))             $flag = false;
-    if(!isset($_SERVER['HTTP_CF_VISITOR']))         $flag = false;
-    return $flag;
-}
-
-function isCloudflare(){
-    $ipCheck = _cloudflare_CheckIP($_SERVER['REMOTE_ADDR']);
-    $requestCheck = _cloudflare_Requests_Check();
-    return ($ipCheck && $requestCheck);
 }
 function dk_check_cookie($data){
 	$option = $data['get_option'];
@@ -255,6 +156,56 @@ function duplicateKiller_check_values($db_values, $form_name, $form_value){
 	return false;
 }
 
+function duplicateKiller_check_duplicate_by_key_value($form_plugin, $form_name, $key, $value, $form_cookie = 'NULL', $checked_cookie = false) {
+    global $wpdb;
+    $table_name = $wpdb->prefix . 'dk_forms_duplicate';
+
+    $results = $wpdb->get_results(
+        $wpdb->prepare(
+            "SELECT form_value,form_cookie FROM {$table_name} WHERE form_plugin = %s AND form_name = %s ORDER BY form_id DESC",
+            $form_plugin, $form_name
+        )
+    );
+
+    foreach ($results as $row) {
+        $form_data = maybe_unserialize($row->form_value);
+		
+         // CF7: associative array (key => value)
+        if (is_array($form_data) && isset($form_data[$key])) {
+            if (duplicateKiller_check_values_with_lowercase_filter($form_data[$key], $value)) {
+
+				//3 checked cookie
+				if($checked_cookie == true){
+					if($row->form_cookie == $form_cookie){
+						return true;
+					}else{
+						return false;
+					}
+				}
+                return true;
+            }
+
+        // Forminator: arrays of array (with key "name" and "value")
+        }elseif (is_array($form_data) && isset($form_data[0]['name'])) {
+            foreach ($form_data as $input) {
+                if (isset($input['name']) && $input['name'] === $key) {
+                    if (duplicateKiller_check_values_with_lowercase_filter($input['value'], $value)) {
+                        //3 checked cookie
+						if($checked_cookie == true){
+							if($row->form_cookie == $form_cookie){
+								return true;
+							}else{
+								return false;
+							}
+						}
+						return true;
+                    }
+                }
+            }
+        }
+    }
+    return false;
+}
 function duplicateKiller_check_values_with_lowercase_filter($var1, $var2){
 	if(is_array($var1) AND is_array($var2)){
 		$var1 = array_map('strtolower', $var1);
@@ -275,26 +226,24 @@ function duplicateKiller_check_values_with_lowercase_filter($var1, $var2){
 add_action('admin_enqueue_scripts', 'duplicateKiller_callback_for_setting_up_scripts');
 
 function duplicateKiller_callback_for_setting_up_scripts() {
-    // Verificăm dacă suntem pe pagina unde vrem să încărcăm fișierele
     if (!isset($_GET['page']) || $_GET['page'] !== 'duplicateKiller') {
         return;
     }
+		wp_register_style(
+		'duplicateKillerStyle',
+		plugins_url('assets/style.css', DuplicateKiller_PLUGIN),
+		[],
+		DuplicateKiller_VERSION
+	);
+	wp_enqueue_style('duplicateKillerStyle');
 
-    // Înregistrăm și încărcăm fișierul CSS
-    wp_register_style(
-        'duplicateKillerStyle',
-        plugins_url('assets/style.css', DuplicateKiller_PLUGIN)
-    );
-    wp_enqueue_style('duplicateKillerStyle');
-
-    // Înregistrăm și încărcăm fișierul JS
 	wp_enqueue_script(
-        'duplicateKiller-admin',
-        plugins_url('assets/admin-settings.js', DuplicateKiller_PLUGIN),
-        array(),
-        '1.0',
-        true
-    );
+		'duplicateKiller-admin',
+		plugins_url('assets/admin-settings.js', DuplicateKiller_PLUGIN),
+		[],
+		DuplicateKiller_VERSION,
+		true
+	);
 }
 
 
@@ -408,130 +357,102 @@ function duplicateKiller_options() {
 	
 	$settings = array(
 		'CF7_page' => array(
-		  'title'=>'Contact Form 7',
-		  'page'=>'CF7_page',
-		  'fields'=> array(
-			array(
-				'id'=> 'CF7_forms',
-				'title'=>'',
-				'callback'=> 'duplicateKiller_cf7_select_form_tag_callback'
-			  ),
-			array(
-				'id' => 'CF7_error_message',
-				'title' => '',
-				'callback' =>'duplicateKiller_cf7_settings_callback'
-				),
+			'title' => 'Contact Form 7',
+			'description_cb' => 'duplicateKiller_CF7_description',
+			'validate_cb' => 'duplicateKiller_cf7_validate_input',
+			'fields' => array(
+				array('id' => 'CF7_forms', 'title' => '', 'callback' => 'duplicateKiller_cf7_select_form_tag_callback'),
+				array('id' => 'CF7_error_message', 'title' => '', 'callback' => 'duplicateKiller_cf7_settings_callback'),
 			),
 		),
 		'Forminator_page' => array(
 			'title' => 'Forminator',
-			'page' => 'Forminator_page',
+			'description_cb' => 'duplicateKiller_forminator_description',
+			'validate_cb' => 'duplicateKiller_forminator_validate_input',
 			'fields' => array(
-				array(
-					'id' => 'Forminator_forms',
-					'title'=>'',
-					'callback' => 'duplicateKiller_forminator_select_form_tag_callback'
-				),
-				array(
-					'id' => 'Forminator_error_message',
-					'title' => '',
-					'callback' =>'duplicateKiller_forminator_settings_callback'
-				),
+				array('id' => 'Forminator_forms', 'title' => '', 'callback' => 'duplicateKiller_forminator_select_form_tag_callback'),
+				array('id' => 'Forminator_error_message', 'title' => '', 'callback' => 'duplicateKiller_forminator_settings_callback'),
 			),
 		),
-		'WPForms' => array(
+		'WPForms_page' => array(
 			'title' => 'WPForms',
-			'page' => 'WPForms_page',
+			'description_cb' => 'duplicateKiller_wpforms_description',
+			'validate_cb' => 'duplicateKiller_wpforms_validate_input',
 			'fields' => array(
-				array(
-					'id' => 'WPForms_forms',
-					'title'=>'',
-					'callback' => 'duplicateKiller_wpforms_select_form_tag_callback'
-				),
-				array(
-					'id' => 'WPForms_error_message',
-					'title' =>'',
-					'callback' =>'duplicateKiller_wpforms_settings_callback'
-				),
+				array('id' => 'WPForms_forms', 'title' => '', 'callback' => 'duplicateKiller_wpforms_select_form_tag_callback'),
+				array('id' => 'WPForms_error_message', 'title' => '', 'callback' => 'duplicateKiller_wpforms_settings_callback'),
 			),
 		),
-		'About' => array(
-			'title' => 'About',
-			'page' => 'About_page',
+		'Breakdance_page' => array(
+			'title' => 'Breakdance',
+			'description_cb' => 'duplicateKiller_breakdance_description',
+			'validate_cb' => 'duplicateKiller_breakdance_validate_input',
+			'fields' => array(
+				array('id' => 'Breakdance_forms', 'title' => '', 'callback' => 'duplicateKiller_breakdance_select_form_tag_callback'),
+				array('id' => 'Breakdance_error_message', 'title' => '', 'callback' => 'duplicateKiller_breakdance_settings_callback'),
+			),
+		),
+		'Elementor_page' => array(
+			'title' => 'Elementor',
+			'description_cb' => 'duplicateKiller_elementor_description',
+			'validate_cb' => 'duplicateKiller_elementor_validate_input',
+			'fields' => array(
+				array('id' => 'Elementor_forms', 'title' => '', 'callback' => 'duplicateKiller_elementor_select_form_tag_callback'),
+				array('id' => 'Elementor_error_message', 'title' => '', 'callback' => 'duplicateKiller_Elementor_settings_callback'),
+			),
+		),
+		'Formidable_page' => array(
+			'title' => 'Formidable',
+			'description_cb' => 'duplicateKiller_formidable_description',
+			'validate_cb' => 'duplicateKiller_formidable_validate_input',
+			'fields' => array(
+				array('id' => 'Formidable_forms', 'title' => '', 'callback' => 'duplicateKiller_formidable_select_form_tag_callback'),
+				array('id' => 'Formidable_error_message', 'title' => '', 'callback' => 'duplicateKiller_Formidable_settings_callback'),
+			),
+		),
+		'NinjaForms_page' => array(
+			'title' => 'Formidable',
+			'description_cb' => 'duplicateKiller_NinjaForms_description',
+			'validate_cb' => 'duplicateKiller_NinjaForms_validate_input',
+			'fields' => array(
+				array('id' => 'NinjaForms_forms', 'title' => '', 'callback' => 'duplicateKiller_NinjaForms_select_form_tag_callback'),
+				array('id' => 'NinjaForms_error_message', 'title' => '', 'callback' => 'duplicateKiller_NinjaForms_settings_callback'),
+			),
+		),
+		'Pro_page' => array(
+			'title' => 'Pro',
+			'description_cb' => 'duplicateKiller_pro_plugin',
+			'fields' => array(),
+		),
+		'Get_support' => array(
+			'title' => 'Get Support',
+			'description_cb' => 'duplicateKiller_support_plugin', // Definește această funcție
 			'fields' => array(),
 		),
 	);
-	foreach($settings as $id => $values){
-		if($values['page'] == "CF7_page"){
-			add_settings_section(
-	        $id,
-	        '',
-	        'duplicateKiller_CF7_description',
-	        'CF7_page'
+
+	foreach ($settings as $page => $data) {
+		add_settings_section(
+			$page . '_section',
+			'',
+			$data['description_cb'],
+			$page
+		);
+
+		foreach ($data['fields'] as $field) {
+			add_settings_field(
+				$field['id'],
+				$field['title'],
+				$field['callback'],
+				$page,
+				$page . '_section',
+				array($page, $field['title'])
 			);
-			foreach ($values['fields'] as $field) {
-				add_settings_field(  
-					$field['id'],    
-					$field['title'],
-					$field['callback'],   
-					$values['page'],
-					$id,
-					array(
-						$values['page'],
-						$field['title']
-					) 
-				);
-			}
-			register_setting($values['page'], $values['page'],'duplicateKiller_cf7_validate_input');
-		}elseif($values['page'] == "Forminator_page"){
-			add_settings_section(
-	        $id,
-	        '',
-	        'duplicateKiller_forminator_description',
-	        'Forminator_page'
-			);
-			foreach ($values['fields'] as $field) {
-				add_settings_field(  
-					$field['id'],    
-					$field['title'],
-					$field['callback'],   
-					$values['page'],
-					$id,
-					array(
-						$values['page'],
-						$field['title']
-					) 
-				);
-			}
-			register_setting($values['page'], $values['page'],'duplicateKiller_forminator_validate_input');
-		}elseif($values['page'] == "WPForms_page"){
-			add_settings_section(
-	        $id,
-	        '',
-	        'duplicateKiller_wpforms_description',
-	        'WPForms_page'
-			);
-			foreach ($values['fields'] as $field) {
-				add_settings_field(  
-					$field['id'],
-					$field['title'],
-					$field['callback'],   
-					$values['page'],
-					$id,
-					array(
-						$values['page'],
-						$field['title']
-					) 
-				);
-			}
-			register_setting($values['page'], $values['page'],'duplicateKiller_wpforms_validate_input');
-		}elseif($values['page'] == "About_page"){
-			add_settings_section(
-	        'id_About_plugin',
-	        '',
-	        'duplicateKiller_about_plugin',
-	        'About_page'
-			);
+		}
+
+		// Înregistrăm doar dacă există funcție de validare
+		if (!empty($data['validate_cb'])) {
+			register_setting($page, $page, $data['validate_cb']);
 		}
 	}    
 }
@@ -604,7 +525,18 @@ function duplicateKiller_display_page() {
 			<a href="?page=duplicateKiller&tab=second" class="nav-tab <?php echo esc_attr($active_tab == 'second' ? 'nav-tab-active' : ''); ?>"><?php esc_html_e('Forminator','duplicatekiller');?>
 			</a>
 			<a href="?page=duplicateKiller&tab=third" class="nav-tab <?php echo esc_attr($active_tab == 'third' ? 'nav-tab-active' : ''); ?>"><?php esc_html_e('WPForms Free','duplicatekiller');?></a>
-			<a href="?page=duplicateKiller&tab=about" class="nav-tab <?php echo esc_attr($active_tab == 'about' ? 'nav-tab-active' : ''); ?>"><?php esc_html_e('About','duplicatekiller');?></a>
+			<a href="?page=duplicateKiller&tab=fourth" class="nav-tab <?php echo esc_attr($active_tab == 'fourth' ? 'nav-tab-active' : ''); ?>"><?php esc_html_e('Breakdance','duplicatekiller');?></a>
+			<a href="?page=duplicateKiller&tab=fifth" class="nav-tab <?php echo esc_attr($active_tab == 'fifth' ? 'nav-tab-active' : ''); ?>"><?php esc_html_e('Elementor','duplicatekiller');?></a>
+			
+			<a href="?page=duplicateKiller&tab=sixth" class="nav-tab <?php echo esc_attr($active_tab == 'sixth' ? 'nav-tab-active' : ''); ?>"><?php esc_html_e('Formidable','duplicatekiller');?></a>
+			
+			<a href="?page=duplicateKiller&tab=seventh" class="nav-tab <?php echo esc_attr($active_tab == 'seventh' ? 'nav-tab-active' : ''); ?>"><?php esc_html_e('Ninja Forms','duplicatekiller');?></a>
+			
+			<a href="?page=duplicateKiller&tab=pro"
+			   class="nav-tab dk-pro-tab <?php echo esc_attr($active_tab == 'pro' ? 'nav-tab-active' : ''); ?>">
+			   <?php esc_html_e('PRO','duplicatekiller');?>
+			</a>
+			<a href="?page=duplicateKiller&tab=support" class="nav-tab <?php echo esc_attr($active_tab == 'support' ? 'nav-tab-active' : ''); ?>"><?php esc_html_e('Get support','duplicatekiller');?></a>
         </h2>  
         <form method="post" action="options.php">  
             <?php 
@@ -620,10 +552,29 @@ function duplicateKiller_display_page() {
                 settings_fields('WPForms_page');
 				dk_do_settings_sections('WPForms_page');
 				submit_button();
-            }elseif($active_tab == 'about') {
-                settings_fields('About_page');
-				dk_do_settings_sections('About_page');
-            }
+            }elseif($active_tab == 'fourth') {
+                settings_fields('Breakdance_page');
+				dk_do_settings_sections('Breakdance_page');
+				submit_button();	
+            }elseif($active_tab == 'fifth') {
+                settings_fields('Elementor_page');
+				dk_do_settings_sections('Elementor_page');
+				submit_button();
+			}elseif($active_tab == 'sixth') {
+                settings_fields('Formidable_page');
+				dk_do_settings_sections('Formidable_page');
+				submit_button();
+			}elseif($active_tab == 'seventh') {
+                settings_fields('NinjaForms_page');
+				dk_do_settings_sections('NinjaForms_page');
+				submit_button();				
+            }elseif($active_tab == 'pro') {
+                settings_fields('Pro_page');
+				dk_do_settings_sections('Pro_page');
+            }elseif ($active_tab == 'support') {
+				settings_fields('Get_support'); 
+				dk_do_settings_sections('Get_support');
+			}
             ?>
         </form> 
     </div> 

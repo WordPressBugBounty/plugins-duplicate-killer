@@ -46,43 +46,57 @@ function dk_forminator_is_cookie_set(){
 }
 add_action( 'forminator_custom_form_submit_before_set_fields', 'duplicateKiller_forminator_save_fields', 10, 3 );
 function duplicateKiller_forminator_save_fields($entry, $id, $field_data) {
-	global $wpdb;
-	$table_name = $wpdb->prefix.'dk_forms_duplicate';
-	$form_title = get_the_title($id);
-	$form_cookie = isset($_COOKIE['dk_form_cookie'])? $form_cookie=$_COOKIE['dk_form_cookie']: $form_cookie='NULL';
-	$dk_check_ip_feature = getDuplicateKillerSetting("Forminator_page","forminator_user_ip");
-	$form_ip = ($dk_check_ip_feature)? $form_ip=dk_get_user_ip(): $form_ip='NULL';
+    global $wpdb;
 
-	foreach($field_data as $data){
-		if(is_array($data['value']) AND isset($data['value']['file']) AND (!empty($data['value']['file']))){
-			$storage_fields[] = [
-				"name" => $data['name'],
-				"value" => array(
-					"file_name" => $data['value']['file']['file_name'],
-					"file_url" => $data['value']['file']['file_url'])
-			]; 
-		}else{
-			$storage_fields[] = [
-				"name" => $data['name'],
-				"value" => $data['value']
-			];
-		}
-		
-	}
-	$form_value = serialize($storage_fields);
-	$form_date = current_time('Y-m-d H:i:s');
-		$wpdb->insert(
-			$table_name, 
-			array(
-				'form_plugin' => "Forminator",
-				'form_name' => $form_title,
-				'form_value'   => $form_value,
-				'form_cookie' => $form_cookie,
-				'form_date' => $form_date,
-				'form_ip' => $form_ip
-			) 
-		);
-	//error_log( print_r( $field_data, true ) );
+    $table_name  = $wpdb->prefix . 'dk_forms_duplicate';
+    $form_title  = get_the_title($id);
+
+    $form_cookie = isset($_COOKIE['dk_form_cookie'])
+        ? sanitize_text_field($_COOKIE['dk_form_cookie'])
+        : '';
+
+    $dk_check_ip_feature = getDuplicateKillerSetting("Forminator_page", "forminator_user_ip");
+    $form_ip = $dk_check_ip_feature ? dk_get_user_ip() : 'NULL';
+
+    $storage_fields = [];
+
+    foreach ($field_data as $data) {
+        $name  = isset($data['name']) ? $data['name'] : '';
+        $value = $data['value'] ?? null;
+
+        // File upload (Forminator poate returna structuri diferite)
+        if (is_array($value) && isset($value['file']) && is_array($value['file']) && !empty($value['file'])) {
+            $file = $value['file'];
+
+            $file_name = $file['file_name'] ?? $file['filename'] ?? $file['name'] ?? '';
+            $file_url  = $file['file_url']  ?? $file['url']      ?? '';
+
+            $storage_fields[] = [
+                "name"  => $name,
+                "value" => [
+                    "file_name" => $file_name,
+                    "file_url"  => $file_url,
+                ],
+            ];
+        } else {
+            $storage_fields[] = [
+                "name"  => $name,
+                "value" => $value,
+            ];
+        }
+    }
+
+    $form_value = serialize($storage_fields);
+    $form_date  = current_time('Y-m-d H:i:s');
+
+    $wpdb->insert($table_name, [
+        'form_plugin' => "Forminator",
+        'form_name'   => $form_title,
+        'form_value'  => $form_value,
+        'form_cookie' => $form_cookie,
+        'form_date'   => $form_date,
+        'form_ip'     => $form_ip,
+    ]);
 }
 
 add_action( 'forminator_custom_form_submit_errors','duplicateKiller_forminator_before_send_email',10,3);
@@ -93,8 +107,9 @@ function duplicateKiller_forminator_before_send_email($submit_errors, $form_id, 
 	
 	$form_title = get_the_title( $form_id );
 	
+	if (!is_array($forminator_page)) $forminator_page = [];
 	//check if IP limit feature is active
-	if($forminator_page['forminator_user_ip'] == "1"){
+	if (($forminator_page['forminator_user_ip'] ?? "0") === "1") {
 		$form_ip = dk_get_user_ip();
 		$dk_check_ip_feature = dk_check_ip_feature("Forminator",$form_title,$form_ip);
 		if($dk_check_ip_feature){
@@ -110,7 +125,7 @@ function duplicateKiller_forminator_before_send_email($submit_errors, $form_id, 
 		}
 	}
 	$abort = false;
-	$form_cookie = isset($_COOKIE['dk_form_cookie'])? $form_cookie=$_COOKIE['dk_form_cookie']: $form_cookie='NULL';
+	$form_cookie = isset($_COOKIE['dk_form_cookie'])? $form_cookie=sanitize_text_field($_COOKIE['dk_form_cookie']): $form_cookie='';
 	$storage_fields = array();
 	$no_form = true;
 	
@@ -149,49 +164,20 @@ function duplicateKiller_forminator_before_send_email($submit_errors, $form_id, 
 											$abort = true;
 										}
 									}
-								}/* deprecated from 1.2.1
-								else{
-									if(!empty($data['value'])){
-										$form_data[$data['name']] = $data['value'];
-									}
-									
 								}
-								*/
 						}
-					}/* deprecated from 1.2.1
-					else{
-						if(!empty($data['value'])){
-							$form_data[$data['name']] = $data['value'];
-						}
-						
 					}
-					*/
 				}
 			}
 		}
 	}
-	/*deprecated from 1.2.1
-	
-	if(!$abort and $no_form){
-		$form_value = serialize($storage_fields);
-		$wpdb->insert(
-			$table_name, 
-			array(
-				'form_plugin' => "Forminator",
-				'form_name' => $form_title,
-				'form_value'   => $form_value,
-				'form_cookie' => $form_cookie
-			) 
-		);							
-	}
-	*/
 	return $submit_errors;
 }
 
 function duplicateKiller_forminator_get_forms(){
 	$forminator_posts = get_posts([
 		'post_type' => 'forminator_forms',
-		'order' => 'ASC',
+		'order' => 'DESC',
 		'nopaging' => true
 	]);
 	$output = array();
@@ -205,7 +191,8 @@ function duplicateKiller_forminator_get_forms(){
 							if($arr['type'] == "name" OR
 								$arr['type'] == "text" OR
 								$arr['type'] == "email" OR
-								$arr['type'] == "phone"
+								$arr['type'] == "phone" OR
+								$arr['type'] == "number"
 							)
 							$output[$value->post_title][] = $arr['id'];
 						}	
@@ -371,55 +358,34 @@ function duplicateKiller_forminator_settings_callback($args){
 	</div>
 <?php
 }
+function duplicateKiller_forminator_get_forms_ids() {
+    $forminator_posts = get_posts([
+        'post_type' => 'forminator_forms',
+        'order'     => 'DESC',
+        'nopaging'  => true
+    ]);
+
+    $forms = [];
+
+    foreach ($forminator_posts as $post) {
+        
+        if (!empty($post->post_title) && isset($post->ID)) {
+            $forms[$post->post_title] = $post->ID;
+        }
+    }
+
+    return $forms;
+}
 function duplicateKiller_forminator_select_form_tag_callback($args){
-	global $wpdb;
+	$forms     = duplicateKiller_forminator_get_forms();      // [ 'Form name' => [ 'field1', 'field2' ] ]
 
-	$options = get_option($args[0]);
-	$table   = $wpdb->prefix . 'dk_forms_duplicate';
+	$forms_ids = duplicateKiller_forminator_get_forms_ids(); // [ 'Form name' => 123 ]
 
-	// Get all counts in a single query
-	$counts = $wpdb->get_results(
-		$wpdb->prepare(
-			"SELECT form_name, COUNT(*) as total FROM $table WHERE form_plugin = %s GROUP BY form_name",
-			'Forminator'
-		),
-		OBJECT_K // => will return an array with key form_name
+	duplicate_killer_render_forms_ui(
+		'Forminator',
+		'Forminator',
+		$args,
+		$forms,
+		$forms_ids
 	);
-	?>
-	<h4 class="dk-form-header">Forminator forms list</h4>
-<?php
-	$forminator_forms = duplicateKiller_forminator_get_forms();
-	foreach($forminator_forms as $form => $tag):
-	//get all counts for this form
-		$count = isset($counts[$form]) ? (int)$counts[$form]->total : 0;
-?>
-		<div class="dk-single-form"><h4 class="dk-form-header"><?php esc_html_e($form,'duplicatekiller');?></h4>
-		<h4 style="text-align:center">Choose the unique fields</h4>
-<?php
-		for($i=0;$i<count($tag);$i++):
-			$checked = isset($options[$form][$tag[$i]])?: $checked='';?>
-			<div class="dk-input-checkbox-callback">
-			<input type="checkbox" id="<?php echo esc_attr($form.'['.$tag[$i].']');?>" name="<?php echo esc_attr($args[0].'['.$form.']['.$tag[$i].']');?>" value="1" <?php echo esc_attr($checked ? 'checked' : '');?>>
-			<label for="<?php echo esc_attr($form.'['.$tag[$i].']');?>"><?php echo esc_attr($tag[$i]);?></label></br>
-			</div>
-<?php
-		endfor; ?>
-		<!-- New checkbox from v1.3.1: delete submissions -->
-		<div class="dk-box dk-delete-records">
-				<p class="dk-record-count">
-					📦 <span class="dk-count-number"><?php echo esc_html($count); ?></span> saved submissions found for this form
-				</p>
-				<?php if ($count > 0) : ?>
-				<label for="<?php echo esc_attr('delete_records_' . $form); ?>" class="dk-delete-label">
-					<input type="checkbox"
-						id="<?php echo esc_attr('delete_records_' . $form); ?>"
-						name="<?php echo esc_attr('Forminator_delete_records[' . $form . ']'); ?>"
-						value="1"
-						class="dk-delete-checkbox">
-					🗑️ <span>Delete all saved entries for this form <small>(this action cannot be undone)</small></span>
-				</label>
-				<?php endif; ?>
-			</div>
-		</div>
-<?php endforeach;
 }

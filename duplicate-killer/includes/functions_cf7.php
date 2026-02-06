@@ -1,52 +1,6 @@
 <?php
 defined( 'ABSPATH' ) or die( 'You shall not pass!' );
 
-/**
- * check if CF7 load the stylesheets and call the custom function (dk_cf7_is_cookie_set) if so
- */
-add_filter( 'the_content', 'dk_check_cf7_enqueue' );
-function dk_check_cf7_enqueue( $content ) {
-	if(has_shortcode($content, 'contact-form-7') OR function_exists( 'wpcf7_enqueue_styles')){
-		dk_cf7_is_cookie_set();
-	}
-	return $content;
-}
-function dk_cf7_is_cookie_set(){
-	if($cf7_page = get_option("CF7_page")){
-	if(isset($cf7_page['cf7_cookie_option']) AND $cf7_page['cf7_cookie_option'] == "1"){
-		dk_checked_defined_constants('dk_cookie_unique_time',md5(microtime(true).mt_Rand()));
-		dk_checked_defined_constants('dk_cookie_days_persistence',$cf7_page['cf7_cookie_option_days']);
-		
-		
-
-		add_action( 'wp_footer', function(){?>
-		<script id="duplicate-killer-wpcf7-form" type="text/javascript">
-			(function($){
-			if($('input').hasClass('wpcf7-submit')){
-				if(!getCookie('dk_form_cookie')){
-					var date = new Date();
-					date.setDate(date.getDate()+<?php echo esc_attr(dk_cookie_days_persistence);?>);
-					var dk_cf7_form_cookie_days = date.toUTCString();
-					document.cookie = "dk_form_cookie=<?php echo esc_attr(dk_cookie_unique_time);?>; expires="+dk_cf7_form_cookie_days+"; path=/";
-				}
-			}
-			})(jQuery);
-			function getCookie(ck_name) {
-				var cookieArr = document.cookie.split(";");
-				for(var i = 0; i < cookieArr.length; i++) {
-					var cookiePair = cookieArr[i].split("=");
-					if(ck_name == cookiePair[0].trim()) {
-						return decodeURIComponent(cookiePair[1]);
-					}
-				}
-				return null;
-			}
-		</script>
-<?php
-		}, 999 );
-	}
-	}
-}
 function duplicateKiller_cf7_before_send_email($contact_form, &$abort, $object) {
 
     global $wpdb;
@@ -60,7 +14,7 @@ function duplicateKiller_cf7_before_send_email($contact_form, &$abort, $object) 
 	$dkcf7_folder_url = $upload_dir['baseurl'].'/dkcf7_uploads';
 	$form_name = $contact_form->title();
 	
-	$form_cookie = isset($_COOKIE['dk_form_cookie'])? $form_cookie=$_COOKIE['dk_form_cookie']: $form_cookie='NULL';
+	$form_cookie = isset($_COOKIE['dk_form_cookie'])? $form_cookie=sanitize_text_field($_COOKIE['dk_form_cookie']): $form_cookie='';
 	$abort = false;
 	$no_form = false;
 	$data = $submission->get_posted_data();
@@ -165,41 +119,62 @@ function duplicateKiller_cf7_before_send_email($contact_form, &$abort, $object) 
 	}
 }
 add_action( 'wpcf7_before_send_mail', 'duplicateKiller_cf7_before_send_email', 1,3 );
-function duplicate_killer_CF7_get_forms(){
-	global $wpdb;	
-	$CF7Query = $wpdb->get_results( "SELECT * FROM $wpdb->posts WHERE post_type = 'wpcf7_contact_form'", ARRAY_A );
-	if($CF7Query == NULL){
-		return false;
-	}else{
-		$output = array();
-		foreach($CF7Query as $form){
-			$tagsArray = explode(" ",$form['post_content']);
-			
-			
-			for($i=0;$i<count($tagsArray);$i++){
-				
-				if(str_contains($tagsArray[$i],"[text")){
-					//splits a string into an array based on a specified delimiter
-					$result = explode(']', $tagsArray[$i+1]);
-					
-					//return the first element of the resulting array
-					$output[$form['post_title']][] = $result[0];
-				}
-				if(str_contains($tagsArray[$i],"[email")){
-					$result = explode(']', $tagsArray[$i+1]);
-					$output[$form['post_title']][] = $result[0];
-				}
-				if(str_contains($tagsArray[$i],"[tel")){
-					$result = explode(']', $tagsArray[$i+1]);
-					$output[$form['post_title']][] = $result[0];
-				}
-				if(str_contains($tagsArray[$i],"[submit")){
-					break;
-				}
-			}
-		}
-		return $output;
-	}
+/**
+ * Retrieve CF7 forms and extract their text/email/tel fields.
+ * Forms are ordered in descending order by ID (newest first).
+ */
+function duplicate_killer_CF7_get_forms() {
+    global $wpdb;
+
+    // Get CF7 forms in descending order
+    $CF7Query = $wpdb->get_results(
+        "SELECT ID, post_title, post_content 
+         FROM {$wpdb->posts}
+         WHERE post_type = 'wpcf7_contact_form'
+           AND post_status NOT IN ('trash', 'auto-draft')
+         ORDER BY ID DESC",
+        ARRAY_A
+    );
+
+    if ( empty( $CF7Query ) ) {
+        return [];
+    }
+
+    $output = [];
+
+    foreach ( $CF7Query as $form ) {
+
+        // Split content into tokens based on spaces
+        $tagsArray = explode( " ", $form['post_content'] );
+
+        for ( $i = 0; $i < count( $tagsArray ); $i++ ) {
+
+            // Match [text ...]
+            if ( str_contains( $tagsArray[$i], "[text" ) ) {
+                $result = explode( "]", $tagsArray[ $i + 1 ] );
+                $output[ $form['post_title'] ][] = sanitize_text_field( $result[0] );
+            }
+
+            // Match [email ...]
+            if ( str_contains( $tagsArray[$i], "[email" ) ) {
+                $result = explode( "]", $tagsArray[ $i + 1 ] );
+                $output[ $form['post_title'] ][] = sanitize_text_field( $result[0] );
+            }
+
+            // Match [tel ...]
+            if ( str_contains( $tagsArray[$i], "[tel" ) ) {
+                $result = explode( "]", $tagsArray[ $i + 1 ] );
+                $output[ $form['post_title'] ][] = sanitize_text_field( $result[0] );
+            }
+
+            // Stop scanning once we reach [submit]
+            if ( str_contains( $tagsArray[$i], "[submit" ) ) {
+                break;
+            }
+        }
+    }
+
+    return $output;
 }
 
 /*********************************
@@ -328,7 +303,6 @@ function duplicateKiller_cf7_settings_callback($args){
 		<input type="text" size="70" name="<?php echo esc_attr($args[0].'[cf7_error_message]');?>" value="<?php echo esc_attr($stored_error_message);?>"></input>
 		</fieldset>
 	</div>
-	</br>
 	<div class="dk-set-unique-entries-per-user">
 		<fieldset class="dk-fieldset">
 		<legend><strong>Unique entries per user</strong></legend>
@@ -346,7 +320,7 @@ function duplicateKiller_cf7_settings_callback($args){
 		</div>
 		</fieldset>
 	</div>
-		<div class="dk-limit_submission_by_ip">
+	<div class="dk-limit_submission_by_ip">
 		<fieldset class="dk-fieldset">
 		<legend><strong>Limit submissions by IP address for 7 days for all forms!</strong></legend>
 		<strong>This feature </strong><span> restrict form entries based on IP address for 7 days</span>
@@ -383,59 +357,45 @@ function duplicateKiller_cf7_settings_callback($args){
 	</div>
 <?php
 }
+function duplicate_killer_get_cf7_forms_info() {
+    global $wpdb;
+
+    $results = $wpdb->get_results(
+        "SELECT post_title, ID 
+         FROM {$wpdb->posts}
+         WHERE post_type = 'wpcf7_contact_form'
+           AND post_status NOT IN ('trash','auto-draft')
+         ORDER BY ID DESC",
+        ARRAY_A
+    );
+
+    if ( empty( $results ) ) {
+        return [];
+    }
+
+    $forms = [];
+
+    foreach ( $results as $row ) {
+        $title = sanitize_text_field( $row['post_title'] );
+        $id    = (int) $row['ID'];
+
+        if ( $id > 0 && $title !== '' ) {
+            $forms[ $title ] = $id;
+        }
+    }
+
+    return $forms;
+}
 function duplicateKiller_cf7_select_form_tag_callback($args){
-	global $wpdb;
+	$forms     = duplicate_killer_CF7_get_forms();      // [ 'Form name' => [ 'field1', 'field2' ] ]
 
-	$options = get_option($args[0]);
-	$table   = $wpdb->prefix . 'dk_forms_duplicate';
+	$forms_ids = duplicate_killer_get_cf7_forms_info(); // [ 'Form name' => 123 ]
 
-	// Get all counts in a single query
-	$counts = $wpdb->get_results(
-		$wpdb->prepare(
-			"SELECT form_name, COUNT(*) as total FROM $table WHERE form_plugin = %s GROUP BY form_name",
-			'CF7'
-		),
-		OBJECT_K // => will return an array with key form_name
+	duplicate_killer_render_forms_ui(
+		'CF7',
+		'Contact Form 7',
+		$args,
+		$forms,
+		$forms_ids
 	);
-	?>
-	<h4 class="dk-form-header">CF7 forms list</h4>
-<?php
-	foreach(duplicate_killer_CF7_get_forms() as $form => $tag):
-		//get all counts for this form
-		$count = isset($counts[$form]) ? (int)$counts[$form]->total : 0;
-	?>
-		<div class="dk-single-form"><h4 class="dk-form-header"><?php esc_html_e($form,'duplicatekiller');?></h4>
-		<h4 style="text-align:center">Choose the unique fields</h4>
-<?php
-		for($i=0;$i<count($tag);$i++):
-			$checked = isset($options[$form][$tag[$i]])?: $checked=''; ?>
-			<div class="dk-input-checkbox-callback">
-			<input type="checkbox" id="<?php echo esc_attr($form.'['.$tag[$i].']');?>" name="<?php echo esc_attr('CF7_page['.$form.']['.$tag[$i].']');?>" value="1" <?php echo esc_attr($checked ? 'checked' : '');?>>
-
-			<label for="<?php echo esc_attr($form.'['.$tag[$i].']');?>"><?php echo esc_attr($tag[$i]);?></label></br>
-			</div>
-
-<?php
-		endfor;
-		?>
-		<!-- New checkbox from v1.3.1: delete submissions -->
-		<div class="dk-box dk-delete-records">
-				<p class="dk-record-count">
-					📦 <span class="dk-count-number"><?php echo esc_html($count); ?></span> saved submissions found for this form
-				</p>
-				<?php if ($count > 0) : ?>
-					<label for="<?php echo esc_attr('delete_records_' . $form); ?>" class="dk-delete-label">
-						<input type="checkbox"
-							id="<?php echo esc_attr('delete_records_' . $form); ?>"
-							name="<?php echo esc_attr('CF7_delete_records[' . $form . ']'); ?>"
-							value="1"
-							class="dk-delete-checkbox">
-						🗑️ <span>Delete all saved entries for this form <small>(this action cannot be undone)</small></span>
-					</label>
-				<?php endif; ?>
-			</div>
-		</div>
-<?php endforeach; ?>
-
-<?php
 }

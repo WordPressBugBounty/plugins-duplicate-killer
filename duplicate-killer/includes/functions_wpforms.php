@@ -57,7 +57,7 @@ function duplicateKiller_wpforms_before_send_email($fields, $entry, $form_data){
 	global $wpdb;
 	$table_name = $wpdb->prefix.'dk_forms_duplicate';
 	$wpforms_page = get_option("WPForms_page");
-	$form_cookie = isset($_POST['dk_form_cookie']) ? sanitize_text_field($_POST['dk_form_cookie']) : 'NULL';
+	$form_cookie = isset($_POST['dk_form_cookie']) ? sanitize_text_field($_POST['dk_form_cookie']) : '';
 	$abort = false;
 	$storage_fields = array();
 	$form_ip="";
@@ -147,7 +147,7 @@ function duplicateKiller_wpforms_before_send_email($fields, $entry, $form_data){
 function duplicateKiller_wpforms_get_forms(){
 	$wpforms_posts = get_posts([
 		'post_type' => 'wpforms',
-		'order' => 'ASC',
+		'order' => 'DESC',
 		'nopaging' => true
 	]);
 	$output = array();
@@ -320,55 +320,33 @@ function duplicateKiller_wpforms_settings_callback($args){
 	</div>
 <?php
 }
+function duplicateKiller_wpforms_get_forms_ids() {
+	$wpforms_posts = get_posts([
+		'post_type' => 'wpforms',
+		'order'     => 'DESC',
+		'nopaging'  => true
+	]);
+
+	$forms = [];
+
+	foreach ($wpforms_posts as $post) {
+		if (!empty($post->post_title) && isset($post->ID)) {
+			$forms[$post->post_title] = $post->ID;
+		}
+	}
+
+	return $forms;
+}
 function duplicateKiller_wpforms_select_form_tag_callback($args){
-	global $wpdb;
+	$forms     = duplicateKiller_wpforms_get_forms();      // [ 'Form name' => [ 'field1', 'field2' ] ]
 
-	$options = get_option($args[0]);
-	$table   = $wpdb->prefix . 'dk_forms_duplicate';
+	$forms_ids = duplicateKiller_wpforms_get_forms_ids(); // [ 'Form name' => 123 ]
 
-	// Get all counts in a single query
-	$counts = $wpdb->get_results(
-		$wpdb->prepare(
-			"SELECT form_name, COUNT(*) as total FROM $table WHERE form_plugin = %s GROUP BY form_name",
-			'WPForms'
-		),
-		OBJECT_K // => will return an array with key form_name
+	duplicate_killer_render_forms_ui(
+		'WPForms',
+		'WPForms',
+		$args,
+		$forms,
+		$forms_ids
 	);
-?>
-	<h4 class="dk-form-header">WPForms forms list</h4>
-<?php
-	$wp_forms = duplicateKiller_wpforms_get_forms();
-	foreach($wp_forms as $form => $tag):
-	//get all counts for this form
-		$count = isset($counts[$form]) ? (int)$counts[$form]->total : 0;
-?>
-		<div class="dk-single-form"><h4 class="dk-form-header"><?php esc_html_e($form,'duplicatekiller');?></h4>
-		<h4 style="text-align:center">Choose the unique fields</h4>
-<?php
-		for($i=0;$i<count($tag);$i++):
-			$checked = isset($options[$form][$tag[$i]])?: $checked='';?>
-			<div class="dk-input-checkbox-callback">
-			<input type="checkbox" id="<?php echo esc_attr($form.'['.$tag[$i].']');?>" name="<?php echo esc_attr($args[0].'['.$form.']['.$tag[$i].']');?>" value="1" <?php echo esc_attr($checked ? 'checked' : '');?>>
-			<label for="<?php echo esc_attr($form.'['.$tag[$i].']');?>"><?php echo esc_attr($tag[$i]);?></label></br>
-			</div>
-<?php
-		endfor; ?>
-		<!-- New checkbox from v1.3.1: delete submissions -->
-		<div class="dk-box dk-delete-records">
-				<p class="dk-record-count">
-					📦 <span class="dk-count-number"><?php echo esc_html($count); ?></span> saved submissions found for this form
-				</p>
-				<?php if ($count > 0) : ?>
-				<label for="<?php echo esc_attr('delete_records_' . $form); ?>" class="dk-delete-label">
-					<input type="checkbox"
-						id="<?php echo esc_attr('delete_records_' . $form); ?>"
-						name="<?php echo esc_attr('WPForms_delete_records[' . $form . ']'); ?>"
-						value="1"
-						class="dk-delete-checkbox">
-					🗑️ <span>Delete all saved entries for this form <small>(this action cannot be undone)</small></span>
-				</label>
-				<?php endif; ?>
-			</div>
-		</div>
-<?php endforeach;
 }

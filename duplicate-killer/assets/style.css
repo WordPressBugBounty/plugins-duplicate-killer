@@ -1,112 +1,590 @@
 /*
-Plugin name: Duplicate Killer
-Version: 1.1.1
+Plugin Name: Duplicate Killer
+Version: 1.1.4
 */
-
-.dk-fieldset {
-    border: 1px solid grey;
-	padding:10px;
-	margin:10px;
-}
-.dk-settings-form-row{
-	background-color:white;
-	border:1px solid grey;
-	margin-bottom:25px;
-}
-.dk-single-form{
-	box-shadow: 1px 2px 5px grey;
-    border-radius: 8px;
-    padding: 10px;
-    margin: 10px;
-	display:inline-table;
-	max-width:90%;
-	width:350px;
-}
-.dk-single-form:hover{
-	box-shadow: 1px 2px 15px grey;
-	transition-duration: 0.5s;
-	position:relative;
-	top:3px;
-}
-.dk-form-header{
-	text-align: center;
-    border-bottom: 3px double grey;
-    font-size: 17px;
-    padding-bottom: 10px;
+.dk-pro-tab {
+    background: #f4f1ff;
+    border-color: #6b4eff;
+    color: #6b4eff;
     font-weight: 600;
-	box-shadow: 0 4px 2px -2px grey;
 }
-.dk-input-checkbox-callback input {
-  position: absolute;
-  opacity: 0;
-  height: 0;
-  width: 0;
+.dk-pro-wrap {
+	margin: 18px 0 24px;
 }
-.dk-input-checkbox-callback label {
-  position: relative;
-  display: block;
-  padding-left: 30px;
-  cursor: pointer;
+
+.dk-pro-panel {
+	background: #fff;
+	border: 1px solid #dcdcde; /* WP admin border */
+	border-radius: 10px;
+	padding: 16px 16px 14px;
+	margin: 14px 0;
+	box-shadow: 0 1px 2px rgba(0,0,0,.04);
 }
-.dk-input-checkbox-callback label:before {
-  content: '';
-  position: absolute;
-  top: 50%;
-  margin-top: -10px;
-  left: 0;
-  display: block;
-  height: 20px;
-  width: 20px;
-  background-color: #3D3D3D;
-  border-radius: 3px;
+
+.dk-pro-panel.dk-pro-panel--soft {
+	background: #fbfbfc;
 }
-.dk-input-checkbox-callback label:hover:before {
-  background-color: black;
+
+.dk-pro-head {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	margin-bottom: 8px;
 }
-.dk-input-checkbox-callback label:after {
-  content: '';
-  position: absolute;
-  left: 7px;
-  top: 1px;
-  width: 5px;
-  height: 10px;
-  border: solid #FCC224;
-  border-width: 0 3px 3px 0;
-  transform: rotate(45deg);
-  opacity: 0;
-}
-.dk-input-checkbox-callback input:checked + label:after {
-  opacity: 1;
-}
-.dk-box.dk-delete-records {
-	background-color: #f0f4f8;
-	border: 1px solid #d1d9e0;
+
+.dk-pro-icon {
+	width: 28px;
+	height: 28px;
 	border-radius: 8px;
-	padding: 12px 16px;
+	border: 1px solid #dcdcde;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 15px;
+	background: #fff;
+	color: #1d2327;
+	flex: 0 0 auto;
+}
+
+.dk-pro-title {
+	margin: 0;
+	font-size: 15px;
+	font-weight: 650;
+	color: #1d2327;
+	line-height: 1.3;
+}
+
+.dk-pro-text {
+	margin: 6px 0 0;
+	font-size: 13px;
+	line-height: 1.65;
+	color: #3c434a;
+}
+
+.dk-pro-kicker {
+	margin-top: 10px;
+	padding-top: 10px;
+	border-top: 1px solid #eceef1;
+	font-size: 12.5px;
+	color: #646970;
+}
+
+.dk-pro-grid {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 12px;
+	margin-top: 10px;
+}
+
+@media (max-width: 782px) {
+	.dk-pro-grid { grid-template-columns: 1fr; }
+}
+
+.dk-pro-box {
+	border: 1px solid #eceef1;
+	border-radius: 10px;
+	padding: 12px 12px 10px;
+	background: #fff;
+}
+
+.dk-pro-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 11px;
+	font-weight: 650;
+	letter-spacing: .02em;
+	text-transform: uppercase;
+	color: #1d2327;
+	background: #f0f6fc;
+	border: 1px solid #d0e2ff;
+	border-radius: 999px;
+	padding: 4px 8px;
+	margin-bottom: 8px;
+}
+
+.dk-pro-list {
+	margin: 6px 0 0 18px;
+	font-size: 13px;
+	color: #3c434a;
+	line-height: 1.6;
+}
+
+.dk-pro-list li { margin: 4px 0; }
+
+.dk-pro-cta {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	flex-wrap: wrap;
+}
+
+.dk-pro-cta a {
+	color: #2271b1;
+	text-decoration: none;
+	font-weight: 600;
+}
+
+.dk-pro-cta a:hover { text-decoration: underline; }
+
+.dk-pro-mini {
+	font-size: 12.5px;
+	color: #646970;
+}
+
+
+.pro-version {
+    position: relative;
+    opacity: 0.5;
+    pointer-events: none;
+    /*filter: grayscale(70%);*/
+}
+
+.pro-version::after {
+    content: "PRO";
+    position: absolute;
+    top: 8px;
+    right: -2px;
+    background: #d7263d;    /* Red badge color */
+    color: #fff;            /* White text color */
+    font-weight: bold;
+    padding: 4px 8px;
+    font-size: 11px;
+    border-radius: 3px;
+    z-index: 10;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2); /* Small shadow for depth */
+    letter-spacing: 1px;
+}
+
+/*
+ * DISABLED OVERLAY
+ * Creates a semi-transparent overlay on top of the content, 
+ * reinforcing the impression that the feature is locked.
+ */
+.pro-version::before {
+    content: "";
+    position: absolute;
+    inset: 0;               /* Shorthand for top/right/bottom/left: 0 */
+    background: rgba(255,255,255,0.2); /* White transparent overlay */
+    z-index: 5;
+    border-radius: inherit; /* Preserve border radius from parent elements */
+}
+
+/* settings tab*/
+.duplicate-killer-support {
+	background: #f9fafb;
+	border: 1px solid #e5e7eb;
+	padding: 30px;
+	border-radius: 12px;
+	box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+	max-width: 860px;
+	margin: 30px auto;
+	font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+	color: #111827;
+}
+
+.duplicate-killer-support h2 {
+	font-size: 1.75rem;
+	margin-bottom: 20px;
+	color: #1f2937;
+}
+
+.duplicate-killer-support h3 {
+	font-size: 1.25rem;
+	margin-top: 30px;
+	color: #374151;
+}
+
+.duplicate-killer-support p,
+.duplicate-killer-support li {
+	font-size: 1rem;
+	line-height: 1.6;
+	color: #4b5563;
+}
+
+.duplicate-killer-support ul,
+.duplicate-killer-support ol {
+	margin: 1em 0;
+	padding-left: 1.5em;
+}
+
+.duplicate-killer-support ul li::marker {
+	color: #10b981;
+}
+
+.duplicate-killer-support textarea {
+	background: #f3f4f6;
+	border: 1px solid #d1d5db;
+	border-radius: 6px;
+	padding: 12px;
+	font-family: monospace;
+	font-size: 0.95rem;
+	color: #111827;
+	resize: vertical;
+}
+
+.duplicate-killer-support button[type="button"],
+.duplicate-killer-support a {
+	display: inline-block;
+	margin-top: 10px;
+	border: none;
+	border-radius: 6px;
+	text-align: center;
+	font-size: 0.95rem;
+	font-weight: 500;
+	text-decoration: none;
+	transition: background 0.2s ease;
+}
+
+.duplicate-killer-support button[type="button"] {
+	background: #10b981;
+	color: white;
+	padding: 10px 20px;
+	cursor: pointer;
+}
+
+.duplicate-killer-support button[type="button"]:hover {
+	background: #059669;
+}
+
+.duplicate-killer-support a {
+	background: #2563eb;
+	color: white;
+	padding: 10px 20px;
+	margin-left: 10px;
+}
+
+.duplicate-killer-support a:hover {
+	background: #1d4ed8;
+}
+
+#dk-copy-status {
+	font-size: 0.95rem;
+	color: #16a34a;
+	margin-top: 10px;
+}
+
+.dk-settings-wrapper{
+	
+}
+.dk-unique-fieldset {
+	background: #f4faff;
+	border-color: #b3dcf9;
+}
+
+.dk-unique-instruction {
+	color: #444;
+	font-size: 14px;
+	margin-bottom: 12px;
+}
+
+.dk-set-error-message {
 	margin-top: 15px;
 }
 
+.dk-error-fieldset {
+	border: 1px solid #f3c3c0;
+	background: #fff7f6;
+	padding: 15px;
+	border-radius: 8px;
+}
+
+.dk-legend-title {
+	font-size: 15px;
+	font-weight: 600;
+	color: #b02a1f;
+}
+
+.dk-error-instruction {
+	font-size: 13px;
+	color: #666;
+	margin:0;
+	margin-bottom: 8px;
+}
+
+.dk-error-input {
+	width: 99%;
+	max-width: 99%;
+	padding: 10px;
+	font-size: 14px;
+	border: 1px solid #ccc;
+	border-radius: 5px;
+	box-sizing: border-box;
+}
+.dk-error-input:focus {
+	outline: none;
+	border-color: #b02a1f;
+	box-shadow: 0 0 3px rgba(176, 42, 31, 0.4);
+}
+
+/* ===== Responsive container for forms ===== */
+.dk-forms-wrapper {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 20px;
+	justify-content: center;
+	align-items: flex-start;
+	padding: 10px;
+}
+
+/* ===== Individual form card ===== */
+.dk-single-form {
+	box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+	border-radius: 8px;
+	padding: 20px;
+	margin: 10px;
+	background: #fff;
+	width: 100%;
+	max-width: 31%;
+	display: inline-grid;
+	box-sizing: border-box;
+	transition: all 0.3s ease;
+}
+.dk-single-form:hover {
+	box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08), 0 0 0 3px rgba(59, 130, 246, 0.2); /* albastru soft */
+	transform: translateY(-6px);
+}
+
+/* ===== Header for each form ===== */
+.dk-form-header {
+	font-size: 20px;
+	font-weight: 700;
+	text-align: center;
+	border-bottom: 2px solid #eee;
+	color: #1e1e1e;
+	padding-bottom: 12px;
+	margin-bottom: 8px;
+}
+
+/* ===== Checkbox container ===== */
+.dk-input-checkbox-callback {
+	margin: 8px 0;
+	position: relative;
+}
+
+.dk-input-checkbox-callback input[type="checkbox"] {
+	position: absolute;
+	opacity: 0;
+	width: 0;
+	height: 0;
+}
+
+.dk-input-checkbox-callback label {
+	display: inline-block;
+	cursor: pointer;
+	position: relative;
+	padding-left: 32px;
+	font-size: 14px;
+	color: #444;
+}
+.dk-input-checkbox-callback label:before {
+	content: '';
+	position: absolute;
+	left: 0;
+	top: 50%;
+	transform: translateY(-50%);
+	width: 20px;
+	height: 20px;
+	background: #3d3d3d;
+	border-radius: 4px;
+	transition: background 0.3s;
+}
+.dk-input-checkbox-callback label:hover:before {
+	background: #000;
+}
+.dk-input-checkbox-callback label:after {
+	content: '';
+	position: absolute;
+	left: 7px;
+	top: 1px;
+	width: 5px;
+	height: 10px;
+	border: solid #FCC224;
+	border-width: 0 3px 3px 0;
+	transform: rotate(45deg);
+	opacity: 0;
+	transition: opacity 0.3s;
+}
+.dk-input-checkbox-callback input:checked + label:after {
+	opacity: 1;
+}
+
+/* ===== Delete record box ===== */
+.dk-box.dk-delete-records {
+	background-color: #fef3f2;
+	border: 1px solid #f3c3c0;
+	border-radius: 8px;
+	padding: 15px;
+	margin-top: 20px;
+}
+
 .dk-record-count {
-	margin: 0 0 10px;
+	margin-bottom: 10px;
 	font-weight: 600;
 	color: #333;
+	font-size: 14px;
 }
 
 .dk-delete-label {
 	display: flex;
 	align-items: center;
-	gap: 8px;
+	gap: 10px;
 	cursor: pointer;
 	color: #c0392b;
+	font-size: 14px;
 	font-weight: 500;
 }
 
 .dk-delete-checkbox {
 	transform: scale(1.2);
 	cursor: pointer;
+	accent-color: red;
 }
+
 .dk-count-number {
-	font-size: 1.25em;
+	font-size: 1.3em;
 	font-weight: bold;
 	color: #000;
+}
+
+/* ===== General settings section styling ===== */
+.dk-settings-form-row {
+	background-color: #fff;
+	border: 1px solid #ccd0d4;
+	border-radius: 6px;
+	padding: 16px;
+	margin-bottom: 25px;
+	box-sizing: border-box;
+}
+
+.dk-fieldset {
+	border: 1px solid #ddd;
+	padding: 16px;
+	margin: 16px 0;
+	border-radius: 6px;
+	background: #f9f9f9;
+	box-sizing: border-box;
+}
+
+.dk-input-switch-ios {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin-top: 10px;
+}
+.dk-toggle-section {
+	max-height: 0;
+	opacity: 0;
+	overflow: hidden;
+	margin-top: 0;
+	transition: all 0.4s ease;
+}
+
+.dk-toggle-section.is-active {
+	max-height: 200px; /* ajustabil */
+	opacity: 1;
+	margin-top: 10px;
+}
+
+.ios-switch-input {
+	display: none!important;
+}
+
+.ios-switch-label {
+	position: relative;
+	width: 44px;
+	height: 24px;
+	background: #ccc;
+	border-radius: 34px;
+	cursor: pointer;
+	transition: background-color 0.3s;
+}
+
+.ios-switch-label::after {
+	content: "";
+	position: absolute;
+	top: 2px;
+	left: 2px;
+	width: 20px;
+	height: 20px;
+	background: white;
+	border-radius: 50%;
+	transition: transform 0.3s;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+.ios-switch-input:checked + .ios-switch-label {
+	background-color: #34C759; /* iOS green */
+}
+
+.ios-switch-input:checked + .ios-switch-label::after {
+	transform: translateX(20px);
+}
+
+.ios-switch-text {
+	font-size: 14px;
+	color: #333;
+}
+/.dk-input-switch-ios {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin-top: 10px;
+}
+
+.ios-switch-input {
+	display: none;
+}
+
+.ios-switch-label {
+	position: relative;
+	width: 44px;
+	height: 24px;
+	background: #ccc;
+	border-radius: 34px;
+	cursor: pointer;
+	transition: background-color 0.3s;
+}
+
+.ios-switch-label::after {
+	content: "";
+	position: absolute;
+	top: 2px;
+	left: 2px;
+	width: 20px;
+	height: 20px;
+	background: white;
+	border-radius: 50%;
+	transition: transform 0.3s;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+.ios-switch-input:checked + .ios-switch-label {
+	background-color: #34C759; /* iOS green */
+}
+
+.ios-switch-input:checked + .ios-switch-label::after {
+	transform: translateX(20px);
+}
+
+.ios-switch-text {
+	font-size: 14px;
+	color: #333;
+}
+
+
+/* ===== Responsive layout (mobile) ===== */
+@media screen and (max-width: 480px) {
+	.dk-single-form {
+		max-width: 100%;
+		margin: 10px 0;
+	}
+	.dk-form-header {
+		font-size: 17px;
+	}
+	.dk-delete-label {
+		flex-direction: column;
+		align-items: flex-start;
+	}
 }
