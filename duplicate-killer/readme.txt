@@ -1,6 +1,6 @@
 === Duplicate Killer – Stop Duplicate Form Submissions in WordPress (CF7, Elementor, Formidable, WPForms, Breakdance) ===
 Plugin Name: Duplicate Killer
-Version: 1.4.7
+Version: 1.4.8
 Author: NIA
 Author URI: https://profiles.wordpress.org/wpnia/
 Contributors: wpnia
@@ -8,11 +8,11 @@ Tags: duplicates, forms, validation, elementor, cf7
 Donate link: https://www.paypal.com/paypalme/wpnia
 Requires at least: 5.2
 Tested up to: 6.9
-Stable tag: 1.4.7
+Stable tag: 1.4.8
 Requires PHP: 5.6.20
 License: GPL v2 - http://www.gnu.org/licenses/old-licenses/gpl-2.0.html
 
-Duplicate Killer prevents duplicate form submissions by enforcing unique email, phone or text fields — without CAPTCHA.
+Block duplicate WordPress form submissions by validating unique email, phone and text fields — without CAPTCHA.
 
 == Description ==
 
@@ -24,9 +24,9 @@ Choose which fields must be unique (email, phone, text) and block duplicate entr
 
 Duplicate Killer works silently in the background and integrates seamlessly with popular WordPress form plugins and page builders.
 
-In the free version, duplicate protection rules are applied globally to all forms of the selected plugin.
+Free: In the free version, duplicate protection can be enabled for one form per supported plugin.
 
-Duplicate Killer PRO allows you to define different rules, messages and limits for each form.
+PRO: Duplicate Killer PRO enables multi-form protection with individual rules and messages per form.
 
 == Supported Plugins ==
 
@@ -108,13 +108,14 @@ This feature works with Elementor’s native form widget and requires no additio
 == Free vs Pro ==
 
 === Free Version ===
-- Global duplicate protection rules applied to all forms
-- One global error message for duplicate submissions
+- Protect one form (per supported plugin)
+- Global duplicate protection rules (for the protected form)
+- One global error message
 - Global IP-based submission limits
 - Unique entries per user (cookie-based)
-- Supports multiple form plugins
 
 === Duplicate Killer PRO ===
+- Protect multiple forms
 - Per-form duplicate protection rules
 - Custom error message for each form
 - Different IP limits per form
@@ -172,8 +173,14 @@ Use the PRO version if your site has multiple forms with different purposes — 
 5. Works with popular WordPress form plugins
 
 == Upgrade Notice ==
-
+= 1.4.8 =
+* Improved admin UX and clearer Free vs PRO separation for multi-form sites.
 == Changelog ==
+
+= 1.4.8 =
+* Updated: Free vs PRO structure updated to reflect the long-term direction of the plugin.
+* Added: Visual guidance in the admin area for multi-form protection.
+* Improved: Minor improvements to cookie-based duplicate detection.
 
 = 1.4.7 =
 * New: Full Ninja Forms support – block duplicate submissions before entries are saved.

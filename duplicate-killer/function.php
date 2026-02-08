@@ -1,18 +1,18 @@
 <?php
 /**
  * Plugin Name: Duplicate Killer
- * Version: 1.4.7
+ * Version: 1.4.8
  * Description: Stop duplicate form entries for Contact Form 7, Forminator, WPForms, Elementor Forms, Formidable Forms, and Breakdance Page Builder. Prevent duplicate submissions when users submit your forms and limit one submission per email address or other selected fields.
  * Author: NIA
  * Author URI: https://profiles.wordpress.org/wpnia/
- * Text Domain: duplicate killer
+ * Text Domain: duplicate-killer
  * Domain Path: /languages/
  */
 
 	defined('ABSPATH') or die('You shall not pass!');
 	
 	define('DuplicateKiller_PLUGIN',__FILE__);
-	define ('DuplicateKiller_VERSION','1.4.7');
+	define('DuplicateKiller_VERSION','1.4.8');
 	define('DuplicateKiller_PLUGIN_DIR', untrailingslashit(dirname(DuplicateKiller_PLUGIN )));
 	
 	require_once DuplicateKiller_PLUGIN_DIR.'/includes/helpers.php';

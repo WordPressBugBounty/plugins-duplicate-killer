@@ -170,9 +170,15 @@ class DK_Main_List_Table extends WP_List_Table{
 				$allowed_html = [
 					'div' => ['class' => true],
 					'p'   => [],
+					'br'  => [],
 					'strong' => [],
 					'small'  => ['style' => true],
 					'em'     => [],
+					'a' => [
+						'href'   => true,
+						'target' => true,
+						'rel'    => true,
+					],
 					'img' => [
 						'src'   => true,
 						'alt'   => true,

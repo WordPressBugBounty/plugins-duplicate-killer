@@ -1,100 +1,6 @@
 <?php
 defined( 'ABSPATH' ) or die( 'You shall not pass!' );
 
-add_action('template_redirect', function () {
-    
-    if (empty($GLOBALS['dk_bd_buf_started'])) {
-        ob_start();
-        $GLOBALS['dk_bd_buf_started'] = true;
-    }
-}, 0);
-
-add_action('wp_footer', function () {
-    if (!function_exists('dk_breakdance_is_cookie_set')) return;
-    if (empty($GLOBALS['dk_bd_buf_started'])) return;
-
-    $html = ob_get_contents();
-    if ($html === false || $html === '') return;
-
-    $formIds = [];
-
-    if (class_exists('DOMDocument')) {
-        libxml_use_internal_errors(true);
-        $dom = new DOMDocument();
-        $dom->loadHTML($html, LIBXML_NOWARNING | LIBXML_NOERROR);
-        libxml_clear_errors();
-
-        $xp    = new DOMXPath($dom);
-        $forms = $xp->query('//form[contains(concat(" ", normalize-space(@class), " "), " breakdance-form ")]');
-        if ($forms && $forms->length) {
-            foreach ($forms as $form) {
-                $inputs = $xp->query('.//input[@name="form_id"]', $form);
-                if ($inputs && $inputs->length) {
-                    $val = (int)$inputs->item(0)->getAttribute('value');
-                    if ($val > 0) $formIds[] = $val;
-                }
-            }
-        }
-    }
-
-    // Fallback regex (if DOM missing)
-    if (!$formIds) {
-        if (preg_match_all(
-            '/<form\b[^>]*\bclass\s*=\s*(["\'])[^\1>]*\bbreakdance-form\b[^\1>]*\1[^>]*>.*?<input\b[^>]*\bname\s*=\s*(["\'])form_id\2[^>]*\bvalue\s*=\s*(["\'])(\d+)\3/si',
-            $html,
-            $m
-        )) {
-            $formIds = array_map('intval', $m[4]);
-        }
-    }
-
-    $formIds = array_values(array_unique(array_filter($formIds, fn($v)=>$v>0)));
-
-    if ($formIds) {
-        foreach ($formIds as $fid) {
-            dk_breakdance_is_cookie_set($fid);
-        }
-    }
-}, 1);
-
-function dk_breakdance_is_cookie_set($form_id){
-	if($Breakdance_page = get_option("Breakdance_page")){
-	foreach($Breakdance_page as $arr => $form){
-			if (is_array($form) && isset($form['form_id']) && $form['form_id'] == $form_id) {
-				if(isset($Breakdance_page['breakdance_cookie_option']) AND $Breakdance_page['breakdance_cookie_option'] == "1"){
-					dk_checked_defined_constants('dk_cookie_unique_time',md5(microtime(true).mt_Rand()));
-					dk_checked_defined_constants('dk_cookie_days_persistence',$Breakdance_page['breakdance_cookie_option_days']);
-					add_action( 'wp_footer', function(){?>
-					<script id="duplicate-killer-breakdance-form" type="text/javascript">
-						(function($){
-						if ($('form.breakdance-form .breakdance-form-button__submit').length) {
-							if(!getCookie('dk_form_cookie')){
-								var date = new Date();
-								date.setDate(date.getDate()+<?php echo esc_attr(dk_cookie_days_persistence);?>);
-								var dk_breakdance_form_cookie_days = date.toUTCString();
-								document.cookie = "dk_form_cookie=<?php echo esc_attr(dk_cookie_unique_time);?>; expires="+dk_breakdance_form_cookie_days+"; path=/";
-							}
-						}
-						})(jQuery);
-						function getCookie(ck_name) {
-							var cookieArr = document.cookie.split(";");
-							for(var i = 0; i < cookieArr.length; i++) {
-								var cookiePair = cookieArr[i].split("=");
-								if(ck_name == cookiePair[0].trim()) {
-									return decodeURIComponent(cookiePair[1]);
-								}
-							}
-							return null;
-						}
-					</script>
-				<?php
-					}, 999 );
-				}
-			}
-	}
-	}
-}
-
 add_filter('breakdance_form_run_action_store_submission', 'duplicateKiller_breakdance_guard_action', 10, 5);
 add_filter('breakdance_form_run_action_email',            'duplicateKiller_breakdance_guard_action', 10, 5);
 
@@ -428,10 +334,25 @@ function duplicateKiller_breakdance_validate_input($input){
                 continue; // already processed
             }
 			// it is a field checkbox only if the value is exactly "1"
-            if ((string)$v === '1') {
-                // $k is the field ID (ex: your-email / name / qqtaqi)
-                $form_out[$k] = '1';
-            }
+            // A field checkbox is "enabled" only when the value is exactly 1/"1".
+			// Some builders send nested arrays, so we must handle both scalar and array shapes safely.
+			$is_enabled = false;
+
+			if (is_scalar($v)) {
+				$is_enabled = ((string) $v === '1');
+			} elseif (is_array($v)) {
+				// Common patterns: ['enabled' => '1'] or ['value' => '1']
+				if (isset($v['enabled']) && is_scalar($v['enabled']) && (string) $v['enabled'] === '1') {
+					$is_enabled = true;
+				} elseif (isset($v['value']) && is_scalar($v['value']) && (string) $v['value'] === '1') {
+					$is_enabled = true;
+				}
+			}
+
+			if ($is_enabled) {
+				// $k is the field ID (ex: your-email / name / qqtaqi)
+				$form_out[$k] = '1';
+			}
         }
 
         if (!empty($form_out)) {

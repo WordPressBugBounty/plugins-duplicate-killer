@@ -160,7 +160,7 @@ function duplicateKiller_support_plugin() {
 				<span class="dashicons dashicons-clipboard" style="vertical-align:middle;margin-right:6px;"></span>
 				<?php echo esc_html__( 'Copy Info', 'duplicate-killer' ); ?>
 			</button>
-			<a href="<?php echo esc_url( 'https://verselabwp.com/duplicate-killer/' ); ?>" target="_blank" rel="noopener"
+			<a href="<?php echo esc_url( 'https://wordpress.org/support/plugin/duplicate-killer/' ); ?>" target="_blank" rel="noopener"
 			   class="button button-primary" style="margin-left:8px;">
 				<span class="dashicons dashicons-admin-site-alt3" style="vertical-align:middle;margin-right:6px;"></span>
 				<?php echo esc_html__( 'Get Support Now', 'duplicate-killer' ); ?>

@@ -1,54 +1,6 @@
 <?php
 defined( 'ABSPATH' ) or die( 'You shall not pass!' );
 
-// Inject JS that sets the cookie AND set the valuea as hidden input field
-add_action('wp_footer', 'dk_inject_wpforms_cookie_with_hidden_field', 20);
-function dk_inject_wpforms_cookie_with_hidden_field() {
-	$wpforms_page = get_option("WPForms_page");
-
-	if (!empty($wpforms_page['wpforms_cookie_option']) && $wpforms_page['wpforms_cookie_option'] === "1") {
-		$days = (int) $wpforms_page['wpforms_cookie_option_days'];
-		$cookie_value = md5(microtime(true) . mt_rand());
-		?>
-		<script id="dk-wpforms-cookie-handler" type="text/javascript">
-		document.addEventListener("DOMContentLoaded", function () {
-			var cookieName = "dk_form_cookie";
-			var cookieValue = getCookie(cookieName);
-			if (!cookieValue) {
-				var date = new Date();
-				date.setDate(date.getDate() + <?php echo $days; ?>);
-				var expires = "expires=" + date.toUTCString();
-				document.cookie = cookieName + "=<?php echo esc_js($cookie_value); ?>; " + expires + "; path=/";
-				cookieValue = "<?php echo esc_js($cookie_value); ?>";
-			}
-
-			// Add hidden input to each form
-			document.querySelectorAll("form.wpforms-form").forEach(function(form) {
-				if (!form.querySelector('input[name="dk_form_cookie"]')) {
-					var input = document.createElement('input');
-					input.type = 'hidden';
-					input.name = 'dk_form_cookie';
-					input.value = cookieValue;
-					form.appendChild(input);
-				}
-			});
-
-			function getCookie(name) {
-				var cookieArr = document.cookie.split(";");
-				for (var i = 0; i < cookieArr.length; i++) {
-					var cookiePair = cookieArr[i].split("=");
-					if (name === cookiePair[0].trim()) {
-						return decodeURIComponent(cookiePair[1]);
-					}
-				}
-				return null;
-			}
-		});
-		</script>
-		<?php
-	}
-}
-
 add_action( 'wpforms_process', 'duplicateKiller_wpforms_before_send_email', 10, 3 );
 function duplicateKiller_wpforms_before_send_email($fields, $entry, $form_data){
 	$form_title = $form_data['settings']['form_title'];

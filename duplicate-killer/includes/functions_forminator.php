@@ -1,49 +1,6 @@
 <?php
 defined( 'ABSPATH' ) or die( 'You shall not pass!' );
 
-/**
- * check if Forminator load the stylesheets and call the custom function (dk_forminator_is_cookie_set) if so
- */
-add_filter( 'the_content', 'dk_check_forminator_enqueue' );
-function dk_check_forminator_enqueue( $content ) {
-	if(has_shortcode($content, 'forminator_form') OR function_exists('forminator_print_front_styles')){
-		dk_forminator_is_cookie_set();
-	}
-	return $content;
-}
-function dk_forminator_is_cookie_set(){
-	if($forminator_page = get_option("Forminator_page")){
-	if(isset($forminator_page['forminator_cookie_option']) AND $forminator_page['forminator_cookie_option'] == "1"){
-		dk_checked_defined_constants('dk_cookie_unique_time',md5(microtime(true).mt_Rand()));
-		dk_checked_defined_constants('dk_cookie_days_persistence',$forminator_page['forminator_cookie_option_days']);
-		add_action( 'wp_footer', function(){?>
-		<script id="duplicate-killer-forminator-form" type="text/javascript">
-			(function($){
-			if($('button').hasClass('forminator-button-submit')){
-				if(!getCookie('dk_form_cookie')){
-					var date = new Date();
-					date.setDate(date.getDate()+<?php echo esc_attr(dk_cookie_days_persistence);?>);
-					var dk_forminator_form_cookie_days = date.toUTCString();
-					document.cookie = "dk_form_cookie=<?php echo esc_attr(dk_cookie_unique_time);?>; expires="+dk_forminator_form_cookie_days+"; path=/";
-				}
-			}
-			})(jQuery);
-			function getCookie(ck_name) {
-				var cookieArr = document.cookie.split(";");
-				for(var i = 0; i < cookieArr.length; i++) {
-					var cookiePair = cookieArr[i].split("=");
-					if(ck_name == cookiePair[0].trim()) {
-						return decodeURIComponent(cookiePair[1]);
-					}
-				}
-				return null;
-			}
-		</script>
-<?php
-		}, 999 );
-	}
-	}
-}
 add_action( 'forminator_custom_form_submit_before_set_fields', 'duplicateKiller_forminator_save_fields', 10, 3 );
 function duplicateKiller_forminator_save_fields($entry, $id, $field_data) {
     global $wpdb;
