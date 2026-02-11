@@ -1,6 +1,6 @@
-=== Duplicate Killer ===
+=== Duplicate Killer – Stop Duplicate Form Submissions in WordPress (CF7, Elementor, Formidable, WPForms, Breakdance) ===
 Plugin Name: Duplicate Killer
-Version: 1.4.9
+Version: 1.4.8
 Author: NIA
 Author URI: https://profiles.wordpress.org/wpnia/
 Contributors: wpnia
@@ -8,12 +8,11 @@ Tags: duplicates, forms, validation, elementor, cf7
 Donate link: https://www.paypal.com/paypalme/wpnia
 Requires at least: 5.2
 Tested up to: 6.9
-Stable tag: 1.4.9
+Stable tag: 1.4.8
 Requires PHP: 5.6.20
-License: GPLv2 or later
-License URI: https://www.gnu.org/licenses/gpl-2.0.html
+License: GPL v2 - http://www.gnu.org/licenses/old-licenses/gpl-2.0.html
 
-Block duplicate form submissions by validating unique email, phone and text fields — without CAPTCHA.
+Block duplicate WordPress form submissions by validating unique email, phone and text fields — without CAPTCHA.
 
 == Description ==
 
@@ -174,18 +173,9 @@ Use the PRO version if your site has multiple forms with different purposes — 
 5. Works with popular WordPress form plugins
 
 == Upgrade Notice ==
-= 1.4.9 =
-* Maintenance and compliance update. Improved security, compatibility and WordPress.org guidelines alignment. Recommended update for all users.
-
+= 1.4.8 =
+* Improved admin UX and clearer Free vs PRO separation for multi-form sites.
 == Changelog ==
-
-= 1.4.9 =
-* Improved security and data validation.
-* Better compatibility with latest WordPress versions.
-* Cleaner and more stable file handling for uploaded files.
-* Improved admin performance and script loading.
-* Translation system aligned with WordPress standards.
-* General code cleanup and stability improvements.
 
 = 1.4.8 =
 * Updated: Free vs PRO structure updated to reflect the long-term direction of the plugin.

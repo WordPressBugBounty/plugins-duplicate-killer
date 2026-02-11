@@ -38,12 +38,7 @@ function duplicateKiller_elementor_guard_only($record, $ajax_handler) {
     $db_form_name = $form_name . '.' . $node_id;
 
     // cookie
-    $form_cookie = 'NULL';
-	if ( isset( $_COOKIE['dk_form_cookie'] ) ) {
-		$form_cookie = sanitize_text_field(
-			wp_unslash( $_COOKIE['dk_form_cookie'] )
-		);
-	}
+    $form_cookie = isset($_COOKIE['dk_form_cookie']) ? sanitize_text_field($_COOKIE['dk_form_cookie']) : 'NULL';
 
     // --- per-form cfg (only fields in new structure) ---
     $cfg = [];
@@ -77,8 +72,8 @@ function duplicateKiller_elementor_guard_only($record, $ajax_handler) {
         $data[$fid] = sanitize_text_field((string)$val);
     }
 
-    // 1) IP check (map globals to what duplicateKiller_ip_limit_trigger expects)
-    if (function_exists('duplicateKiller_ip_limit_trigger')) {
+    // 1) IP check (map globals to what dk_ip_limit_trigger expects)
+    if (function_exists('dk_ip_limit_trigger')) {
         $mapped_for_ip = [
             // keep everything else if your function needs it
             // but provide the keys it expects:
@@ -86,10 +81,10 @@ function duplicateKiller_elementor_guard_only($record, $ajax_handler) {
             'user_ip_days' => isset($opt['elementor_user_ip_days']) ? (string)$opt['elementor_user_ip_days'] : '',
         ];
 
-        // if duplicateKiller_ip_limit_trigger expects full option array, you can merge:
+        // if dk_ip_limit_trigger expects full option array, you can merge:
         $opt_for_ip = $opt + $mapped_for_ip;
 
-        if (duplicateKiller_ip_limit_trigger("elementor", $opt_for_ip, $db_form_name)) {
+        if (dk_ip_limit_trigger("elementor", $opt_for_ip, $db_form_name)) {
             $ajax_handler->add_error_message($g_msg_ip);
 
             // stop elementor: attach error to first field if possible
@@ -144,6 +139,7 @@ add_action('elementor_pro/forms/new_record', 'duplicateKiller_elementor_save_onl
 function duplicateKiller_elementor_save_only($record, $handler) {
 
     global $wpdb;
+    $table_name = $wpdb->prefix . 'dk_forms_duplicate';
 
     $opt = get_option('Elementor_page');
     if (!is_array($opt)) $opt = [];
@@ -184,12 +180,7 @@ function duplicateKiller_elementor_save_only($record, $handler) {
     if (empty($cfg)) return;
 
     // cookie
-    $form_cookie = 'NULL';
-	if ( isset( $_COOKIE['dk_form_cookie'] ) ) {
-		$form_cookie = sanitize_text_field(
-			wp_unslash( $_COOKIE['dk_form_cookie'] )
-		);
-	}
+    $form_cookie = isset($_COOKIE['dk_form_cookie']) ? sanitize_text_field($_COOKIE['dk_form_cookie']) : 'NULL';
 
     // data
     $fields = $record->get('fields');
@@ -206,10 +197,8 @@ function duplicateKiller_elementor_save_only($record, $handler) {
     }
 
     // IP store flag (global)
-    $form_ip = $g_user_ip_enabled ? duplicateKiller_get_user_ip() : 'NULL';
-	
-	$table_name = $wpdb->prefix . 'dk_forms_duplicate';
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- Inserting into plugin-owned custom table.
+    $form_ip = $g_user_ip_enabled ? dk_get_user_ip() : 'NULL';
+
     $wpdb->insert(
         $table_name,
         [
@@ -224,191 +213,174 @@ function duplicateKiller_elementor_save_only($record, $handler) {
     );
 }
 
+
 function duplicateKiller_elementor_get_forms(): array {
+    $posts = get_posts([
+        'post_type'        => 'any',
+        'posts_per_page'   => -1,
+        'meta_query'       => [[ 'key' => '_elementor_data', 'compare' => 'EXISTS' ]],
+        'orderby'          => 'ID',
+        'order'            => 'DESC',
+        'no_found_rows'    => true,
+        'suppress_filters' => true,
+    ]);
 
-	$out = array();
+    if (!$posts) return [];
 
-	$per_page = 200;
-	$paged    = 1;
+    $out = [];
 
-	do {
-		// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Admin-only scan for Elementor forms (paged, IDs only).
-		$post_ids = get_posts(
-			array(
-				'post_type'      => array( 'post', 'page' ), // Add more post types if needed (e.g. 'elementor_library').
-				'posts_per_page' => $per_page,
-				'paged'          => $paged,
-				'fields'         => 'ids',
-				// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Admin-only scan for Elementor forms (paged, IDs only).
-				'meta_key'       => '_elementor_data',
-				'orderby'        => 'ID',
-				'order'          => 'DESC',
-				'no_found_rows'  => true,
-			)
-		);
+    foreach ($posts as $p) {
+        $meta_raw = get_post_meta($p->ID, '_elementor_data', true);
+        if (empty($meta_raw)) continue;
 
-		if ( empty( $post_ids ) ) {
-			break;
-		}
+        // Elementor stores JSON string in _elementor_data (sometimes already array)
+        $data = $meta_raw;
+        if (is_string($meta_raw)) {
+            $decoded = json_decode($meta_raw, true);
+            if (is_array($decoded)) {
+                $data = $decoded;
+            } else {
+                $maybe = maybe_unserialize($meta_raw);
+                if (is_array($maybe)) $data = $maybe;
+            }
+        }
 
-		foreach ( $post_ids as $post_id ) {
-			$post_id = (int) $post_id;
+        if (!is_array($data) || empty($data)) continue;
 
-			$meta_raw = get_post_meta( $post_id, '_elementor_data', true );
-			if ( empty( $meta_raw ) ) {
-				continue;
-			}
+        // DFS: Elementor tree is an array of root elements, each may contain "elements"
+        $stack = $data;
 
-			// Elementor stores JSON string in _elementor_data (sometimes already array).
-			$data = $meta_raw;
+        while ($stack) {
+            $node = array_pop($stack);
+            if (!is_array($node)) continue;
 
-			if ( is_string( $meta_raw ) ) {
-				$decoded = json_decode( $meta_raw, true );
-				if ( is_array( $decoded ) ) {
-					$data = $decoded;
-				} else {
-					$maybe = maybe_unserialize( $meta_raw );
-					if ( is_array( $maybe ) ) {
-						$data = $maybe;
-					}
-				}
-			}
+            // push children
+            if (!empty($node['elements']) && is_array($node['elements'])) {
+                foreach ($node['elements'] as $child) {
+                    $stack[] = $child;
+                }
+            }
 
-			if ( ! is_array( $data ) || empty( $data ) ) {
-				continue;
-			}
+            // detect Elementor Form widget
+            $widgetType = (string)($node['widgetType'] ?? '');
+            $elType     = (string)($node['elType'] ?? '');
 
-			// DFS: Elementor tree is an array of root elements, each may contain "elements".
-			$stack = $data;
+            if ($elType !== 'widget' || $widgetType !== 'form') {
+                continue;
+            }
 
-			while ( ! empty( $stack ) ) {
-				$node = array_pop( $stack );
-				if ( ! is_array( $node ) ) {
-					continue;
-				}
+            $settings  = $node['settings'] ?? [];
+            if (!is_array($settings)) $settings = [];
 
-				// Push children.
-				if ( ! empty( $node['elements'] ) && is_array( $node['elements'] ) ) {
-					foreach ( $node['elements'] as $child ) {
-						$stack[] = $child;
-					}
-				}
+            $form_name = trim((string)($settings['form_name'] ?? ''));
+            if ($form_name === '') $form_name = (string)$p->post_title;
 
-				// Detect Elementor Form widget.
-				$widgetType = (string) ( $node['widgetType'] ?? '' );
-				$elType     = (string) ( $node['elType'] ?? '' );
+            // Elementor element id (string like 'a1b2c3d')
+            $node_id = (string)($node['id'] ?? '');
+            if ($node_id === '') continue;
 
-				if ( 'widget' !== $elType || 'form' !== $widgetType ) {
-					continue;
-				}
+            $display_key = sprintf('%s.%s', $form_name, $node_id);
 
-				$settings = $node['settings'] ?? array();
-				if ( ! is_array( $settings ) ) {
-					$settings = array();
-				}
+            if (!isset($out[$display_key])) {
+                $out[$display_key] = [
+                    'form_id'   => $node_id,      // Elementor element id (string)
+                    'post_id'   => (int)$p->ID,
+                    'form_name' => $form_name,
+                    'fields'    => [],
+                ];
+            }
 
-				$form_name = trim( (string) ( $settings['form_name'] ?? '' ) );
-				if ( '' === $form_name ) {
-					$form_name = (string) get_the_title( $post_id );
-				}
+            $fields = $settings['form_fields'] ?? [];
+            if (!is_array($fields)) $fields = [];
 
-				// Elementor element id (string like 'a1b2c3d').
-				$node_id = (string) ( $node['id'] ?? '' );
-				if ( '' === $node_id ) {
-					continue;
-				}
+            foreach ($fields as $f) {
+                if (!is_array($f)) continue;
 
-				$display_key = sprintf( '%s.%s', $form_name, $node_id );
+                // Extra safety: skip items that don't look like real fields
+                $label = (string)($f['field_label'] ?? '');
+                $cid   = (string)($f['custom_id'] ?? '');
+                if ($label === '' && $cid === '') continue;
 
-				if ( ! isset( $out[ $display_key ] ) ) {
-					$out[ $display_key ] = array(
-						'form_id'   => $node_id,   // Elementor element id (string).
-						'post_id'   => $post_id,
-						'form_name' => $form_name,
-						'fields'    => array(),
-					);
-				}
+                $ftype = strtolower((string)($f['field_type'] ?? ''));
 
-				$fields = $settings['form_fields'] ?? array();
-				if ( ! is_array( $fields ) ) {
-					$fields = array();
-				}
+                // Elementor behavior: missing field_type => default Text field
+                if ($ftype === '') {
+                    $ftype = 'text';
+                }
 
-				foreach ( $fields as $f ) {
-					if ( ! is_array( $f ) ) {
-						continue;
-					}
+                // eligible types (align with your original intent)
+                if (!in_array($ftype, ['text', 'textarea', 'email', 'tel', 'phone', 'url'], true)) {
+                    continue;
+                }
 
-					// Extra safety: skip items that don't look like real fields.
-					$label = (string) ( $f['field_label'] ?? '' );
-					$cid   = (string) ( $f['custom_id'] ?? '' );
-					if ( '' === $label && '' === $cid ) {
-						continue;
-					}
+                // Field id: prefer custom_id; fallback to _id; fallback to label
+                $fid = '';
+                if (!empty($f['custom_id'])) {
+                    $fid = (string)$f['custom_id'];
+                } elseif (!empty($f['_id'])) {
+                    $fid = 'field_' . (string)$f['_id'];
+                } elseif (!empty($f['field_label'])) {
+                    $fid = sanitize_key((string)$f['field_label']);
+                }
+                if ($fid === '') continue;
 
-					$ftype = strtolower( (string) ( $f['field_type'] ?? '' ) );
+                $out[$display_key]['fields'][] = [
+                    'type'  => $ftype,
+                    'label' => $label,
+                    'id'    => $fid,
+                ];
+            }
+        }
+    }
 
-					// Elementor behavior: missing field_type => default Text field.
-					if ( '' === $ftype ) {
-						$ftype = 'text';
-					}
+    // Deduplicate fields (by id) per form
+    foreach ($out as $key => $bundle) {
+        $seen  = [];
+        $clean = [];
+        foreach ($bundle['fields'] as $f) {
+            if (isset($seen[$f['id']])) continue;
+            $seen[$f['id']] = true;
+            $clean[] = $f;
+        }
+        $out[$key]['fields'] = array_values($clean);
+    }
 
-					// Eligible types (align with your original intent).
-					if ( ! in_array( $ftype, array( 'text', 'textarea', 'email', 'tel', 'phone', 'url' ), true ) ) {
-						continue;
-					}
-
-					// Field id: prefer custom_id; fallback to _id; fallback to label.
-					$fid = '';
-					if ( ! empty( $f['custom_id'] ) ) {
-						$fid = (string) $f['custom_id'];
-					} elseif ( ! empty( $f['_id'] ) ) {
-						$fid = 'field_' . (string) $f['_id'];
-					} elseif ( ! empty( $f['field_label'] ) ) {
-						$fid = sanitize_key( (string) $f['field_label'] );
-					}
-
-					if ( '' === $fid ) {
-						continue;
-					}
-
-					$out[ $display_key ]['fields'][] = array(
-						'type'  => $ftype,
-						'label' => $label,
-						'id'    => $fid,
-					);
-				}
-			}
-		}
-
-		$paged++;
-	} while ( count( $post_ids ) === $per_page );
-
-	// Deduplicate fields (by id) per form.
-	foreach ( $out as $key => $bundle ) {
-		$seen  = array();
-		$clean = array();
-
-		foreach ( $bundle['fields'] as $f ) {
-			if ( isset( $seen[ $f['id'] ] ) ) {
-				continue;
-			}
-			$seen[ $f['id'] ] = true;
-			$clean[]          = $f;
-		}
-
-		$out[ $key ]['fields'] = array_values( $clean );
-	}
-
-	return $out;
+    return $out;
 }
-
 /*********************************
  * Callbacks
 **********************************/
 function duplicateKiller_elementor_validate_input($input){
 	global $wpdb;
 	$output = array();
+	
+	// DELETE if checkbox is checked
+	if (isset($_POST['Elementor_delete_records'])) {
+		$table = $wpdb->prefix . 'dk_forms_duplicate';
+
+		// If there is only one checkbox checked and it is NOT an array (ex: name="Elementor_delete_records[Some Form]")
+		if (!is_array($_POST['Elementor_delete_records'])) {
+
+			$form_name = sanitize_text_field($_POST['Elementor_delete_records']);
+			$wpdb->delete($table, [
+				'form_plugin' => 'Elementor',
+				'form_name'   => $form_name,
+			]);
+
+		} else {
+
+			// If there are multiple checkboxes checked
+			foreach ($_POST['Elementor_delete_records'] as $raw_form_name => $delete_flag) {
+				if ($delete_flag === "1") {
+					$form_name = sanitize_text_field($raw_form_name);
+					$wpdb->delete($table, [
+						'form_plugin' => 'Elementor',
+						'form_name'   => $form_name,
+					]);
+				}
+			}
+		}
+	}
 	
 	// Create our array for storing the validated options
     foreach($input as $key =>$value){
@@ -455,13 +427,13 @@ function duplicateKiller_elementor_validate_input($input){
 		$output['elementor_error_message'] = sanitize_text_field($input['elementor_error_message']);
 	}
     // Return the array processing any additional functions filtered by this action
-      return apply_filters( 'duplicateKiller_elementor_error_message', $output, $input );
+      return apply_filters( 'elementor_error_message', $output, $input );
 }
 
 /**
  * Helper: is Elementor present & enabled for this request?
  */
-function duplicateKiller_elementor_pro_is_ready(): bool {
+function dk_elementor_pro_is_ready(): bool {
     // Elementor (free) must be loaded first
     if (
         !defined('ELEMENTOR_VERSION') &&
@@ -495,108 +467,81 @@ function duplicateKiller_elementor_pro_is_ready(): bool {
 }
 function duplicateKiller_elementor_get_form_map(): array {
 
-	$out = array();
+    $posts = get_posts([
+        'post_type'        => 'any',
+        'posts_per_page'   => -1,
+        'meta_query'       => [[ 'key' => '_elementor_data', 'compare' => 'EXISTS' ]],
+        'orderby'          => 'ID',
+        'order'            => 'DESC',
+        'no_found_rows'    => true,
+        'suppress_filters' => true,
+    ]);
 
-	$per_page = 200;
-	$paged    = 1;
+    if (!$posts) return [];
 
-	do {
-		// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Admin-only scan for Elementor forms (paged, IDs only).
-		$post_ids = get_posts(
-			array(
-				'post_type'      => array( 'post', 'page' ), // Add more if needed (e.g. 'elementor_library').
-				'posts_per_page' => $per_page,
-				'paged'          => $paged,
-				'fields'         => 'ids',
-				// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Admin-only scan for Elementor forms (paged, IDs only).
-				'meta_key'       => '_elementor_data',
-				'orderby'        => 'ID',
-				'order'          => 'DESC',
-				'no_found_rows'  => true,
-			)
-		);
+    $out = [];
 
-		if ( empty( $post_ids ) ) {
-			break;
-		}
+    foreach ($posts as $p) {
 
-		foreach ( $post_ids as $post_id ) {
-			$post_id = (int) $post_id;
+        $meta_raw = get_post_meta($p->ID, '_elementor_data', true);
+        if (empty($meta_raw)) continue;
 
-			$meta_raw = get_post_meta( $post_id, '_elementor_data', true );
-			if ( empty( $meta_raw ) ) {
-				continue;
-			}
+        $data = $meta_raw;
+        if (is_string($meta_raw)) {
+            $decoded = json_decode($meta_raw, true);
+            if (is_array($decoded)) {
+                $data = $decoded;
+            } else {
+                $maybe = maybe_unserialize($meta_raw);
+                if (is_array($maybe)) {
+                    $data = $maybe;
+                }
+            }
+        }
 
-			$data = $meta_raw;
+        if (!is_array($data) || empty($data)) continue;
 
-			if ( is_string( $meta_raw ) ) {
-				$decoded = json_decode( $meta_raw, true );
-				if ( is_array( $decoded ) ) {
-					$data = $decoded;
-				} else {
-					$maybe = maybe_unserialize( $meta_raw );
-					if ( is_array( $maybe ) ) {
-						$data = $maybe;
-					}
-				}
-			}
+        $stack = $data;
 
-			if ( ! is_array( $data ) || empty( $data ) ) {
-				continue;
-			}
+        while ($stack) {
+            $node = array_pop($stack);
+            if (!is_array($node)) continue;
 
-			$stack = $data;
+            if (!empty($node['elements']) && is_array($node['elements'])) {
+                foreach ($node['elements'] as $child) {
+                    $stack[] = $child;
+                }
+            }
 
-			while ( ! empty( $stack ) ) {
-				$node = array_pop( $stack );
-				if ( ! is_array( $node ) ) {
-					continue;
-				}
+            if (
+                ($node['elType'] ?? '') !== 'widget' ||
+                ($node['widgetType'] ?? '') !== 'form'
+            ) {
+                continue;
+            }
 
-				if ( ! empty( $node['elements'] ) && is_array( $node['elements'] ) ) {
-					foreach ( $node['elements'] as $child ) {
-						$stack[] = $child;
-					}
-				}
+            $settings = $node['settings'] ?? [];
+            if (!is_array($settings)) $settings = [];
 
-				if (
-					( $node['elType'] ?? '' ) !== 'widget' ||
-					( $node['widgetType'] ?? '' ) !== 'form'
-				) {
-					continue;
-				}
+            $form_name = trim((string)($settings['form_name'] ?? ''));
+            if ($form_name === '') {
+                $form_name = (string)$p->post_title;
+            }
 
-				$settings = $node['settings'] ?? array();
-				if ( ! is_array( $settings ) ) {
-					$settings = array();
-				}
+            $form_id = (string)($node['id'] ?? '');
+            if ($form_id === '') continue;
 
-				$form_name = trim( (string) ( $settings['form_name'] ?? '' ) );
-				if ( '' === $form_name ) {
-					$form_name = (string) get_the_title( $post_id );
-				}
+            
+            if (!isset($out[$form_name])) {
+                $out[$form_name] = $form_id;
+            }
+        }
+    }
 
-				$form_id = (string) ( $node['id'] ?? '' );
-				if ( '' === $form_id ) {
-					continue;
-				}
-
-				// Keep first occurrence for a given form_name (same behavior as your original code).
-				if ( ! isset( $out[ $form_name ] ) ) {
-					$out[ $form_name ] = $form_id;
-				}
-			}
-		}
-
-		$paged++;
-	} while ( count( $post_ids ) === $per_page );
-
-	return $out;
+    return $out;
 }
-
 function duplicateKiller_elementor_description(){
-	if (!duplicateKiller_elementor_pro_is_ready()) {
+	if (!dk_elementor_pro_is_ready()) {
         echo '<h3 style="color:red"><strong>' . esc_html__('Elementor PRO plugin is not activated! Please activate it in order to continue.', 'duplicate-killer') . '</strong></h3>';
 		exit();
     }
@@ -667,13 +612,30 @@ function duplicateKiller_elementor_settings_callback($args){
 	</div>
 <?php
 }
+function duplicateKiller_elementor_get_forms_ids() {
+    $forminator_posts = get_posts([
+        'post_type' => 'forminator_forms',
+        'order'     => 'DESC',
+        'nopaging'  => true
+    ]);
 
+    $forms = [];
+
+    foreach ($forminator_posts as $post) {
+        
+        if (!empty($post->post_title) && isset($post->ID)) {
+            $forms[$post->post_title] = $post->ID;
+        }
+    }
+
+    return $forms;
+}
 function duplicateKiller_elementor_select_form_tag_callback($args){
 	$forms     = duplicateKiller_elementor_get_forms();      // [ 'Form name' => [ 'field1', 'field2' ] ]
 
 	$forms_ids = duplicateKiller_elementor_get_form_map(); // [ 'Form name' => 123 ]
 
-	duplicateKiller_render_forms_ui(
+	duplicate_killer_render_forms_ui(
 		'Elementor',
 		'Elementor',
 		$args,

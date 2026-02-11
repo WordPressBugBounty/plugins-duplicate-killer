@@ -9,21 +9,16 @@ function duplicateKiller_wpforms_before_send_email($fields, $entry, $form_data){
 	global $wpdb;
 	$table_name = $wpdb->prefix.'dk_forms_duplicate';
 	$wpforms_page = get_option("WPForms_page");
-	$form_cookie = 'NULL';
-	if ( isset( $_COOKIE['dk_form_cookie'] ) ) {
-		$form_cookie = sanitize_text_field(
-			wp_unslash( $_COOKIE['dk_form_cookie'] )
-		);
-	}
+	$form_cookie = isset($_POST['dk_form_cookie']) ? sanitize_text_field($_POST['dk_form_cookie']) : '';
 	$abort = false;
 	$storage_fields = array();
 	$form_ip="";
 	$no_form = true;
 	//check if IP limit feature is active
 	if($wpforms_page['wpforms_user_ip'] == "1"){
-		$form_ip = duplicateKiller_get_user_ip();
-		$duplicateKiller_check_ip_feature = duplicateKiller_check_ip_feature("WPForms",$form_title,$form_ip);
-		if($duplicateKiller_check_ip_feature){
+		$form_ip = dk_get_user_ip();
+		$dk_check_ip_feature = dk_check_ip_feature("WPForms",$form_title,$form_ip);
+		if($dk_check_ip_feature){
 			$message = $wpforms_page['wpforms_error_message_limit_ip'];
 			//change the general error message with the dk_custom_error_message
 			add_filter('wpforms_custom_form_invalid_form_message',function($invalid_form_message, $form_data) use($message){
@@ -31,7 +26,7 @@ function duplicateKiller_wpforms_before_send_email($fields, $entry, $form_data){
 				return $invalid_form_message = $message;
 			},15,2);
 				//stop form for submission if IP limit is triggered
-				wpforms()->process->errors[ $form_data[ 'id' ]][1] = $message;
+				wpforms()->process->errors[ $form_data[ 'id' ]][0] = $message;
 				$abort = true;
 		}else{
 			//store fields in custom table dk
@@ -82,14 +77,12 @@ function duplicateKiller_wpforms_before_send_email($fields, $entry, $form_data){
 	if(!$abort AND $no_form){
 		//check if IP limit feature is active and store it
 		if(!$form_ip){
-			$duplicateKiller_check_ip_feature = duplicateKiller_get_setting("WPForms","wpforms_user_ip");
-			$form_ip = ($duplicateKiller_check_ip_feature)? $form_ip=duplicateKiller_get_user_ip(): $form_ip='NULL';
+			$dk_check_ip_feature = getDuplicateKillerSetting("WPForms","wpforms_user_ip");
+			$form_ip = ($dk_check_ip_feature)? $form_ip=dk_get_user_ip(): $form_ip='NULL';
 		}
 		
 		$form_value = serialize($storage_fields);
 		$form_date = current_time('Y-m-d H:i:s');
-		
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- Inserting into plugin-owned custom table.
 		$wpdb->insert(
 			$table_name, 
 			array(
@@ -133,6 +126,31 @@ function duplicateKiller_wpforms_validate_input($input){
 	global $wpdb;
 	$output = array();
 	
+	// DELETE if checkbox is checked
+	if (isset($_POST['WPForms_delete_records'])) {
+		$table = $wpdb->prefix . 'dk_forms_duplicate';
+
+		// If there is only one checkbox checked and it is NOT an array (ex: name="WPForms_delete_records[Some Form]")
+		if (!is_array($_POST['WPForms_delete_records'])) {
+			$form_name = sanitize_text_field($_POST['WPForms_delete_records']);
+			$wpdb->delete($table, [
+				'form_plugin' => 'WPForms',
+				'form_name'   => $form_name,
+			]);
+
+		} else {
+			// If there are multiple checkboxes checked
+			foreach ($_POST['WPForms_delete_records'] as $raw_form_name => $delete_flag) {
+				if ($delete_flag === "1") {
+					$form_name = sanitize_text_field($raw_form_name);
+					$wpdb->delete($table, [
+						'form_plugin' => 'WPForms',
+						'form_name'   => $form_name,
+					]);
+				}
+			}
+		}
+	}
 	// Create our array for storing the validated options
        foreach($input as $key =>$value){
 		if(is_array($value)){
@@ -179,20 +197,20 @@ function duplicateKiller_wpforms_validate_input($input){
 	}
      
     // Return the array processing any additional functions filtered by this action
-    return apply_filters('duplicateKiller_wpforms_error_message', $output, $input);
+    return apply_filters('wpforms_error_message', $output, $input);
 }
 
 function duplicateKiller_WPForms_description() {
 	if(class_exists('wpforms') OR is_plugin_active('wpforms-lite/wpforms.php')){?>
-		<h3 style="color:green"><strong><?php esc_html_e('WPForms plugin is activated!','duplicate-killer');?></strong></h3>
+		<h3 style="color:green"><strong><?php esc_html_e('WPForms plugin is activated!','duplicatekiller');?></strong></h3>
 <?php
 	}else{ ?>
-		<h3 style="color:red"><strong><?php esc_html_e('WPForms plugin is not activated! Please activate it in order to continue.','duplicate-killer');?></strong></h3>
+		<h3 style="color:red"><strong><?php esc_html_e('WPForms plugin is not activated! Please activate it in order to continue.','duplicatekiller');?></strong></h3>
 <?php
 		exit();
 	}
 	if(duplicateKiller_wpforms_get_forms() == NULL){ ?>
-		</br><h3 style="color:red"><strong><?php esc_html_e('There is no contact forms. Please create one!','duplicate-killer');?></strong></h3>
+		</br><h3 style="color:red"><strong><?php esc_html_e('There is no contact forms. Please create one!','duplicatekiller');?></strong></h3>
 <?php
 		exit();
 	}
@@ -276,7 +294,7 @@ function duplicateKiller_wpforms_select_form_tag_callback($args){
 
 	$forms_ids = duplicateKiller_wpforms_get_forms_ids(); // [ 'Form name' => 123 ]
 
-	duplicateKiller_render_forms_ui(
+	duplicate_killer_render_forms_ui(
 		'WPForms',
 		'WPForms',
 		$args,
