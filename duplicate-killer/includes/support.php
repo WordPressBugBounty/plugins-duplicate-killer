@@ -50,12 +50,12 @@ function duplicateKiller_support_plugin() {
 	$post_max_size       = (string) ini_get( 'post_max_size' );
 
 	/** ==== Plugin path / version ==== */
-	$plugin_dir = trailingslashit( dirname( __FILE__, 1 ) ); // ajustează dacă e altă structură
+	$plugin_dir = DUPLICATEKILLER_PLUGIN_DIR; // ajustează dacă e altă structură
 	if ( ! function_exists( 'get_plugin_data' ) ) {
 		require_once ABSPATH . 'wp-admin/includes/plugin.php';
 	}
 	$plugin_version = '';
-	$main_file_path = wp_normalize_path( WP_PLUGIN_DIR . '/duplicate-killer/function.php' );
+	$main_file_path = wp_normalize_path(DUPLICATEKILLER_PLUGIN_FILE );
 	if ( file_exists( $main_file_path ) ) {
 		$plugin_data    = get_plugin_data( $main_file_path, false, false );
 		$plugin_version = isset( $plugin_data['Version'] ) ? (string) $plugin_data['Version'] : '';
@@ -84,7 +84,7 @@ function duplicateKiller_support_plugin() {
 	sort( $active_list, SORT_NATURAL | SORT_FLAG_CASE );
 	$active_plugins_pretty = implode( ', ', $active_list );
 
-	/** ==== Error log (ultimele 200 linii) via WP_Filesystem ==== */
+	/** ==== Error log (last 200 lines) via WP_Filesystem ==== */
 	if ( ! function_exists( 'WP_Filesystem' ) ) {
 		require_once ABSPATH . 'wp-admin/includes/file.php';
 	}
@@ -92,11 +92,10 @@ function duplicateKiller_support_plugin() {
 	WP_Filesystem();
 
 	$error_log_data = '';
-	$paths = array_filter( [
+	$paths = array_filter( array(
 		ABSPATH . 'error_log',
-		trailingslashit( $plugin_dir ) . 'error_log',
-		ini_get( 'error_log' ) ?: null,
-	] );
+		( ini_get( 'error_log' ) ? (string) ini_get( 'error_log' ) : '' ),
+	) );
 
 	if ( isset( $wp_filesystem ) ) {
 		foreach ( $paths as $path ) {
@@ -177,35 +176,5 @@ function duplicateKiller_support_plugin() {
 			<?php echo esc_html__( 'Copied to clipboard!', 'duplicate-killer' ); ?>
 		</p>
 	</div>
-
-	<script>
-	function dkCopySupportInfo() {
-	  const el = document.getElementById('dk-support-info');
-	  const text = el ? (el.value || el.textContent || '') : '';
-
-	  const ok = () => {
-		const s = document.getElementById('dk-copy-status');
-		if (s) { s.style.display = 'block'; setTimeout(()=> s.style.display='none', 2000); }
-	  };
-
-	  if (navigator.clipboard && window.isSecureContext) {
-		navigator.clipboard.writeText(text).then(ok).catch(fallback);
-	  } else {
-		fallback();
-	  }
-	  function fallback() {
-		const ta = document.createElement('textarea');
-		ta.value = text;
-		ta.setAttribute('readonly', '');
-		ta.style.position = 'fixed';
-		ta.style.opacity  = '0';
-		document.body.appendChild(ta);
-		ta.select();
-		try { document.execCommand('copy'); } catch(e) {}
-		document.body.removeChild(ta);
-		ok();
-	  }
-	}
-	</script>
 <?php
 }

@@ -1,23 +1,23 @@
 <?php
 defined( 'ABSPATH' ) or die( 'You shall not pass!' );
 
-function duplicateKiller_db_display_page(){
-	return new DK_db_page();
+function duplicateKiller_database_display_page(){
+	return new duplicateKiller_DisplayDatabase();
 }
 
-class DK_db_page{
+class duplicateKiller_DisplayDatabase{
     public function __construct(){
         $this->list_table_page();
     }
     public function list_table_page(){
-        $ListTable = new DK_Main_List_Table();
+        $ListTable = new duplicateKiller_DatabaseMainListTable();
         $ListTable->prepare_items();
         ?>
             <div class="wrap">
                 <div id="icon-users" class="icon32"></div>
                 <h2>Duplicate Killer Database</h2>
                 <form method="post" action="">
-                    <?php $ListTable->search_box(__( 'Search', 'contact-form-cfdb7' ), 'search'); ?>
+                    <?php $ListTable->search_box(__( 'Search', 'duplicate-killer' ), 'search'); ?>
                     <?php $ListTable->display(); ?>
                 </form>
             </div>
@@ -30,7 +30,7 @@ if( ! class_exists( 'WP_List_Table' ) ) {
     require_once( ABSPATH . 'wp-admin/includes/class-wp-list-table.php' );
 }
 
-class DK_Main_List_Table extends WP_List_Table{
+class duplicateKiller_DatabaseMainListTable extends WP_List_Table{
 	public function __construct() {
         parent::__construct(
             array(
@@ -41,41 +41,50 @@ class DK_Main_List_Table extends WP_List_Table{
         );
     }
 
-    public function prepare_items(){
-		
-		$search = empty( $_REQUEST['s'] ) ? false :  esc_sql( $_REQUEST['s'] );
+    public function prepare_items() {
 
-        global $wpdb;
+		$search = '';
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading a UI navigation param (non-destructive).
+		if ( isset( $_GET['s'] ) ) {
+				// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading search query for UI filtering (non-destructive).
+			$search = sanitize_text_field( wp_unslash( $_GET['s'] ) );
+		}
+
+		global $wpdb;
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Nonce is verified inside process_bulk_action().
 		$this->process_bulk_action();
-        $dkdb        = apply_filters( 'duplicate_killer_database', $wpdb );
-        $table_name  = $dkdb->prefix.'dk_forms_duplicate';
-        $columns     = $this->get_columns();
-        $hidden      = $this->get_hidden_columns();
-        $data        = $this->table_data();
-        $perPage     = 20;
-        $currentPage = $this->get_pagenum();
-        $totalItems  = $this->countDKFormsDB();
-		
 
-        $this->set_pagination_args( array(
-            'total_items' => $totalItems,
-            'per_page'    => $perPage
-        ) );
+		$dkdb       = apply_filters( 'duplicate_killer_database', $wpdb );
+		$table_name = $dkdb->prefix . 'dk_forms_duplicate';
 
-        $this->_column_headers = array($columns, $hidden );
-        $this->items = $data;
-    }
+		$columns     = $this->get_columns();
+		$hidden      = $this->get_hidden_columns();
+		$data        = $this->table_data(); // dacă folosești $search, pasează-l: table_data( $search )
+		$perPage     = 20;
+		$currentPage = $this->get_pagenum();
+		$totalItems  = $this->countDKFormsDB();
+
+		$this->set_pagination_args(
+			array(
+				'total_items' => $totalItems,
+				'per_page'    => $perPage,
+			)
+		);
+
+		$this->_column_headers = array( $columns, $hidden );
+		$this->items           = $data;
+	}
     
     //Override the parent columns method. Defines the columns to use in your listing table
     public function get_columns(){
 
         $columns = array(
-			'cb' => __('<input type="checkbox" />'),
-			'form_plugin'=> __( 'Form plugin', 'duplicate_killer_database' ),
-            'form_name' => __( 'Form Name', 'duplicate_killer_database' ),
-            'form_value'=> __( 'Form Value', 'duplicate_killer_database' ),
-			'form_date'=> __( 'Form Date', 'duplicate_killer_database' ),
-			'form_ip'=> __( 'Form IP', 'duplicate_killer_database' )
+			'cb' => '<input type="checkbox" />',
+			'form_plugin'=> __( 'Form plugin', 'duplicate-killer' ),
+            'form_name' => __( 'Form Name', 'duplicate-killer' ),
+            'form_value'=> __( 'Form Value', 'duplicate-killer' ),
+			'form_date'=> __( 'Form Date', 'duplicate-killer' ),
+			'form_ip'=> __( 'Form IP', 'duplicate-killer' )
         );
 
         return $columns;
@@ -96,127 +105,259 @@ class DK_Main_List_Table extends WP_List_Table{
     }
 	public function get_bulk_actions(){
         return array(
-            'delete' => __( 'Delete', 'duplicate_killer_database' )
+            'delete' => __( 'Delete', 'duplicate-killer' )
         );
     }
 	
-	private function table_data(){
-        global $wpdb;
-		$search = empty($_REQUEST['s'])? false: esc_sql($_REQUEST['s']);
-        $table_name = $wpdb->prefix.'dk_forms_duplicate';
-        $page = $this->get_pagenum();
-        $page = $page - 1;
-        $start = $page * 20;
-		
-		if(!empty($search)){
-			$result = $wpdb->get_results("SELECT * FROM $table_name 
-                        WHERE  form_value LIKE '%$search%'
-                        ORDER BY form_id DESC
-                        LIMIT $start,20", OBJECT);
-        }else{
-			$result = $wpdb->get_results("SELECT * FROM $table_name 
-                       ORDER BY form_id DESC
-                        LIMIT $start,20", OBJECT);
-        }
-			// Cache options once (cheap + clean)
-			$formidable_page = get_option('Formidable_page', []);
-			if (!is_array($formidable_page)) {
-				$formidable_page = [];
-			}
+	private function table_data() {
+		global $wpdb;
+		$data = array();
+		$search = '';
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading a UI navigation param (non-destructive).
+		if(isset($_GET['s'])){
+				// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading search query for UI filtering (non-destructive).
+			$search = sanitize_text_field( wp_unslash( $_GET['s'] ) );
+		}
+		$table_name = $wpdb->prefix . 'dk_forms_duplicate';
+		$per_page = 20;
+		$page     = max( 1, (int) $this->get_pagenum() );
+		$offset   = ( $page - 1 ) * $per_page;
+
+		if ( '' !== $search ) {
+			$like   = '%' . $wpdb->esc_like( $search ) . '%';
 			
-			// Cache Ninja Forms options once (cheap + clean)
-			$ninjaforms_page = get_option('NinjaForms_page', []);
-			if (!is_array($ninjaforms_page)) {
-				$ninjaforms_page = [];
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter
+			$result = $wpdb->get_results(
+				$wpdb->prepare(
+					// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					"SELECT * FROM {$table_name} WHERE form_value LIKE %s ORDER BY form_id DESC LIMIT %d OFFSET %d", $like, $per_page, $offset
+				),
+				OBJECT
+			);
+		} else {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter
+			$result = $wpdb->get_results(
+				$wpdb->prepare(
+					// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					"SELECT * FROM {$table_name} ORDER BY form_id DESC LIMIT %d OFFSET %d", $per_page, $offset
+				),
+				OBJECT
+			);
+		}
+
+		// Cache options once (cheap + clean).
+		$formidable_page = get_option( 'Formidable_page', array() );
+		if ( ! is_array( $formidable_page ) ) {
+			$formidable_page = array();
+		}
+
+		$ninjaforms_page = get_option( 'NinjaForms_page', array() );
+		if ( ! is_array( $ninjaforms_page ) ) {
+			$ninjaforms_page = array();
+		}
+
+		$allowed_html = array(
+			'div'    => array( 'class' => true ),
+			'p'      => array(),
+			'br'     => array(),
+			'strong' => array(),
+			'small'  => array( 'style' => true ),
+			'em'     => array(),
+			'a'      => array(
+				'href'   => true,
+				'target' => true,
+				'rel'    => true,
+			),
+			'img'    => array(
+				'src'   => true,
+				'alt'   => true,
+				'style' => true,
+			),
+		);
+
+		$allowed_protocols = array_merge( wp_allowed_protocols(), array( 'data' ) );
+
+		foreach ( (array) $result as $row ) {
+
+			// Reset per row (prevents leaking values across iterations).
+			$data_value = array();
+			$store      = '';
+
+			$data_value['form_id']     = absint( $row->form_id );
+			$data_value['form_plugin'] = sanitize_text_field( (string) $row->form_plugin );
+			$data_value['form_name']   = sanitize_text_field( (string) $row->form_name );
+
+			$form_value = maybe_unserialize( $row->form_value );
+
+			if ( 'CF7' === $data_value['form_plugin'] ) {
+				$store = $this->organize_array_cf7( $form_value );
+
+			} elseif ( 'Forminator' === $data_value['form_plugin'] ) {
+				$store = $this->organize_array_forminator( $form_value );
+
+			} elseif ( 'WPForms' === $data_value['form_plugin'] ) {
+				$store = $this->organize_array_wpforms( $form_value );
+
+			} elseif ( 'breakdance' === $data_value['form_plugin'] ) {
+				$store = $this->duplicateKiller_organize_array_breakdance( $form_value );
+
+			} elseif ( 'Formidable' === $data_value['form_plugin'] ) {
+				$store = $this->organize_array_formidable( $form_value, $data_value['form_name'], $formidable_page );
+
+			} elseif ( 'NinjaForms' === $data_value['form_plugin'] ) {
+				$store = $this->organize_array_ninjaforms( $form_value, $data_value['form_name'], $ninjaforms_page );
+
+			} elseif ( 'elementor' === $data_value['form_plugin'] ) {
+				$store = $this->organize_array_cf7( $form_value );
+
+			}else {
+				// Fallback for unknown plugins.
+				$store = is_string( $form_value )
+					? $form_value
+					: wp_json_encode( $form_value, JSON_PRETTY_PRINT );
 			}
-			foreach ($result as $row) {
 
-				// Reset per row (prevents leaking values across iterations)
-				$data_value = [];
-				$store = '';
+			$data_value['form_value'] = wp_kses( (string) $store, $allowed_html, $allowed_protocols );
+			$data_value['form_date']  = sanitize_text_field( (string) $row->form_date );
+			$data_value['form_ip']    = sanitize_text_field( (string) $row->form_ip );
 
-				$data_value['form_id']     = esc_attr($row->form_id);
-				$data_value['form_plugin'] = esc_attr($row->form_plugin);
-				$data_value['form_name']   = esc_attr($row->form_name);
+			$data[] = $data_value;
+		}
 
-				$form_value = maybe_unserialize($row->form_value);
+		return $data;
+	}
 
-				if ($data_value['form_plugin'] === 'CF7') {
-					$store = $this->organize_array_cf7($form_value);
+	/**
+	 * Breakdance: render fields as "label - value" lines.
+	 * Supports multiple uploaded files (comma-separated signed URLs) and converts them
+	 * to direct file URLs under uploads/breakdance/submissions to avoid 401 on signed endpoints.
+	 *
+	 * @param mixed $array Unserialized form_value (usually associative array).
+	 * @return string HTML (will be sanitized by wp_kses in table_data()).
+	 */
+	private function duplicateKiller_organize_array_breakdance( $array ) {
+		$store = '';
 
-				} elseif ($data_value['form_plugin'] === 'Forminator') {
-					$store = $this->organize_array_forminator($form_value);
+		if ( empty( $array ) ) {
+			return $store;
+		}
 
-				} elseif ($data_value['form_plugin'] === 'WPForms') {
-					$store = $this->organize_array_wpforms($form_value);
+		$uploads = wp_get_upload_dir();
+		$baseurl = isset( $uploads['baseurl'] ) ? rtrim( (string) $uploads['baseurl'], '/' ) : '';
+		$basedir = isset( $uploads['basedir'] ) ? rtrim( (string) $uploads['basedir'], DIRECTORY_SEPARATOR ) : '';
 
-				} elseif ($data_value['form_plugin'] === 'breakdance') {
-					$store = $this->organize_array_cf7($form_value);
+		foreach ( (array) $array as $arr => $value ) {
+			$key = (string) $arr;
 
-				} elseif ($data_value['form_plugin'] === 'Formidable') {
-					$store = $this->organize_array_formidable($form_value, $data_value['form_name'], $formidable_page);
-				
-				} elseif ($data_value['form_plugin'] === 'NinjaForms') {
-					$store = $this->organize_array_ninjaforms($form_value, $data_value['form_name'], $ninjaforms_page);
-	
-				} elseif ($data_value['form_plugin'] === 'elementor') {
-					$store = $this->organize_array_cf7($form_value);
+			// Normalize nested arrays (e.g. multi-select).
+			if ( is_array( $value ) ) {
+				$flat = array();
+				foreach ( $value as $row ) {
+					if ( is_scalar( $row ) ) {
+						$flat[] = (string) $row;
+					} else {
+						$flat[] = wp_json_encode( $row );
+					}
+				}
+				$store .= esc_html( $key ) . ' - ' . esc_html( implode( ', ', $flat ) ) . '<br>';
+				continue;
+			}
 
-				} else {
-					// Fallback for unknown plugins (prevents reusing previous $store)
-					$store = is_string($form_value) ? $form_value : print_r($form_value, true);
+			$val = is_scalar( $value ) ? (string) $value : wp_json_encode( $value );
+			$val = trim( $val );
+
+			// Breakdance uploads can be multiple signed URLs in a single string (comma-separated).
+			if ( $val !== '' && strpos( $val, 'breakdance_download=' ) !== false ) {
+				$parts = array_map( 'trim', explode( ',', $val ) );
+				$links = array();
+
+				foreach ( $parts as $one ) {
+					if ( $one === '' || ! filter_var( $one, FILTER_VALIDATE_URL ) ) {
+						continue;
+					}
+
+					$parsed = wp_parse_url( $one );
+					$q      = array();
+					if ( ! empty( $parsed['query'] ) ) {
+						parse_str( $parsed['query'], $q );
+					}
+
+					$form_id       = isset( $q['formId'] ) ? (int) $q['formId'] : 0;
+					$download_path = isset( $q['breakdance_download'] ) ? urldecode( (string) $q['breakdance_download'] ) : '';
+					$download_path = '/' . ltrim( $download_path, '/' );
+
+					// Link text = filename when possible.
+					$link_text = 'Download file';
+					if ( $download_path !== '/' ) {
+						$file = basename( $download_path );
+						if ( $file !== '' ) {
+							$link_text = $file;
+						}
+					}
+
+					// Try to resolve to a direct URL under uploads/breakdance/submissions/{formId}-*/YYYY/MM/file
+					$href = $one; // fallback to signed url
+					if ( $form_id > 0 && $download_path !== '/' && $baseurl !== '' && $basedir !== '' ) {
+						$sub_path = str_replace( '/', DIRECTORY_SEPARATOR, $download_path );
+
+						$pattern = $basedir
+							. DIRECTORY_SEPARATOR . 'breakdance'
+							. DIRECTORY_SEPARATOR . 'submissions'
+							. DIRECTORY_SEPARATOR . $form_id . '-*'
+							. $sub_path;
+
+						$matches = glob( $pattern );
+						if ( ! empty( $matches ) && is_array( $matches ) ) {
+							$real_file = (string) $matches[0];
+
+							// Absolute path -> URL relative to uploads.
+							$rel = ltrim( str_replace( $basedir, '', $real_file ), DIRECTORY_SEPARATOR );
+							$rel = str_replace( DIRECTORY_SEPARATOR, '/', $rel );
+
+							$href = $baseurl . '/' . $rel;
+						}
+					}
+
+					$links[] = '<a href="' . esc_url( $href ) . '" target="_blank" rel="noopener noreferrer">' . esc_html( $link_text ) . '</a>';
 				}
 
-				$allowed_html = [
-					'div' => ['class' => true],
-					'p'   => [],
-					'br'  => [],
-					'strong' => [],
-					'small'  => ['style' => true],
-					'em'     => [],
-					'a' => [
-						'href'   => true,
-						'target' => true,
-						'rel'    => true,
-					],
-					'img' => [
-						'src'   => true,
-						'alt'   => true,
-						'style' => true,
-					],
-				];
-
-				$allowed_protocols = array_merge(wp_allowed_protocols(), ['data']);
-
-				$data_value['form_value'] = wp_kses($store, $allowed_html, $allowed_protocols);
-				$data_value['form_date']  = esc_attr($row->form_date);
-				$data_value['form_ip']    = esc_attr($row->form_ip);
-
-				$data[] = $data_value;
+				if ( ! empty( $links ) ) {
+					$store .= esc_html( $key ) . ' - ' . implode( ', ', $links ) . '<br>';
+					continue;
+				}
 			}
-			if(!empty($data)){
-				return $data;
+
+			// Optional: any other URL becomes clickable.
+			if ( $val !== '' && filter_var( $val, FILTER_VALIDATE_URL ) ) {
+				$text = ( strlen( $val ) > 80 ) ? ( substr( $val, 0, 60 ) . '…' ) : $val;
+				$link = '<a href="' . esc_url( $val ) . '" target="_blank" rel="noopener noreferrer">' . esc_html( $text ) . '</a>';
+				$store .= esc_html( $key ) . ' - ' . $link . '<br>';
+				continue;
 			}
-        return;
-    }
+
+			// Plain text fallback.
+			$store .= esc_html( $key ) . ' - ' . esc_html( $val ) . '<br>';
+		}
+
+		return $store;
+	}
+
 	private function organize_array_cf7($array){
 		$store = "";
 		foreach($array as $arr => $value){
-			//inserted in 1.2.1
 			if(is_array($value)){
 				$store .= $arr.' - ';
 				foreach($value as $row){
 					$store .= $row.', ';
 				}
-				$store .= '</br>';
-			//for version under 1.2.1
+				$store .= '<br>';
 			}else{
 				if(strpos($arr, 'file') !== false ){
 					$escaped_url = esc_url($value);
 					$link_url = '<a href="'.$escaped_url.'" target="_blank">'.basename($value).'</a>';
-					$store .= $arr.' - '. $link_url.'</br>';
+					$store .= $arr.' - '. $link_url.'<br>';
 				}else{
-					$store .= $arr.' - '. $value.'</br>';
+					$store .= $arr.' - '. $value.'<br>';
 				}
 			}
 		}
@@ -225,7 +366,6 @@ class DK_Main_List_Table extends WP_List_Table{
 	private function organize_array_wpforms($array){
 		$store = "";
 		foreach($array as $arr => $value){
-			//inserted in 1.2.1
 			if(is_array($value)){
 				//check if $value have multiple values (checkboxes,uploads)
 				if(is_array($value['value'])){
@@ -234,13 +374,12 @@ class DK_Main_List_Table extends WP_List_Table{
 						foreach($value['value'] as $subrow){
 							$store .= $subrow.', ';	
 						}
-						$store .='</br>';
+						$store .='<br>';
 				}else{
-					$store .= $value['name'].' - '.$value['value'].'</br>';
+					$store .= $value['name'].' - '.$value['value'].'<br>';
 				}
-			//for version under 1.2.1
 			}else{
-				$store .= $arr.' - '.$value.'</br>';
+				$store .= $arr.' - '.$value.'<br>';
 			}
 		}
 		return $store;
@@ -256,20 +395,20 @@ class DK_Main_List_Table extends WP_List_Table{
 					if(isset($value['value']['file_name'])){
 						$escaped_url = esc_url($value['value']['file_url']);
 						$link_url = '<a href="'.$escaped_url.'" target="_blank">'.$value['value']['file_name'].'</a>';
-						$store .= $value['name'].' - '. $link_url.'</br>';
+						$store .= $value['name'].' - '. $link_url.'<br>';
 					}else{
 						$store .= $value['name'].' - ';
 						foreach($value['value'] as $subrow){
 							$store .= $subrow.', ';	
 						}
-						$store .='</br>';
+						$store .='<br>';
 					}
 				}else{
-					$store .= $value['name'].' - '.$value['value'].'</br>';
+					$store .= $value['name'].' - '.$value['value'].'<br>';
 				}
 			//for version under 1.2.1
 			}else{
-				$store .= $arr.' - '.$value.'</br>';
+				$store .= $arr.' - '.$value.'<br>';
 			}
 		}
 		return $store;
@@ -472,39 +611,59 @@ class DK_Main_List_Table extends WP_List_Table{
 		return $out;
 	}
     //Define bulk action
-    public function process_bulk_action(){
+    public function process_bulk_action() {
+		$action = $this->current_action();
 
-        global $wpdb;
-        $dkdb = apply_filters( 'duplicate_killer_database', $wpdb );
-        $table_name = $dkdb->prefix.'dk_forms_duplicate';
-        $action = $this->current_action();
+		// Bulk actions should be POST (not GET).
+		if ( empty( $action )
+			|| ! isset( $_SERVER['REQUEST_METHOD'] )
+			|| 'POST' !== $_SERVER['REQUEST_METHOD']
+		) {
+			return;
+		}
 
-        if(!empty($action)){
-            $nonce = isset( $_REQUEST['_wpnonce'] ) ? $_REQUEST['_wpnonce'] : '';
-            $nonce_action = 'bulk-' . $this->_args['plural'];
-            if(!wp_verify_nonce( $nonce, $nonce_action)){
-                wp_die('You cannot do that!');
-            }
-        }
+		// Nonce required for destructive actions.
+		if ( empty( $_POST['_wpnonce'] ) ) {
+			return;
+		}
 
-        $form_ids = isset($_POST['dk_contact_form'])?$_POST['dk_contact_form']:array();
+		$nonce        = sanitize_text_field( wp_unslash( $_POST['_wpnonce'] ) );
+		$nonce_action = 'bulk-' . $this->_args['plural'];
 
+		if ( ! wp_verify_nonce( $nonce, $nonce_action ) ) {
+			wp_die( esc_html__( 'You cannot do that!', 'duplicate-killer' ) );
+		}
 
-        if('delete' === $action){
-            foreach ($form_ids as $form_id){
-                $dkdb->delete(
-                    $table_name ,
-                    array( 'form_id' => $form_id ),
-                    array( '%d' )
-                );
-            }
-        }
-    }
+		$form_ids = array();
+		if ( ! empty( $_POST['dk_contact_form'] ) ) {
+			$form_ids = array_map( 'absint', (array) wp_unslash( $_POST['dk_contact_form'] ) );
+			$form_ids = array_filter( $form_ids ); // remove 0s
+		}
+
+		if ( empty( $form_ids ) ) {
+			return;
+		}
+
+		global $wpdb;
+		$dkdb       = apply_filters( 'duplicate_killer_database', $wpdb );
+		$table_name = $dkdb->prefix . 'dk_forms_duplicate';
+
+		if ( 'delete' === $action ) {
+			foreach ( $form_ids as $form_id ) {
+				$dkdb->delete(
+					$table_name,
+					array( 'form_id' => $form_id ),
+					array( '%d' )
+				);
+			}
+		}
+	}
 	
 	//Display the bulk actions dropdown.
     protected function bulk_actions( $which = '' ) {
         if ( is_null( $this->_actions ) ) {
             $this->_actions = $this->get_bulk_actions();
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WordPress core hook (WP_List_Table bulk actions).
             $this->_actions = apply_filters( "bulk_actions-{$this->screen->id}", $this->_actions );
             $two = '';
         } else {
@@ -514,30 +673,96 @@ class DK_Main_List_Table extends WP_List_Table{
         if(empty($this->_actions))
             return;
 ?>
-        <label for="bulk-action-selector-<?php echo esc_attr($which);?>" class="screen-reader-text"><?php __('Select bulk action', 'duplicate_killer_database')?></label>
-        <select name="action<?php esc_attr($two);?>" id="bulk-action-selector-<?php echo esc_attr($which);?>">
-        <option value="-1"><?php echo __('Bulk Actions', 'duplicate_killer_database');?></option>
-<?php
-        foreach ( $this->_actions as $name => $title ) {
-            $class = 'edit' === $name ? esc_attr(' class="hide-if-no-js"') : '';
+        <label for="bulk-action-selector-<?php echo esc_attr($which);?>" class="screen-reader-text"><?php esc_html_e( 'Select bulk action', 'duplicate-killer' ); ?></label>
+        <select name="action<?php echo esc_attr( $two ); ?>" id="bulk-action-selector-<?php echo esc_attr( $which ); ?>">
+        <option value="-1"><?php echo esc_html__( 'Bulk Actions', 'duplicate-killer' ); ?></option>
+			<?php
+			foreach ( $this->_actions as $name => $title ) {
+				$class_attr = ( 'edit' === $name ) ? ' class="hide-if-no-js"' : '';
 
-            echo "\t" . '<option value="' . $name . '"' . $class . '>' . $title . "</option>\n";
-        }
+				echo "\t" . '<option value="' . esc_attr( $name ) . '"' . esc_attr($class_attr) . '>' . esc_html( $title ) . "</option>\n";
+			}
 ?>
 		</select>
 <?php
-        submit_button( __( 'Apply', 'duplicate_killer_database' ), 'action', '', false, array( 'id' => "doaction$two" ) );
+        submit_button( __( 'Apply', 'duplicate-killer' ), 'action', '', false, array( 'id' => "doaction$two" ) );
         echo "\n";
         $nonce = wp_create_nonce( 'dknonce' );
     }
 	public function countDKFormsDB(){
 		global $wpdb;
-        $dkdb = apply_filters( 'duplicate_killer_database', $wpdb );
-		$table_name = $dkdb->prefix.'dk_forms_duplicate';
-		return $dkdb->get_var("SELECT COUNT(form_id) FROM $table_name");
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Reading from plugin-owned custom table.
+		return (int) $wpdb->get_var(
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Plugin-owned table name using $wpdb->prefix.
+			"SELECT COUNT(form_id) FROM {$wpdb->prefix}dk_forms_duplicate"
+		);
 	}
 		
     public function column_default( $item, $column_name ){
         return $item[ $column_name ];
     }
+	/**
+	 * Resolve a Breakdance signed download URL to a direct file URL under uploads/breakdance/submissions.
+	 * Returns empty string if it can't be resolved.
+	 *
+	 * @param string $signed_url
+	 * @return string
+	 */
+	private function dk_resolve_breakdance_signed_url_to_direct_url( $signed_url ) {
+		$parsed = wp_parse_url( $signed_url );
+		if ( empty( $parsed['query'] ) ) {
+			return '';
+		}
+
+		$q = array();
+		parse_str( $parsed['query'], $q );
+
+		$form_id = isset( $q['formId'] ) ? (int) $q['formId'] : 0;
+		$download_path = isset( $q['breakdance_download'] ) ? urldecode( (string) $q['breakdance_download'] ) : '';
+		$download_path = '/' . ltrim( $download_path, '/' );
+
+		if ( $form_id <= 0 || $download_path === '/' ) {
+			return '';
+		}
+
+		$uploads = wp_get_upload_dir();
+		$baseurl = isset( $uploads['baseurl'] ) ? rtrim( (string) $uploads['baseurl'], '/' ) : '';
+		$basedir = isset( $uploads['basedir'] ) ? rtrim( (string) $uploads['basedir'], DIRECTORY_SEPARATOR ) : '';
+
+		if ( $baseurl === '' || $basedir === '' ) {
+			return '';
+		}
+
+		// Pattern: {basedir}/breakdance/submissions/{formId}-*/YYYY/MM/file.ext
+		$sub_path = str_replace( '/', DIRECTORY_SEPARATOR, $download_path );
+		$pattern  = $basedir
+			. DIRECTORY_SEPARATOR . 'breakdance'
+			. DIRECTORY_SEPARATOR . 'submissions'
+			. DIRECTORY_SEPARATOR . $form_id . '-*'
+			. $sub_path;
+
+		$matches = glob( $pattern );
+		if ( empty( $matches ) || ! is_array( $matches ) ) {
+			return '';
+		}
+
+		$real_file = (string) $matches[0];
+
+		// Convert absolute path -> URL relative to uploads.
+		$rel = ltrim( str_replace( $basedir, '', $real_file ), DIRECTORY_SEPARATOR );
+		$rel = str_replace( DIRECTORY_SEPARATOR, '/', $rel );
+
+		return $baseurl . '/' . $rel;
+	}
+
+	/**
+	 * Build a clickable <a> tag (safe later through wp_kses in table_data()).
+	 *
+	 * @param string $href
+	 * @param string $text
+	 * @return string
+	 */
+	private function dk_build_link( $href, $text ) {
+		return '<a href="' . esc_url( $href ) . '" target="_blank" rel="noopener noreferrer">' . esc_html( $text ) . '</a>';
+	}
 }

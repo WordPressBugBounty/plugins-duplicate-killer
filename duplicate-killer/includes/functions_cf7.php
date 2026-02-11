@@ -7,14 +7,27 @@ function duplicateKiller_cf7_before_send_email($contact_form, &$abort, $object) 
     $table_name = $wpdb->prefix.'dk_forms_duplicate';
 	$cf7_page = get_option("CF7_page");
     $submission = WPCF7_Submission::get_instance();
+	
 	//upload files if any
 	$files = $submission->uploaded_files();
 	$upload_dir = wp_upload_dir();
-    $dkcf7_folder = $upload_dir['basedir'].'/dkcf7_uploads';
-	$dkcf7_folder_url = $upload_dir['baseurl'].'/dkcf7_uploads';
+
+	// NEW location (WP.org compliant)
+	$dkcf7_folder     = trailingslashit( $upload_dir['basedir'] ) . 'duplicate-killer';
+	$dkcf7_folder_url = trailingslashit( $upload_dir['baseurl'] ) . 'duplicate-killer';
+	
+	// ensure dir exists
+	if ( ! file_exists( $dkcf7_folder ) ) {
+		wp_mkdir_p( $dkcf7_folder );
+	}
 	$form_name = $contact_form->title();
 	
-	$form_cookie = isset($_COOKIE['dk_form_cookie'])? $form_cookie=sanitize_text_field($_COOKIE['dk_form_cookie']): $form_cookie='';
+	$form_cookie = 'NULL';
+	if ( isset( $_COOKIE['dk_form_cookie'] ) ) {
+		$form_cookie = sanitize_text_field(
+			wp_unslash( $_COOKIE['dk_form_cookie'] )
+		);
+	}
 	$abort = false;
 	$no_form = false;
 	$data = $submission->get_posted_data();
@@ -23,9 +36,9 @@ function duplicateKiller_cf7_before_send_email($contact_form, &$abort, $object) 
 	//check if IP limit feature is active
 	if($cf7_page['cf7_user_ip'] == "1"){
 		$no_form = true;
-		$form_ip = dk_get_user_ip();
-		$dk_check_ip_feature = dk_check_ip_feature("CF7",$form_name,$form_ip);
-		if($dk_check_ip_feature){
+		$form_ip = duplicateKiller_get_user_ip();
+		$duplicateKiller_check_ip_feature = duplicateKiller_check_ip_feature("CF7",$form_name,$form_ip);
+		if($duplicateKiller_check_ip_feature){
 			$message = $cf7_page['cf7_error_message_limit_ip'];
 			//change the general error message with the dk_custom_error_message
 			add_filter('cf7_custom_form_invalid_form_message',function($invalid_form_message, $contact_form) use($message){
@@ -65,7 +78,7 @@ function duplicateKiller_cf7_before_send_email($contact_form, &$abort, $object) 
 												'cookie_stored' => $form_cookie,
 												'cookie_db_set' => $row->form_cookie
 											];
-											if(dk_check_cookie($cookies_setup)){
+											if(duplicateKiller_check_cookie($cookies_setup)){
 												$abort = true;
 												$object->set_response($cf7_page['cf7_error_message']);
 											}
@@ -83,28 +96,45 @@ function duplicateKiller_cf7_before_send_email($contact_form, &$abort, $object) 
 		
 		//check if IP limit feature is active and store it
 		if(!$form_ip){
-			$dk_check_ip_feature = getDuplicateKillerSetting("CF7","forminator_user_ip");
-			$form_ip = ($dk_check_ip_feature)? $form_ip=dk_get_user_ip(): $form_ip='NULL';
+			$duplicateKiller_check_ip_feature = duplicateKiller_get_setting("CF7","forminator_user_ip");
+			$form_ip = ($duplicateKiller_check_ip_feature)? $form_ip=duplicateKiller_get_user_ip(): $form_ip='NULL';
 		}
 			//check if user want to save the files locally
-			if (!isset($cf7_page['cf7_save_image']) || $cf7_page['cf7_save_image'] == 1) {
-				//upload files if any
-				if($files){
-					$random_number = uniqid(time());
-					foreach ($files as $file_key => $file) {
+			if ( ! isset( $cf7_page['cf7_save_image'] ) || (string) $cf7_page['cf7_save_image'] === '1' ) {
+				if ( $files ) {
+					// Init filesystem once
+					global $wp_filesystem;
+					if ( ! $wp_filesystem ) {
+						require_once ABSPATH . 'wp-admin/includes/file.php';
+						WP_Filesystem();
+					}
+					$random_number = uniqid( (string) time(), true );
+					foreach ( $files as $file_key => $file ) {
 						$file = is_array( $file ) ? reset( $file ) : $file;
-						if( empty($file) ) continue;
-						$file_path = $dkcf7_folder.'/'.$file_key.'-'.$random_number.'-'.basename($file);
-						$file_url = $dkcf7_folder_url.'/'.$file_key.'-'.$random_number.'-'.basename($file);
-						copy($file, $file_path);
-						if(array_key_exists($file_key, $data)){
-							$data[$file_key] = $file_url;
+						if ( empty( $file ) ) {
+							continue;
+						}
+						$dest_name = $file_key . '-' . $random_number . '-' . basename( $file );
+						$file_path = trailingslashit( $dkcf7_folder ) . $dest_name;
+						$file_url  = trailingslashit( $dkcf7_folder_url ) . rawurlencode( $dest_name );
+
+						if ( $wp_filesystem ) {
+							$contents = file_get_contents( $file );
+							if ( false !== $contents ) {
+								$wp_filesystem->put_contents( $file_path, $contents, FS_CHMOD_FILE );
+
+								if ( array_key_exists( $file_key, $data ) ) {
+									$data[ $file_key ] = $file_url;
+								}
+							}
 						}
 					}
 				}
 			}
 			$form_value = serialize($data);
 			$form_date = current_time('Y-m-d H:i:s');
+			
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- Inserting into plugin-owned custom table.
 			$wpdb->insert(
 			$table_name,
 			array(
@@ -123,10 +153,11 @@ add_action( 'wpcf7_before_send_mail', 'duplicateKiller_cf7_before_send_email', 1
  * Retrieve CF7 forms and extract their text/email/tel fields.
  * Forms are ordered in descending order by ID (newest first).
  */
-function duplicate_killer_CF7_get_forms() {
+function duplicateKiller_CF7_get_forms() {
     global $wpdb;
 
     // Get CF7 forms in descending order
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Reading CF7 forms from core posts table (admin-only, request-scoped).
     $CF7Query = $wpdb->get_results(
         "SELECT ID, post_title, post_content 
          FROM {$wpdb->posts}
@@ -183,35 +214,6 @@ function duplicate_killer_CF7_get_forms() {
 function duplicateKiller_cf7_validate_input($input){
 	global $wpdb;
 	$output = array();
-	
-	
-	// DELETE if checkbox is checked
-	if (isset($_POST['CF7_delete_records'])) {
-		$table = $wpdb->prefix . 'dk_forms_duplicate';
-
-		// If there is only one checkbox checked and it is NOT an array (ex: name="CF7_delete_records[Some Form]")
-		if (!is_array($_POST['CF7_delete_records'])) {
-
-			$form_name = sanitize_text_field($_POST['CF7_delete_records']);
-			$wpdb->delete($table, [
-				'form_plugin' => 'CF7',
-				'form_name'   => $form_name,
-			]);
-
-		} else {
-
-			// If there are multiple checkboxes checked
-			foreach ($_POST['CF7_delete_records'] as $raw_form_name => $delete_flag) {
-				if ($delete_flag === "1") {
-					$form_name = sanitize_text_field($raw_form_name);
-					$wpdb->delete($table, [
-						'form_plugin' => 'CF7',
-						'form_name'   => $form_name,
-					]);
-				}
-			}
-		}
-	}
 
 	// Create our array for storing the validated options
     foreach($input as $key =>$value){
@@ -270,15 +272,15 @@ function duplicateKiller_cf7_validate_input($input){
 
 function duplicateKiller_CF7_description() {
 	if(class_exists('WPCF7_ContactForm') OR is_plugin_active('contact-form-7/wp-contact-form-7.php')){ ?>
-		<h3 style="color:green"><strong><?php esc_html_e('Contact-form-7 plugin is activated!','duplicatekiller');?></strong></h3>
+		<h3 style="color:green"><strong><?php esc_html_e('Contact-form-7 plugin is activated!','duplicate-killer');?></strong></h3>
 <?php
 	}else{ ?>
-		<h3 style="color:red"><strong><?php esc_html_e('Contact-form-7 plugin is not activated! Please activate it in order to continue.','duplicatekiller');?></strong></h3>
+		<h3 style="color:red"><strong><?php esc_html_e('Contact-form-7 plugin is not activated! Please activate it in order to continue.','duplicate-killer');?></strong></h3>
 <?php
 		exit();
 	}
-	if(duplicate_killer_CF7_get_forms() == NULL){ ?>
-		</br><span style="color:red"><strong><?php esc_html_e('There is no contact forms. Please create one!','duplicatekiller');?></strong></span>
+	if(duplicateKiller_CF7_get_forms() == NULL){ ?>
+		</br><span style="color:red"><strong><?php esc_html_e('There is no contact forms. Please create one!','duplicate-killer');?></strong></span>
 <?php
 		exit();
 	}
@@ -350,16 +352,17 @@ function duplicateKiller_cf7_settings_callback($args){
 		</div>
 
 		<div id="dk-save-image-path" style="display:none">
-			<p><strong>Images will be saved in the default folder:</strong> <code>/wp-content/uploads/dkcf7_uploads</code></p>
+			<p><strong>Images will be saved in the default folder:</strong> <code>/wp-content/uploads/duplicate-killer</code></p>
 			<p><em>This location will be used automatically. No additional configuration is needed.</em></p>
 		</div>
 	</fieldset>
 	</div>
 <?php
 }
-function duplicate_killer_get_cf7_forms_info() {
+function duplicateKiller_get_cf7_forms_info() {
     global $wpdb;
-
+	
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Reading CF7 forms from core posts table (admin-only, request-scoped).
     $results = $wpdb->get_results(
         "SELECT post_title, ID 
          FROM {$wpdb->posts}
@@ -387,11 +390,11 @@ function duplicate_killer_get_cf7_forms_info() {
     return $forms;
 }
 function duplicateKiller_cf7_select_form_tag_callback($args){
-	$forms     = duplicate_killer_CF7_get_forms();      // [ 'Form name' => [ 'field1', 'field2' ] ]
+	$forms     = duplicateKiller_CF7_get_forms();      // [ 'Form name' => [ 'field1', 'field2' ] ]
 
-	$forms_ids = duplicate_killer_get_cf7_forms_info(); // [ 'Form name' => 123 ]
+	$forms_ids = duplicateKiller_get_cf7_forms_info(); // [ 'Form name' => 123 ]
 
-	duplicate_killer_render_forms_ui(
+	duplicateKiller_render_forms_ui(
 		'CF7',
 		'Contact Form 7',
 		$args,

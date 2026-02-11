@@ -11,9 +11,9 @@ defined( 'ABSPATH' ) || exit;
  * Extend by adding new providers via filter: dk_cookie_providers
  */
 
-add_action( 'wp_enqueue_scripts', 'dk_cookie_enqueue_script' );
+add_action( 'wp_enqueue_scripts', 'duplicateKiller_cookie_enqueue_script' );
 
-function dk_cookie_enqueue_script() {
+function duplicateKiller_cookie_enqueue_script() {
 
 	if ( is_admin() ) {
 		return;
@@ -24,16 +24,16 @@ function dk_cookie_enqueue_script() {
 		return;
 	}
 
-	$config = dk_cookie_build_config();
+	$config = duplicateKiller_cookie_build_config();
 	if ( empty( $config['enabled'] ) ) {
 		return;
 	}
 
 	$handle = 'dk-cookie';
-	$ver = defined( 'DuplicateKiller_VERSION' ) ? DuplicateKiller_VERSION : '1.0.0';
+	$ver = defined( 'DUPLICATEKILLER_VERSION' ) ? DUPLICATEKILLER_VERSION : '1.0.0';
 
 	// IMPORTANT: DK_PLUGIN_FILE should point to the main plugin file
-	$src = plugins_url( 'assets/dk-cookie.js', DuplicateKiller_PLUGIN );
+	$src = plugins_url( 'assets/dk-cookie.js', DUPLICATEKILLER_PLUGIN_FILE );
 
 	wp_enqueue_script( $handle, $src, array(), $ver, true );
 
@@ -54,12 +54,12 @@ function dk_cookie_enqueue_script() {
  * - days: int (max days across enabled providers)
  * - selector: string (combined CSS selectors)
  */
-function dk_cookie_build_config() {
+function duplicateKiller_cookie_build_config() {
 
-	$providers = dk_cookie_default_providers();
+	$providers = duplicateKiller_cookie_default_providers();
 
 	// Allow future integrations to add/override providers
-	$providers = apply_filters( 'dk_cookie_providers', $providers );
+	$providers = apply_filters( 'duplicateKiller_cookie_providers', $providers );
 
 	$enabled   = false;
 	$max_days  = 1;
@@ -98,7 +98,7 @@ function dk_cookie_build_config() {
  * Default providers for cookie feature.
  * - Enable/Days should match YOUR saved settings for each form plugin integration.
  */
-function dk_cookie_default_providers() {
+function duplicateKiller_cookie_default_providers() {
 
 	$providers = array();
 
