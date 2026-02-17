@@ -36,17 +36,19 @@ function duplicateKiller_formidable_before_send_email($errors, $values) {
 	$form_name = $wanted_form_id; // "contact-us.2"
 
 	// Cookie id (whatever your helper does)
-	$form_cookie = dk_get_formidable_cookie_if_enabled($formidable_page);
+	$form_cookie = duplicateKiller_get_formidable_cookie_if_enabled($formidable_page);
 
 	// =========================
 	// 1) IP check
 	// =========================
-	if (dk_ip_limit_trigger('Formidable', $formidable_page, $form_name)) {
+	if (duplicateKiller_ip_limit_trigger('Formidable', $formidable_page, $form_name)) {
 		$message = !empty($formidable_page['formidable_error_message_limit_ip'])
 			? (string)$formidable_page['formidable_error_message_limit_ip']
 			: 'This IP has been already submitted.';
 
 		$errors['frm_error'] = $message;
+		// Increment blocked duplicates counter
+		duplicateKiller_increment_duplicates_blocked_count();
 		return $errors;
 	}
 
@@ -106,6 +108,8 @@ function duplicateKiller_formidable_before_send_email($errors, $values) {
 			$errors['field' . $fid] = $duplicate_message;
 			if (empty($errors['frm_error'])) {
 				$errors['frm_error'] = $duplicate_message;
+				// Increment blocked duplicates counter
+				duplicateKiller_increment_duplicates_blocked_count();
 			}
 			return $errors;
 		}
@@ -115,12 +119,13 @@ function duplicateKiller_formidable_before_send_email($errors, $values) {
 	// 3) Save to DB
 	// =========================
 	$form_ip = (!empty($formidable_page['formidable_user_ip']) && (string)$formidable_page['formidable_user_ip'] === '1')
-		? dk_get_user_ip()
+		? duplicateKiller_get_user_ip()
 		: 'NULL';
 
 	$form_value = serialize($storage_fields);
 	$form_date  = current_time('Y-m-d H:i:s');
-
+	
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- Inserting into plugin-owned custom table.
 	$wpdb->insert(
 		$table_name,
 		array(
@@ -154,10 +159,14 @@ function duplicateKiller_formidable_get_forms(): array {
     if ( empty($forms) || ! is_array($forms) ) {
         // Fallback to DB
         global $wpdb;
-        $tbl_forms = $wpdb->prefix . 'frm_forms';
-        $forms = $wpdb->get_results(
-            "SELECT id, name, form_key FROM {$tbl_forms} WHERE is_template = 0 ORDER BY id DESC"
-        );
+
+		$tbl_forms = esc_sql( $wpdb->prefix . 'frm_forms' );
+		
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Reading Formidable forms from core posts table (admin-only, request-scoped).
+		$forms = $wpdb->get_results(
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is fixed and plugin-controlled.
+			"SELECT id, name, form_key FROM {$tbl_forms} WHERE is_template = 0 ORDER BY id DESC"
+		);
     }
 
     if ( empty($forms) ) return [];
@@ -187,15 +196,22 @@ function duplicateKiller_formidable_get_forms(): array {
         if ( $name === '' ) $name = 'Form #' . $id;
 
         // Ensure form_key exists (fallback to DB if missing)
-        $form_key = trim($form_key);
-        if ( $form_key === '' ) {
-            global $wpdb;
-            $tbl_forms = $wpdb->prefix . 'frm_forms';
-            $form_key = (string) $wpdb->get_var(
-                $wpdb->prepare("SELECT form_key FROM {$tbl_forms} WHERE id = %d LIMIT 1", $id)
-            );
-            $form_key = trim($form_key);
-        }
+        $form_key = trim( $form_key );
+		if ( '' === $form_key ) {
+			global $wpdb;
+
+			$tbl_forms = esc_sql( $wpdb->prefix . 'frm_forms' );
+			
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Reading Formidable forms from core posts table (admin-only, request-scoped).
+			$form_key = (string) $wpdb->get_var(
+				$wpdb->prepare(
+					// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is fixed and plugin-controlled.
+					"SELECT form_key FROM {$tbl_forms} WHERE id = %d LIMIT 1", $id
+				)
+			);
+
+			$form_key = trim( $form_key );
+		}
 
         // Build the "form_id" string requested: form_key.id
         // If form_key is still empty, fallback to "form-{id}.{id}"
@@ -218,13 +234,14 @@ function duplicateKiller_formidable_get_forms(): array {
             $fields = FrmField::get_all_for_form($id, '', 'include');
         } else {
             global $wpdb;
-            $tbl_fields = $wpdb->prefix . 'frm_fields';
-            $fields = $wpdb->get_results(
-                $wpdb->prepare(
-                    "SELECT id, field_key, name, type FROM {$tbl_fields} WHERE form_id = %d ORDER BY field_order DESC",
-                    $id
-                )
-            );
+			$tbl_fields = esc_sql( $wpdb->prefix . 'frm_fields' );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Reading Formidable forms from core posts table (admin-only, request-scoped).
+			$fields = $wpdb->get_results(
+				$wpdb->prepare(
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is fixed and plugin-controlled.
+					"SELECT id, field_key, name, type FROM {$tbl_fields} WHERE form_id = %d ORDER BY field_order DESC", $id
+				)
+			);
         }
 
         if ( empty($fields) ) continue;
@@ -307,34 +324,6 @@ function duplicateKiller_formidable_validate_input($input){
 	global $wpdb;
 	$output = array();
 	
-	// DELETE if checkbox is checked
-	if (isset($_POST['Formidable_delete_records'])) {
-		$table = $wpdb->prefix . 'dk_forms_duplicate';
-
-		// If there is only one checkbox checked and it is NOT an array (ex: name="Formidable_delete_records[Some Form]")
-		if (!is_array($_POST['Formidable_delete_records'])) {
-
-			$form_name = sanitize_text_field($_POST['Formidable_delete_records']);
-			$wpdb->delete($table, [
-				'form_plugin' => 'Elementor',
-				'form_name'   => $form_name,
-			]);
-
-		} else {
-
-			// If there are multiple checkboxes checked
-			foreach ($_POST['Formidable_delete_records'] as $raw_form_name => $delete_flag) {
-				if ($delete_flag === "1") {
-					$form_name = sanitize_text_field($raw_form_name);
-					$wpdb->delete($table, [
-						'form_plugin' => 'Formidable',
-						'form_name'   => $form_name,
-					]);
-				}
-			}
-		}
-	}
-	
 	// Create our array for storing the validated options (keep numeric field keys, add labels)
 	foreach ($input as $form_key => $value) {
 
@@ -402,7 +391,7 @@ function duplicateKiller_formidable_validate_input($input){
 		$output['formidable_error_message'] = sanitize_text_field($input['formidable_error_message']);
 	}
     // Return the array processing any additional functions filtered by this action
-      return apply_filters( 'formidable_error_message', $output, $input );
+      return apply_filters( 'duplicateKiller_formidable_error_message', $output, $input );
 }
 
 /**
@@ -412,7 +401,7 @@ function duplicateKiller_formidable_validate_input($input){
  * - Detectează Pro (FrmProAppHelper) dacă vrei features Pro
  * - Verifică hook-urile de load/init când există
  */
-function dk_formidable_is_ready(): bool {
+function duplicateKiller_formidable_is_ready(): bool {
 
     // 1) Plugin încărcat? (Lite / Core)
     if (
@@ -441,7 +430,7 @@ function dk_formidable_is_ready(): bool {
 }
 
 function duplicateKiller_formidable_description(){
-	if (!dk_formidable_is_ready()) {
+	if (!duplicateKiller_formidable_is_ready()) {
         echo '<h3 style="color:red"><strong>' . esc_html__('Formidable Forms is not activated! Please activate it in order to continue.', 'duplicate-killer') . '</strong></h3>';
 		exit();
     }
@@ -516,7 +505,7 @@ function duplicateKiller_formidable_select_form_tag_callback($args){
 
 	$forms_ids = ""; // [ 'Form name' => 123 ]
 
-	duplicate_killer_render_forms_ui(
+	duplicateKiller_render_forms_ui(
 		'Formidable',
 		'Formidable',
 		$args,

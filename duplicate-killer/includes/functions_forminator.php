@@ -8,12 +8,15 @@ function duplicateKiller_forminator_save_fields($entry, $id, $field_data) {
     $table_name  = $wpdb->prefix . 'dk_forms_duplicate';
     $form_title  = get_the_title($id);
 
-    $form_cookie = isset($_COOKIE['dk_form_cookie'])
-        ? sanitize_text_field($_COOKIE['dk_form_cookie'])
-        : '';
+    $form_cookie = 'NULL';
+	if ( isset( $_COOKIE['dk_form_cookie'] ) ) {
+		$form_cookie = sanitize_text_field(
+			wp_unslash( $_COOKIE['dk_form_cookie'] )
+		);
+	}
 
-    $dk_check_ip_feature = getDuplicateKillerSetting("Forminator_page", "forminator_user_ip");
-    $form_ip = $dk_check_ip_feature ? dk_get_user_ip() : 'NULL';
+    $duplicateKiller_check_ip_feature = duplicateKiller_get_setting("Forminator_page", "forminator_user_ip");
+    $form_ip = $duplicateKiller_check_ip_feature ? duplicateKiller_get_user_ip() : 'NULL';
 
     $storage_fields = [];
 
@@ -45,7 +48,8 @@ function duplicateKiller_forminator_save_fields($entry, $id, $field_data) {
 
     $form_value = serialize($storage_fields);
     $form_date  = current_time('Y-m-d H:i:s');
-
+	
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- Inserting into plugin-owned custom table.
     $wpdb->insert($table_name, [
         'form_plugin' => "Forminator",
         'form_name'   => $form_title,
@@ -67,9 +71,9 @@ function duplicateKiller_forminator_before_send_email($submit_errors, $form_id, 
 	if (!is_array($forminator_page)) $forminator_page = [];
 	//check if IP limit feature is active
 	if (($forminator_page['forminator_user_ip'] ?? "0") === "1") {
-		$form_ip = dk_get_user_ip();
-		$dk_check_ip_feature = dk_check_ip_feature("Forminator",$form_title,$form_ip);
-		if($dk_check_ip_feature){
+		$form_ip = duplicateKiller_get_user_ip();
+		$duplicateKiller_check_ip_feature = duplicateKiller_check_ip_feature("Forminator",$form_title,$form_ip);
+		if($duplicateKiller_check_ip_feature){
 			$message = $forminator_page['forminator_error_message_limit_ip'];
 			//change the general error message with the dk_custom_error_message
 			add_filter('forminator_custom_form_invalid_form_message',function($invalid_form_message, $form_id) use($message){
@@ -78,11 +82,18 @@ function duplicateKiller_forminator_before_send_email($submit_errors, $form_id, 
 			},15,2);
 			//stop form for submission if IP limit is triggered
 				$submit_errors[] = $message;
+				// Increment blocked duplicates counter
+				duplicateKiller_increment_duplicates_blocked_count();
 				return $submit_errors;
 		}
 	}
 	$abort = false;
-	$form_cookie = isset($_COOKIE['dk_form_cookie'])? $form_cookie=sanitize_text_field($_COOKIE['dk_form_cookie']): $form_cookie='';
+	$form_cookie = 'NULL';
+	if ( isset( $_COOKIE['dk_form_cookie'] ) ) {
+		$form_cookie = sanitize_text_field(
+			wp_unslash( $_COOKIE['dk_form_cookie'] )
+		);
+	}
 	$storage_fields = array();
 	$no_form = true;
 	
@@ -110,15 +121,19 @@ function duplicateKiller_forminator_before_send_email($submit_errors, $form_id, 
 										'cookie_stored' => $form_cookie,
 										'cookie_db_set' => $row->form_cookie
 									];
-									if(dk_check_cookie($cookies_setup)){
+									if(duplicateKiller_check_cookie($cookies_setup)){
 										if(is_array($data['value'])){
 											$submit_errors[][$data['name'].'-first-name'] = $forminator_page['forminator_error_message'];
 											$submit_errors[][$data['name'].'-middle-name'] = $forminator_page['forminator_error_message'];
 											$submit_errors[][$data['name'].'-last-name'] = $forminator_page['forminator_error_message'];
 											$abort = true;
+											// Increment blocked duplicates counter
+											duplicateKiller_increment_duplicates_blocked_count();
 										}else{
 											$submit_errors[][$data['name']] = $forminator_page['forminator_error_message'];
 											$abort = true;
+											// Increment blocked duplicates counter
+											duplicateKiller_increment_duplicates_blocked_count();
 										}
 									}
 								}
@@ -167,34 +182,6 @@ function duplicateKiller_forminator_validate_input($input){
 	global $wpdb;
 	$output = array();
 	
-	// DELETE if checkbox is checked
-	if (isset($_POST['Forminator_delete_records'])) {
-		$table = $wpdb->prefix . 'dk_forms_duplicate';
-
-		// If there is only one checkbox checked and it is NOT an array (ex: name="Forminator_delete_records[Some Form]")
-		if (!is_array($_POST['Forminator_delete_records'])) {
-
-			$form_name = sanitize_text_field($_POST['Forminator_delete_records']);
-			$wpdb->delete($table, [
-				'form_plugin' => 'Forminator',
-				'form_name'   => $form_name,
-			]);
-
-		} else {
-
-			// If there are multiple checkboxes checked
-			foreach ($_POST['Forminator_delete_records'] as $raw_form_name => $delete_flag) {
-				if ($delete_flag === "1") {
-					$form_name = sanitize_text_field($raw_form_name);
-					$wpdb->delete($table, [
-						'form_plugin' => 'Forminator',
-						'form_name'   => $form_name,
-					]);
-				}
-			}
-		}
-	}
-	
 	// Create our array for storing the validated options
     foreach($input as $key =>$value){
 		if(is_array($value)){
@@ -240,20 +227,20 @@ function duplicateKiller_forminator_validate_input($input){
 		$output['forminator_error_message'] = sanitize_text_field($input['forminator_error_message']);
 	}
     // Return the array processing any additional functions filtered by this action
-      return apply_filters( 'forminator_error_message', $output, $input );
+      return apply_filters( 'duplicateKiller_forminator_error_message', $output, $input );
 }
 
 function duplicateKiller_forminator_description(){
 	if(class_exists('Forminator') OR is_plugin_active('forminator/forminator.php')){ ?>
-		<h3 style="color:green"><strong><?php esc_html_e('Forminator plugin is activated!','duplicatekiller');?></strong></h3>
+		<h3 style="color:green"><strong><?php esc_html_e('Forminator plugin is activated!','duplicate-killer');?></strong></h3>
 <?php
 	}else{ ?>
-		<h3 style="color:red"><strong><?php esc_html_e('Forminator plugin is not activated! Please activate it in order to continue.','duplicatekiller');?></strong></h3>
+		<h3 style="color:red"><strong><?php esc_html_e('Forminator plugin is not activated! Please activate it in order to continue.','duplicate-killer');?></strong></h3>
 <?php
 		exit();
 	}
 	if(duplicateKiller_forminator_get_forms() == NULL){ ?>
-		</br><span style="color:red"><strong><?php esc_html_e('There is no contact forms. Please create one!','duplicatekiller');?></strong></span>
+		</br><span style="color:red"><strong><?php esc_html_e('There is no contact forms. Please create one!','duplicate-killer');?></strong></span>
 <?php
 		exit();
 	}
@@ -338,7 +325,7 @@ function duplicateKiller_forminator_select_form_tag_callback($args){
 
 	$forms_ids = duplicateKiller_forminator_get_forms_ids(); // [ 'Form name' => 123 ]
 
-	duplicate_killer_render_forms_ui(
+	duplicateKiller_render_forms_ui(
 		'Forminator',
 		'Forminator',
 		$args,

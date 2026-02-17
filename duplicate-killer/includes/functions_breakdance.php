@@ -20,7 +20,7 @@ function duplicateKiller_breakdance_guard_action($canExecute, $action, $extra, $
         if ($dk_state['duplicate_found']) {
             if (!$dk_state['error_sent']) {
                 $dk_state['error_sent'] = true;
-                return new \WP_Error('dk_duplicate', $dk_state['error_message'] ?: __('Duplicate found.', 'duplicatekiller'));
+                return new \WP_Error('dk_duplicate', $dk_state['error_message'] ?: __('Duplicate found.', 'duplicate-killer'));
             }
             return false;
         }
@@ -28,8 +28,8 @@ function duplicateKiller_breakdance_guard_action($canExecute, $action, $extra, $
     }
     $dk_state['checked_once'] = true;
 
-    $post_id = (int)($extra['postId'] ?? 0);
-    $node_id = (int)($extra['formId'] ?? 0);
+    $post_id = isset($extra['postId']) ? $extra['postId'] : '';
+	$node_id = isset($extra['formId']) ? $extra['formId'] : '';
     if (!$post_id || !$node_id) return $canExecute;
 
     $bd_form   = $settings['form'] ?? [];
@@ -39,7 +39,7 @@ function duplicateKiller_breakdance_guard_action($canExecute, $action, $extra, $
         $base_name = $post ? $post->post_title : 'Breakdance Form';
     }
 
-    $db_form_name = $base_name . '.' . $node_id;
+	$db_form_name = $base_name . '.' . (int)$post_id . '.' . (int)$node_id;
 
     $options = get_option('Breakdance_page');
     if (!is_array($options)) $options = [];
@@ -58,7 +58,7 @@ function duplicateKiller_breakdance_guard_action($canExecute, $action, $extra, $
         foreach ($options as $opt_key => $opt_val) {
             if (!is_array($opt_val)) continue;
             if (!isset($opt_val['form_id'])) continue;
-            if ((int)$opt_val['form_id'] === $node_id) {
+            if ($opt_val['form_id'] == $node_id) {
                 $perForm = $opt_val;
                 break;
             }
@@ -67,8 +67,11 @@ function duplicateKiller_breakdance_guard_action($canExecute, $action, $extra, $
 
     if (empty($perForm)) return $canExecute;
 
-    $default_msg_fields = __('Please check all fields! These values have been submitted already!', 'duplicatekiller');
-    $default_msg_ip     = __('This IP has been already submitted.', 'duplicatekiller');
+	$form_cookie = isset( $_COOKIE['dk_form_cookie'] )
+			? sanitize_text_field( wp_unslash( $_COOKIE['dk_form_cookie'] ) )
+			: 'NULL';
+    $default_msg_fields = __('Please check all fields! These values have been submitted already!', 'duplicate-killer');
+    $default_msg_ip     = __('This IP has been already submitted.', 'duplicate-killer');
 
     $error_message_base = $global_err_msg_fields !== '' ? $global_err_msg_fields
                         : (isset($perForm['error_message']) ? (string)$perForm['error_message'] : $default_msg_fields);
@@ -86,14 +89,16 @@ function duplicateKiller_breakdance_guard_action($canExecute, $action, $extra, $
 
     /* 1) IP check */
     $ip_triggered = false;
-    if (function_exists('dk_ip_limit_trigger')) {
-        $ip_triggered = dk_ip_limit_trigger('breakdance', $options, $db_form_name);
+    if (function_exists('duplicateKiller_ip_limit_trigger')) {
+        $ip_triggered = duplicateKiller_ip_limit_trigger('breakdance', $options, $db_form_name);
 	}
     if ($ip_triggered) {
         $dk_state['duplicate_found'] = true;
         $dk_state['error_sent']      = true;
         $dk_state['error_message']   = $error_message_ip;
-        return new \WP_Error('dk_duplicate_ip', $error_message_ip);
+		// Increment blocked duplicates counter
+		duplicateKiller_increment_duplicates_blocked_count();
+		return new \WP_Error('dk_duplicate_ip', $error_message_ip);
     }
 
     /* 2) check for duplicates
@@ -105,9 +110,6 @@ function duplicateKiller_breakdance_guard_action($canExecute, $action, $extra, $
     }
 
     if ($unique_ids) {
-        $form_cookie = isset($_COOKIE['dk_form_cookie']) 
-		? sanitize_text_field($_COOKIE['dk_form_cookie']) 
-		: '';
         $checked_cookie = $global_cookie_enabled;
 
         foreach ($unique_ids as $field_id) {
@@ -136,6 +138,8 @@ function duplicateKiller_breakdance_guard_action($canExecute, $action, $extra, $
                 $dk_state['duplicate_found'] = true;
                 $dk_state['error_sent']      = true;
                 $dk_state['error_message']   = $pretty;
+				// Increment blocked duplicates counter
+				duplicateKiller_increment_duplicates_blocked_count();
                 return new \WP_Error('dk_duplicate', $pretty);
             }
         }
@@ -144,19 +148,20 @@ function duplicateKiller_breakdance_guard_action($canExecute, $action, $extra, $
     /* 3) save only one time (first action) */
     if (!$dk_state['saved_once']) {
         global $wpdb;
-        $table_name = $wpdb->prefix . 'dk_forms_duplicate';
 
         $payload = serialize($extra['fields'] ?? []);
 
-        $form_ip = $global_ip_enabled ? dk_get_user_ip() : 'NULL';
+        $form_ip = $global_ip_enabled ? duplicateKiller_get_user_ip() : 'NULL';
 
         $now_gmt = current_time('Y-m-d H:i:s');
-
+		
+		$table_name = $wpdb->prefix . 'dk_forms_duplicate';
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- Inserting into plugin-owned custom table.
         $wpdb->insert($table_name, [
             'form_plugin' => 'breakdance',
             'form_name'   => $db_form_name,
             'form_value'  => $payload,
-            'form_cookie' => isset($_COOKIE['dk_form_cookie']) ? sanitize_text_field($_COOKIE['dk_form_cookie']) : '',
+            'form_cookie' => $form_cookie,
             'form_date'   => $now_gmt,
             'form_ip'     => $form_ip,
         ], ['%s','%s','%s','%s','%s','%s']);
@@ -168,101 +173,161 @@ function duplicateKiller_breakdance_guard_action($canExecute, $action, $extra, $
 }
 
 
-function duplicateKiller_breakdance_get_forms(){
-    $posts = get_posts([
-        'post_type'        => 'any',
-        'posts_per_page'   => -1,
-        'meta_query'       => [[ 'key' => '_breakdance_data', 'compare' => 'EXISTS' ]],
-        'orderby'          => 'ID',
-        'order'            => 'DESC',
-        'no_found_rows'    => true,
-        'suppress_filters' => true,
-    ]);
-    if (!$posts) return [];
+function duplicateKiller_breakdance_get_forms() {
 
-    $out = [];
-    $name_occurrences = [];
+	$cache_key = 'dk_breakdance_forms_v1';
+	$cached    = get_transient( $cache_key );
+	if ( false !== $cached && is_array( $cached ) ) {
+		return $cached;
+	}
 
-    foreach ($posts as $p) {
-        $all_meta = get_post_meta($p->ID, '_breakdance_data', false);
-        if (!$all_meta) continue;
+	$out = array();
 
-        foreach ($all_meta as $meta_raw) {
-            $meta = is_string($meta_raw) ? json_decode($meta_raw, true) : $meta_raw;
-            if (!is_array($meta)) $meta = maybe_unserialize($meta_raw);
-            if (empty($meta['tree_json_string']) || !is_string($meta['tree_json_string'])) continue;
+	// IMPORTANT: adjust post types to what you expect. Keeping 'any' can be heavy.
+	$post_types = array( 'page', 'post' ); // add others if needed (e.g. 'breakdance_template')
 
-            $tree = json_decode($meta['tree_json_string'], true);
-            if (!is_array($tree) || empty($tree['root'])) continue;
+	$per_page = 200;
+	$paged    = 1;
 
-            $stack = [$tree['root']];
-            while ($stack) {
-                $node = array_pop($stack);
-                $type = $node['data']['type'] ?? '';
+	do {
+		// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Admin-only scan for Breakdance forms (paged, IDs only).
+		$post_ids = get_posts( array(
+			'post_type'      => $post_types,
+			'posts_per_page' => $per_page,
+			'paged'          => $paged,
+			'fields'         => 'ids',              // huge perf gain
+			// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Admin-only scan for Breakdance forms (paged, IDs only).
+			'meta_key'       => '_breakdance_data', // faster than meta_query EXISTS
+			'orderby'        => 'ID',
+			'order'          => 'DESC',
+			'no_found_rows'  => true,
+		) );
 
-                if ($type === 'EssentialElements\\FormBuilder') {
-                    $props      = $node['data']['properties'] ?? [];
-                    $form       = $props['content']['form'] ?? [];
-                    $fields     = $form['fields'] ?? [];
-                    $form_name  = trim((string)($form['form_name'] ?? ''));
-                    if ($form_name === '') $form_name = $p->post_title;
+		if ( empty( $post_ids ) ) {
+			break;
+		}
 
-                    $node_id = (int)($node['id'] ?? 0);
+		foreach ( $post_ids as $post_id ) {
+			$post_id = (int) $post_id;
 
-                    $base_key = $form_name;
-                    
+			// Avoid loading full post objects unless needed.
+			$post_title = get_the_title( $post_id );
 
-                    $display_key = sprintf('%s.%d', $base_key, $node_id);           
-					
-                    if (!isset($out[$display_key])) {
-                        $out[$display_key] = [
-                            'form_id'   => $node_id,   // <<=== AICI ai 101 / 102 etc.
-                            'post_id'   => (int)$p->ID,
-                            'form_name' => $form_name,
-                            'fields'    => [],
-                        ];
-                    }
+			$all_meta = get_post_meta( $post_id, '_breakdance_data', false );
+			if ( empty( $all_meta ) ) {
+				continue;
+			}
 
-                    foreach ($fields as $f) {
-                        $ftype = strtolower((string)($f['type'] ?? ''));
-                        if (!in_array($ftype, ['text','email','tel','phone'], true)) continue;
+			foreach ( $all_meta as $meta_raw ) {
 
-                        $fid = '';
-                        if (!empty($f['advanced']['id'])) {
-                            $fid = (string)$f['advanced']['id'];
-                        } elseif (!empty($f['label'])) {
-                            $fid = sanitize_key((string)$f['label']);
-                        }
-                        if ($fid === '') continue;
+				$meta = $meta_raw;
 
-                        $out[$display_key]['fields'][] = [
-                            'type'  => $ftype,
-                            'label' => (string)($f['label'] ?? ''),
-                            'id'    => $fid,
-                        ];
-                    }
-                }
+				if ( is_string( $meta_raw ) ) {
+					$decoded = json_decode( $meta_raw, true );
+					if ( is_array( $decoded ) ) {
+						$meta = $decoded;
+					}
+				}
 
-                if (!empty($node['children']) && is_array($node['children'])) {
-                    foreach ($node['children'] as $child) $stack[] = $child;
-                }
-            }
-        }
-    }
+				if ( ! is_array( $meta ) ) {
+					$maybe = maybe_unserialize( $meta_raw );
+					if ( is_array( $maybe ) ) {
+						$meta = $maybe;
+					}
+				}
 
-    foreach ($out as $key => $bundle) {
-        $seen = [];
-        $clean = [];
-        foreach ($bundle['fields'] as $f) {
-            if (isset($seen[$f['id']])) continue;
-            $seen[$f['id']] = true;
-            $clean[] = $f;
-        }
-        $out[$key]['fields'] = array_values($clean);
-    }
+				if ( empty( $meta['tree_json_string'] ) || ! is_string( $meta['tree_json_string'] ) ) {
+					continue;
+				}
 
-    return $out;
+				$tree = json_decode( $meta['tree_json_string'], true );
+				if ( ! is_array( $tree ) || empty( $tree['root'] ) ) {
+					continue;
+				}
+
+				$stack = array( $tree['root'] );
+
+				while ( ! empty( $stack ) ) {
+					$node = array_pop( $stack );
+					$type = isset( $node['data']['type'] ) ? (string) $node['data']['type'] : '';
+
+					if ( 'EssentialElements\\FormBuilder' === $type ) {
+						$props     = isset( $node['data']['properties'] ) ? (array) $node['data']['properties'] : array();
+						$form      = isset( $props['content']['form'] ) ? (array) $props['content']['form'] : array();
+						$fields    = isset( $form['fields'] ) ? (array) $form['fields'] : array();
+						$form_name = trim( (string) ( $form['form_name'] ?? '' ) );
+
+						if ( '' === $form_name ) {
+							$form_name = (string) $post_title;
+						}
+
+						$node_id = (int) ( $node['id'] ?? 0 );
+
+						// Ensure uniqueness across posts & nodes.
+						$display_key = sprintf( '%s.%d.%d', $form_name, $post_id, $node_id );
+
+						if ( ! isset( $out[ $display_key ] ) ) {
+							$out[ $display_key ] = array(
+								'form_id'   => $node_id,
+								'post_id'   => $post_id,
+								'form_name' => $form_name,
+								'fields'    => array(),
+							);
+						}
+
+						foreach ( $fields as $f ) {
+							$f     = (array) $f;
+							$ftype = strtolower( (string) ( $f['type'] ?? '' ) );
+
+							if ( ! in_array( $ftype, array( 'text', 'email', 'tel', 'phone' ), true ) ) {
+								continue;
+							}
+
+							$fid = '';
+
+							if ( ! empty( $f['advanced']['id'] ) ) {
+								$fid = (string) $f['advanced']['id'];
+							} elseif ( ! empty( $f['label'] ) ) {
+								$fid = sanitize_key( (string) $f['label'] );
+							}
+
+							if ( '' === $fid ) {
+								continue;
+							}
+
+							$out[ $display_key ]['fields'][ $fid ] = array(
+								'type'  => $ftype,
+								'label' => (string) ( $f['label'] ?? '' ),
+								'id'    => $fid,
+							);
+						}
+					}
+
+					if ( ! empty( $node['children'] ) && is_array( $node['children'] ) ) {
+						foreach ( $node['children'] as $child ) {
+							$stack[] = $child;
+						}
+					}
+				}
+			}
+		}
+
+		$paged++;
+	} while ( count( $post_ids ) === $per_page );
+
+	// Normalize fields to numeric array.
+	foreach ( $out as $k => $bundle ) {
+		if ( isset( $bundle['fields'] ) && is_array( $bundle['fields'] ) ) {
+			$out[ $k ]['fields'] = array_values( $bundle['fields'] );
+		}
+	}
+
+	// Cache 30 minutes (adjust).
+	set_transient( $cache_key, $out, 30 * MINUTE_IN_SECONDS );
+
+	return $out;
 }
+
 /*********************************
  * Callbacks
 **********************************/
@@ -272,40 +337,45 @@ function duplicateKiller_breakdance_validate_input($input){
     $output = [];
     $table  = $wpdb->prefix . 'dk_forms_duplicate';
 
-    /* -------------------------
-       Delete logs
-    --------------------------*/
-    if (isset($_POST['Breakdance_delete_records'])) {
-        $to_delete = $_POST['Breakdance_delete_records'];
-        if (!is_array($to_delete)) {
-            $form_name = sanitize_text_field($to_delete);
-            if ($form_name !== '') {
-                $wpdb->delete($table, ['form_plugin' => 'breakdance', 'form_name' => $form_name]);
-            }
-        } else {
-            foreach ($to_delete as $raw_form_name => $flag) {
-                if ((string)$flag === '1') {
-                    $form_name = sanitize_text_field($raw_form_name);
-                    if ($form_name !== '') {
-                        $wpdb->delete($table, ['form_plugin' => 'breakdance', 'form_name' => $form_name]);
-                    }
-                }
-            }
-        }
-    }
+	if ( ! isset( $_POST['_wpnonce'] ) ) {
+		return $input;
+	}
 
+	$nonce = sanitize_text_field( wp_unslash( $_POST['_wpnonce'] ) );
+
+	if ( ! wp_verify_nonce( $nonce, 'Breakdance_page-options' ) ) {
+		return $input;
+	}
     /* -------------------------
-       Fallback if $input null
-    --------------------------*/
-    if (!is_array($input)) {
-        if (isset($_POST['breakdance_page']) && is_array($_POST['breakdance_page'])) {
-            $input = $_POST['breakdance_page'];
-        } elseif (isset($_POST['Breakdance_page']) && is_array($_POST['Breakdance_page'])) {
-            $input = $_POST['Breakdance_page'];
-        } else {
-            return apply_filters('breakdance_error_message', $output, $input);
-        }
-    }
+	   Fallback if $input null
+	--------------------------*/
+	if ( ! is_array( $input ) ) {
+
+		// Verify Settings API nonce (options.php).
+		if ( ! isset( $_POST['_wpnonce'] ) ) {
+			return $input;
+		}
+
+		$nonce = sanitize_text_field( wp_unslash( $_POST['_wpnonce'] ) );
+
+		if ( ! wp_verify_nonce( $nonce, 'Breakdance_page-options' ) ) {
+			return $input;
+		}
+
+		if ( isset( $_POST['breakdance_page'] ) && is_array( $_POST['breakdance_page'] ) ) {
+			$input = array_map(
+				'sanitize_text_field',
+				wp_unslash( $_POST['breakdance_page'] )
+			);
+		} elseif ( isset( $_POST['Breakdance_page'] ) && is_array( $_POST['Breakdance_page'] ) ) {
+			$input = array_map(
+				'sanitize_text_field',
+				wp_unslash( $_POST['Breakdance_page'] )
+			);
+		} else {
+			return apply_filters( 'duplicateKiller_breakdance_error_message', $output, $input );
+		}
+	}
 
     // known key
     $known_scalar_keys = [
@@ -389,12 +459,12 @@ function duplicateKiller_breakdance_validate_input($input){
 	}else{
 		$output['breakdance_error_message'] = sanitize_text_field($input['breakdance_error_message']);
 	}
-    return apply_filters('breakdance_error_message', $output, $input);
+    return apply_filters('duplicateKiller_breakdance_error_message', $output, $input);
 }
 /**
  * Helper: is Breakdance present & enabled for this request?
  */
-function dk_bd_is_ready(): bool {
+function duplicateKiller_bd_is_ready(): bool {
     // Present?
     if (!defined('__BREAKDANCE_VERSION') && !class_exists('\Breakdance\Forms\Actions\Action')) {
         return false;
@@ -408,17 +478,17 @@ function dk_bd_is_ready(): bool {
     return did_action('before_breakdance_loaded') > 0;
 }
 function duplicateKiller_breakdance_description(){
-	if (!dk_bd_is_ready()) {
-        echo '<h3 style="color:red"><strong>' . esc_html__('Breakdance plugin is not activated! Please activate it in order to continue.', 'duplicatekiller') . '</strong></h3>';
+	if (!duplicateKiller_bd_is_ready()) {
+        echo '<h3 style="color:red"><strong>' . esc_html__('Breakdance plugin is not activated! Please activate it in order to continue.', 'duplicate-killer') . '</strong></h3>';
 		exit();
     }
 
     // If you need a success message, keep this. If not, remove it.
-    echo '<h3 style="color:green"><strong>' . esc_html__('Breakdance plugin is activated!', 'duplicatekiller') . '</strong></h3>';
+    echo '<h3 style="color:green"><strong>' . esc_html__('Breakdance plugin is activated!', 'duplicate-killer') . '</strong></h3>';
 
     $forms = duplicateKiller_breakdance_get_forms();
     if (empty($forms)) {
-        echo '<br/><span style="color:red"><strong>' . esc_html__('There is no contact form. Please create one!', 'duplicatekiller') . '</strong></span>';
+        echo '<br/><span style="color:red"><strong>' . esc_html__('There is no contact form. Please create one!', 'duplicate-killer') . '</strong></span>';
 		exit();
     }
 }
@@ -484,7 +554,7 @@ function duplicateKiller_breakdance_select_form_tag_callback($args){
 
 	$forms_ids = ""; // not available
 
-	duplicate_killer_render_forms_ui(
+	duplicateKiller_render_forms_ui(
 		'Breakdance',
 		'Breakdance',
 		$args,

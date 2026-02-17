@@ -5,6 +5,282 @@ define( 'DK_NINJA_FORMS', 'NinjaForms' );
 define( 'DK_NINJA_FORMS_LABEL', 'Ninja Forms' );
 
 /**
+ * Review milestone thresholds.
+ *
+ * @return int[]
+ */
+function duplicateKiller_review_milestones(): array {
+	return array( 10, 50, 100, 1000, 3000, 5000, 10000 );
+}
+
+/**
+ * Get the highest milestone reached but not dismissed.
+ *
+ * @param int $count
+ * @return int|null
+ */
+function duplicateKiller_get_active_milestone( int $count ): ?int {
+
+	$dismissed = get_option( 'duplicateKiller_review_milestones_dismissed', array() );
+	if ( ! is_array( $dismissed ) ) {
+		$dismissed = array();
+	}
+
+	$active = null;
+
+	foreach ( duplicateKiller_review_milestones() as $m ) {
+		if ( $count >= $m && empty( $dismissed[ (string) $m ] ) ) {
+			$active = (int) $m;
+		}
+	}
+
+	return $active;
+}
+
+/**
+ * Handle dismiss action for a milestone notice.
+ */
+function duplicateKiller_handle_dismiss_milestone_notice(): void {
+	if ( ! is_admin() ) {
+		return;
+	}
+
+	if ( empty( $_GET['duplicateKiller_dismiss_milestone'] ) ) {
+		return;
+	}
+
+	$milestone = (int) $_GET['duplicateKiller_dismiss_milestone'];
+	if ( $milestone <= 0 ) {
+		return;
+	}
+
+	check_admin_referer( 'duplicateKiller_dismiss_milestone_' . $milestone );
+
+	$dismissed = get_option( 'duplicateKiller_review_milestones_dismissed', array() );
+	if ( ! is_array( $dismissed ) ) {
+		$dismissed = array();
+	}
+
+	$dismissed[ (string) $milestone ] = time();
+	update_option( 'duplicateKiller_review_milestones_dismissed', $dismissed, false );
+
+	// Redirect to remove query args.
+	wp_safe_redirect( remove_query_arg( array( 'duplicateKiller_dismiss_milestone', '_wpnonce' ) ) );
+	exit;
+}
+
+/**
+ * Admin notice: show at milestones to encourage reviews.
+ */
+function duplicateKiller_admin_review_milestone_notice(): void {
+	if ( ! current_user_can( 'manage_options' ) ) {
+		return;
+	}
+
+	$count     = duplicateKiller_get_duplicates_blocked_count();
+	$milestone = duplicateKiller_get_active_milestone( $count );
+
+	if ( ! $milestone ) {
+		return;
+	}
+
+	$dismiss_url = wp_nonce_url(
+		add_query_arg( array( 'duplicateKiller_dismiss_milestone' => $milestone ) ),
+		'duplicateKiller_dismiss_milestone_' . $milestone
+	);
+
+	// Replace with your real review URL(s).
+	// WordPress.org reviews page is best for free plugin traction.
+	$review_url_wporg   = 'https://wordpress.org/support/plugin/duplicate-killer/reviews/#new-post';
+	$review_url_trustpilot = 'https://www.trustpilot.com/review/verselabwp.com';
+
+	$message = sprintf(
+		/* translators: 1: blocked count */
+		__( '🎉 Duplicate Killer has blocked %1$s duplicate submissions on your site.', 'duplicate-killer' ),
+		number_format_i18n( $count )
+	);
+
+	$sub_message = __( 'If it’s doing its job well, help others discover it with a quick review.', 'duplicate-killer' );
+
+	echo '<div class="notice notice-success is-dismissible">';
+	echo '<p><strong>' . esc_html( $message ) . '</strong></p>';
+	echo '<p>' . esc_html( $sub_message ) . '</p>';
+	echo '<p>';
+	echo '<a class="button button-primary" href="' . esc_url( $review_url_wporg ) . '" target="_blank" rel="noopener noreferrer">' . esc_html__( 'Leave a WordPress.org review', 'duplicate-killer' ) . '</a> ';
+	echo '<a class="button" href="' . esc_url( $review_url_trustpilot ) . '" target="_blank" rel="noopener noreferrer">' . esc_html__( 'Leave a Trustpilot review', 'duplicate-killer' ) . '</a> ';
+	echo '<a class="button-link" href="' . esc_url( $dismiss_url ) . '">' . esc_html__( 'Dismiss', 'duplicate-killer' ) . '</a>';
+	echo '</p>';
+	echo '</div>';
+}
+
+/**
+ * Atomically increments the "duplicates blocked" counter.
+ * Uses a direct DB UPDATE to avoid lost increments under concurrent requests.
+ *
+ * @return int New total after increment.
+ */
+function duplicateKiller_increment_duplicates_blocked_count(): int {
+	global $wpdb;
+
+	$option_name = 'duplicateKiller_duplicates_blocked_count';
+
+	// Try atomic UPDATE first (avoids race conditions).
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- Plugin-owned option update; atomic increment.
+	$updated = $wpdb->query(
+		$wpdb->prepare(
+			"UPDATE {$wpdb->options}
+			 SET option_value = CAST(option_value AS UNSIGNED) + 1
+			 WHERE option_name = %s",
+			$option_name
+		)
+	);
+
+	if ( $updated === 0 ) {
+		// Option doesn't exist yet -> add it.
+		// autoload = no (keeps wp_options autoload lean).
+		add_option( $option_name, '1', '', 'no' );
+		return 1;
+	}
+
+	// Read back the new value (cheap + correct).
+	$new_value = (int) get_option( $option_name, 0 );
+	// Optional: keep object cache coherent if any.
+	wp_cache_delete( $option_name, 'options' );
+
+	return $new_value;
+}
+
+/**
+ * Returns total duplicates blocked (site-wide).
+ *
+ * @return int
+ */
+function duplicateKiller_get_duplicates_blocked_count(): int {
+	return (int) get_option( 'duplicateKiller_duplicates_blocked_count', 0 );
+}
+
+/**
+ * Verify admin capability + DK delete nonce. Dies on failure.
+ *
+ * @param string $action Nonce action string.
+ * @param string $field  Nonce field name in POST.
+ */
+function duplicateKiller_verify_delete_nonce_or_die( $action = 'dk_delete_logs', $field = 'dk_nonce' ) {
+
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_die( esc_html__( 'You cannot do that!', 'duplicate-killer' ) );
+	}
+
+	if ( empty( $_POST[ $field ] ) ) {
+		wp_die( esc_html__( 'Missing security nonce.', 'duplicate-killer' ) );
+	}
+
+	$nonce = sanitize_text_field( wp_unslash( $_POST[ $field ] ) );
+
+	if ( ! wp_verify_nonce( $nonce, $action ) ) {
+		wp_die( esc_html__( 'You cannot do that!', 'duplicate-killer' ) );
+	}
+}
+/**
+ * Process delete records requests for supported integrations.
+ */
+function duplicateKiller_handle_delete_records_request() {
+
+	if ( empty( $_POST ) ) {
+		return;
+	}
+
+	// PHPCS: verify nonce *before* reading any delete-related POST fields.
+	if ( empty( $_POST['dk_nonce'] ) ) {
+		return;
+	}
+
+	$nonce = sanitize_text_field( wp_unslash( $_POST['dk_nonce'] ) );
+	if ( ! wp_verify_nonce( $nonce, 'dk_delete_logs' ) ) {
+		return;
+	}
+
+	// Capability check.
+	if ( ! current_user_can( 'manage_options' ) ) {
+		return;
+	}
+
+	$map = array(
+		'CF7_delete_records'        => 'CF7',
+		'Forminator_delete_records' => 'Forminator',
+		'WPForms_delete_records'    => 'WPForms',
+		'Breakdance_delete_records' => 'breakdance',
+		'Elementor_delete_records'  => 'Elementor',
+		'Formidable_delete_records' => 'Formidable',
+		'NinjaForms_delete_records' => defined( 'DK_NINJA_FORMS' ) ? DK_NINJA_FORMS : 'NinjaForms',
+	);
+
+	$has_delete = false;
+
+	foreach ( $map as $post_key => $plugin_slug ) {
+		if ( isset( $_POST[ $post_key ] ) ) {
+			$has_delete = true;
+			break;
+		}
+	}
+
+	if ( ! $has_delete ) {
+		return;
+	}
+
+	// Nonce already verified above.
+	duplicateKiller_verify_delete_nonce_or_die( 'dk_delete_logs', 'dk_nonce' );
+
+	global $wpdb;
+	$table = $wpdb->prefix . 'dk_forms_duplicate';
+
+	foreach ( $map as $post_key => $plugin_slug ) {
+
+		if ( ! isset( $_POST[ $post_key ] ) ) {
+			continue;
+		}
+
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Sanitized inside duplicateKiller_delete_selected_records_raw() (handles string/array).
+		$raw_delete = wp_unslash($_POST[$post_key]);
+
+		duplicateKiller_delete_selected_records_raw(
+			$wpdb,
+			$table,
+			$raw_delete,
+			$plugin_slug
+		);
+	}
+}
+/**
+ * Delete selected records for a given form plugin from dk_forms_duplicate.
+ * @param mixed $raw Raw value already extracted from request (string|array).
+ */
+function duplicateKiller_delete_selected_records_raw( $db, $table, $raw, $plugin_slug ) {
+	if ( empty( $raw ) ) {
+		return;
+	}
+
+	$to_delete = wp_unslash( $raw );
+
+	if ( ! is_array( $to_delete ) ) {
+		$form_name = sanitize_text_field( $to_delete );
+		if ( '' !== $form_name ) {
+			$db->delete( $table, array( 'form_plugin' => $plugin_slug, 'form_name' => $form_name ) );
+		}
+		return;
+	}
+
+	foreach ( $to_delete as $raw_form_name => $delete_flag ) {
+		if ( '1' !== (string) $delete_flag ) {
+			continue;
+		}
+		$form_name = sanitize_text_field( $raw_form_name );
+		if ( '' !== $form_name ) {
+			$db->delete( $table, array( 'form_plugin' => $plugin_slug, 'form_name' => $form_name ) );
+		}
+	}
+}
+/**
  * Render Duplicate Killer settings UI for a given forms plugin.
  *
  * @param string $plugin_key   Machine key used in DB / shortcode (e.g. 'CF7', 'GF').
@@ -13,7 +289,7 @@ define( 'DK_NINJA_FORMS_LABEL', 'Ninja Forms' );
  * @param array  $forms        [ 'Form Name' => [ 'field_tag_1', 'field_tag_2', ... ] ].
  * @param array  $forms_id     [ 'Form Name' => form_id ].
  */
-function duplicate_killer_render_forms_ui( $plugin_key, $plugin_label, $args, $forms, $forms_id ) {
+function duplicateKiller_render_forms_ui( $plugin_key, $plugin_label, $args, $forms, $forms_id ) {
 	global $wpdb;
 
 	// Capability check – best practice in admin screens.
@@ -33,21 +309,19 @@ function duplicate_killer_render_forms_ui( $plugin_key, $plugin_label, $args, $f
 		$options = array();
 	}
 
-	$table = $wpdb->prefix . 'dk_forms_duplicate';
-
 	$counts = array();
 	if ( ! empty( $forms ) ) {
+		$table = $wpdb->prefix . 'dk_forms_duplicate';
+		$table_safe = esc_sql( $table );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Reading from plugin-owned custom table (admin-only, request-scoped).
 		$results = $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT form_name, COUNT(*) AS total 
-				 FROM {$table} 
-				 WHERE form_plugin = %s 
-				 GROUP BY form_name",
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				"SELECT form_name, COUNT(*) AS total FROM {$table_safe} WHERE form_plugin = %s GROUP BY form_name",
 				$plugin_key
 			),
 			OBJECT_K
 		);
-
 		if ( is_array( $results ) ) {
 			$counts = $results;
 		}
@@ -70,7 +344,7 @@ function duplicate_killer_render_forms_ui( $plugin_key, $plugin_label, $args, $f
 	<?php foreach ( $forms as $form_name => $tags ) : ?>
 		<?php
 		$dk_index++;
-		$is_locked_free = ( $dk_index > 1 ); // first form active, rest locked
+		$is_locked_free = ( $dk_index > 1 );
 		?>
 		<?php
 		$form_key  = (string) $form_name;
@@ -86,23 +360,23 @@ function duplicate_killer_render_forms_ui( $plugin_key, $plugin_label, $args, $f
 		<div class="<?php echo esc_attr( 'dk-single-form' . ( $is_locked_free ? ' dk-locked' : '' ) ); ?>">
 	<?php if ( $is_locked_free ) : ?>
 		<div class="dk-pro-corner-badge">
-			<?php echo esc_html__( 'PRO', 'duplicatekiller' ); ?>
+			<?php echo esc_html__( 'PRO', 'duplicate-killer' ); ?>
 		</div>
 
 		<div class="dk-locked-overlay" aria-hidden="true"></div>
 
-		<div class="dk-locked-overlay-content" role="note" aria-label="<?php echo esc_attr__( 'Pro feature', 'duplicatekiller' ); ?>">
+		<div class="dk-locked-overlay-content" role="note" aria-label="<?php echo esc_attr__( 'Pro feature', 'duplicate-killer' ); ?>">
 			<p class="dk-locked-title">
-				<?php echo esc_html__( 'Additional protection available', 'duplicatekiller' ); ?>
+				<?php echo esc_html__( 'Additional protection available', 'duplicate-killer' ); ?>
 			</p>
 			
 			<div class="dk-locked-cta">
 				<span class="dk-locked-mini">
-					<?php echo esc_html__( 'Free includes protection for one form per plugin.', 'duplicatekiller' ); ?>
+					<?php echo esc_html__( 'Free includes protection for one form per plugin.', 'duplicate-killer' ); ?>
 				</span>
 
 				<a class="button button-primary" href="<?php echo esc_url( $upgrade_url ); ?>">
-					<?php echo esc_html__( 'Upgrade to PRO', 'duplicatekiller' ); ?>
+					<?php echo esc_html__( 'Upgrade to PRO', 'duplicate-killer' ); ?>
 				</a>
 			</div>
 		</div>
@@ -111,7 +385,7 @@ function duplicate_killer_render_forms_ui( $plugin_key, $plugin_label, $args, $f
 				<?php echo esc_html( $form_key ); ?>
 			</h4>
 
-			<h4><?php esc_html_e( 'Choose the unique fields', 'duplicatekiller' ); ?></h4>
+			<h4><?php esc_html_e( 'Choose the unique fields', 'duplicate-killer' ); ?></h4>
 
 			<?php
 				/**
@@ -202,7 +476,7 @@ function duplicate_killer_render_forms_ui( $plugin_key, $plugin_label, $args, $f
 					aria-controls="dk-pro-content-<?php echo esc_attr( $form_id_safe ); ?>"
 				>
 					<span class="dk-pro-toggle-text">
-						<?php esc_html_e( 'Individual Form Rules', 'duplicatekiller' ); ?>
+						<?php esc_html_e( 'Individual Form Rules', 'duplicate-killer' ); ?>
 					</span>
 					<span class="dk-pro-toggle-icon" aria-hidden="true">➜</span>
 				</button>
@@ -214,27 +488,27 @@ function duplicate_killer_render_forms_ui( $plugin_key, $plugin_label, $args, $f
 					<div class="dk-set-error-message">
 						<fieldset class="dk-fieldset dk-error-fieldset">
 							<legend class="dk-legend-title">
-								<?php esc_html_e( 'Error message when duplicate is found', 'duplicatekiller' ); ?>
+								<?php esc_html_e( 'Error message when duplicate is found', 'duplicate-killer' ); ?>
 							</legend>
 							<p class="dk-error-instruction">
-								<?php esc_html_e( 'This message will be shown when the user submits a form with duplicate values.', 'duplicatekiller' ); ?>
+								<?php esc_html_e( 'This message will be shown when the user submits a form with duplicate values.', 'duplicate-killer' ); ?>
 							</p>
 							<input type="text"
 								class="dk-error-input"
-								placeholder="<?php esc_attr_e( 'Please check all fields! These values have already been submitted.', 'duplicatekiller' ); ?>"
+								placeholder="<?php esc_attr_e( 'Please check all fields! These values have already been submitted.', 'duplicate-killer' ); ?>"
 								name=""
-								value="<?php esc_attr_e( 'Please check all fields! These values have already been submitted.', 'duplicatekiller' ); ?>" />
+								value="<?php esc_attr_e( 'Please check all fields! These values have already been submitted.', 'duplicate-killer' ); ?>" />
 						</fieldset>
 					</div>
 
 					<div class="dk-limit_submission_by_ip">
 						<fieldset class="dk-fieldset">
 							<legend class="dk-legend-title">
-								<?php esc_html_e( 'Limit submissions by IP address', 'duplicatekiller' ); ?>
+								<?php esc_html_e( 'Limit submissions by IP address', 'duplicate-killer' ); ?>
 							</legend>
 							<p>
-								<strong><?php esc_html_e( 'This feature', 'duplicatekiller' ); ?></strong>
-								<?php esc_html_e( 'restricts form entries based on IP address for a given number of days.', 'duplicatekiller' ); ?>
+								<strong><?php esc_html_e( 'This feature', 'duplicate-killer' ); ?></strong>
+								<?php esc_html_e( 'restricts form entries based on IP address for a given number of days.', 'duplicate-killer' ); ?>
 							</p>
 
 							<div class="dk-input-switch-ios">
@@ -247,13 +521,13 @@ function duplicate_killer_render_forms_ui( $plugin_key, $plugin_label, $args, $f
 
 								<label class="ios-switch-label" for="user_ip_option_<?php echo esc_attr( $form_id_safe ); ?>"></label>
 								<span class="ios-switch-text">
-									<?php esc_html_e( 'Activate this function', 'duplicatekiller' ); ?>
+									<?php esc_html_e( 'Activate this function', 'duplicate-killer' ); ?>
 								</span>
 							</div>
 
 							<div id="dk-limit-ip_<?php echo esc_attr( $form_id_safe ); ?>" class="dk-toggle-section">
 								<label for="error_message_limit_ip_option_<?php echo esc_attr( $form_id_safe ); ?>">
-									<?php esc_html_e( 'Set error message for this option:', 'duplicatekiller' ); ?>
+									<?php esc_html_e( 'Set error message for this option:', 'duplicate-killer' ); ?>
 								</label>
 								<input type="text"
 									id="error_message_limit_ip_option_<?php echo esc_attr( $form_id_safe ); ?>"
@@ -261,10 +535,10 @@ function duplicate_killer_render_forms_ui( $plugin_key, $plugin_label, $args, $f
 									size="40"
 									value=""
 									class="dk-error-input"
-									placeholder="<?php esc_attr_e( 'This IP has already submitted this form.', 'duplicatekiller' ); ?>" />
+									placeholder="<?php esc_attr_e( 'This IP has already submitted this form.', 'duplicate-killer' ); ?>" />
 
 								<label for="user_ip_days_<?php echo esc_attr( $form_id_safe ); ?>">
-									<?php esc_html_e( 'IP block duration (in days):', 'duplicatekiller' ); ?>
+									<?php esc_html_e( 'IP block duration (in days):', 'duplicate-killer' ); ?>
 								</label>
 								<input type="text"
 									id="user_ip_days_<?php echo esc_attr( $form_id_safe ); ?>"
@@ -272,7 +546,7 @@ function duplicate_killer_render_forms_ui( $plugin_key, $plugin_label, $args, $f
 									size="5"
 									value=""
 									class="dk-error-input"
-									placeholder="<?php esc_attr_e( 'e.g. 7', 'duplicatekiller' ); ?>" />
+									placeholder="<?php esc_attr_e( 'e.g. 7', 'duplicate-killer' ); ?>" />
 							</div>
 						</fieldset>
 					</div>
@@ -280,11 +554,11 @@ function duplicate_killer_render_forms_ui( $plugin_key, $plugin_label, $args, $f
 					<div class="dk-set-unique-entries-per-user">
 						<fieldset class="dk-fieldset">
 							<legend class="dk-legend-title">
-								<?php esc_html_e( 'Unique entries per user', 'duplicatekiller' ); ?>
+								<?php esc_html_e( 'Unique entries per user', 'duplicate-killer' ); ?>
 							</legend>
 							<p>
-								<strong><?php esc_html_e( 'This feature uses cookies.', 'duplicatekiller' ); ?></strong>
-								<?php esc_html_e( 'Multiple users can submit the same entry, but a single user cannot submit the same one twice.', 'duplicatekiller' ); ?>
+								<strong><?php esc_html_e( 'This feature uses cookies.', 'duplicate-killer' ); ?></strong>
+								<?php esc_html_e( 'Multiple users can submit the same entry, but a single user cannot submit the same one twice.', 'duplicate-killer' ); ?>
 							</p>
 
 							<div class="dk-input-switch-ios">
@@ -297,13 +571,13 @@ function duplicate_killer_render_forms_ui( $plugin_key, $plugin_label, $args, $f
 
 								<label class="ios-switch-label" for="cookie_<?php echo esc_attr( $form_id_safe ); ?>"></label>
 								<span class="ios-switch-text">
-									<?php esc_html_e( 'Activate this function', 'duplicatekiller' ); ?>
+									<?php esc_html_e( 'Activate this function', 'duplicate-killer' ); ?>
 								</span>
 							</div>
 
 							<div id="cookie_section_<?php echo esc_attr( $form_id_safe ); ?>" class="dk-toggle-section">
 								<label for="cookie_days_<?php echo esc_attr( $form_id_safe ); ?>">
-									<?php esc_html_e( 'Cookie persistence (days - max 365):', 'duplicatekiller' ); ?>
+									<?php esc_html_e( 'Cookie persistence (days - max 365):', 'duplicate-killer' ); ?>
 								</label>
 								<input type="text"
 									id="cookie_days_<?php echo esc_attr( $form_id_safe ); ?>"
@@ -311,17 +585,17 @@ function duplicate_killer_render_forms_ui( $plugin_key, $plugin_label, $args, $f
 									size="5"
 									value=""
 									class="dk-error-input"
-									placeholder="<?php esc_attr_e( 'e.g. 7', 'duplicatekiller' ); ?>" />
+									placeholder="<?php esc_attr_e( 'e.g. 7', 'duplicate-killer' ); ?>" />
 							</div>
 						</fieldset>
 					</div>
 					<div class="dk-shortcode-count-submission">
 						<fieldset class="dk-fieldset">
 							<legend class="dk-legend-title">
-								<?php esc_html_e( 'Display submission count', 'duplicatekiller' ); ?>
+								<?php esc_html_e( 'Display submission count', 'duplicate-killer' ); ?>
 							</legend>
 							<p>
-								<?php esc_html_e( 'You can use this shortcode to display the submission count anywhere on your site. This is useful for showcasing engagement, verifying participation levels, or triggering conditional actions. Note: refresh every 30 seconds.', 'duplicatekiller' ); ?>
+								<?php esc_html_e( 'You can use this shortcode to display the submission count anywhere on your site. This is useful for showcasing engagement, verifying participation levels, or triggering conditional actions. Note: refresh every 30 seconds.', 'duplicate-killer' ); ?>
 							</p>
 							<?php
 							$shortcode = sprintf(
@@ -339,7 +613,7 @@ function duplicate_killer_render_forms_ui( $plugin_key, $plugin_label, $args, $f
 									style="flex:1; padding:8px 12px; font-size:16px; border:1px solid #ccc; border-radius:5px; background:#fff; cursor:default;">
 								<button type="button" 
 									style="padding:8px 16px; font-size:14px; background-color:#0073aa; color:#fff; border:none; border-radius:5px; cursor:pointer;">
-									<?php esc_html_e( 'Copy', 'duplicatekiller' ); ?>
+									<?php esc_html_e( 'Copy', 'duplicate-killer' ); ?>
 								</button>
 							</div>
 						</fieldset>
@@ -352,7 +626,7 @@ function duplicate_killer_render_forms_ui( $plugin_key, $plugin_label, $args, $f
 					<span class="dk-count-number">
 						<?php echo esc_html( (string) $count ); ?>
 					</span>
-					<?php esc_html_e( 'saved submissions found for this form', 'duplicatekiller' ); ?>
+					<?php esc_html_e( 'saved submissions found for this form', 'duplicate-killer' ); ?>
 				</p>
 
 				<?php if ( $count > 0 ) : ?>
@@ -364,9 +638,9 @@ function duplicate_killer_render_forms_ui( $plugin_key, $plugin_label, $args, $f
 							class="dk-delete-checkbox" />
 						🗑️
 						<span>
-							<?php esc_html_e( 'Delete all saved entries for this form', 'duplicatekiller' ); ?>
+							<?php esc_html_e( 'Delete all saved entries for this form', 'duplicate-killer' ); ?>
 							<small>
-								<?php esc_html_e( '(this action cannot be undone)', 'duplicatekiller' ); ?>
+								<?php esc_html_e( '(this action cannot be undone)', 'duplicate-killer' ); ?>
 							</small>
 						</span>
 					</label>
@@ -389,7 +663,7 @@ function duplicate_killer_render_forms_ui( $plugin_key, $plugin_label, $args, $f
 	  z-index:9999;
 	  box-shadow:0 2px 6px rgba(0,0,0,0.3);
 	">
-	  <?php esc_html_e( 'Shortcode copied!', 'duplicatekiller' ); ?>
+	  <?php esc_html_e( 'Shortcode copied!', 'duplicate-killer' ); ?>
 	</div>
 	<?php
 }
@@ -405,7 +679,7 @@ function duplicate_killer_render_forms_ui( $plugin_key, $plugin_label, $args, $f
  *   checked_cookie bool    True only if cookie exists AND is enabled for this form
  * }
  */
-function dk_get_form_cookie_simple( array $options, string $form_name ): array {
+function duplicateKiller_get_form_cookie_simple( array $options, string $form_name ): array {
 
 	$form_cookie    = 'NULL';
 	$checked_cookie = false;
@@ -443,25 +717,24 @@ function dk_get_form_cookie_simple( array $options, string $form_name ): array {
 /**
  * Return the DK cookie value only if the Formidable cookie feature is enabled.
  *
- * New structure: global option in Formidable_page:
- * - formidable_cookie_option = "1"
- * Cookie name: dk_form_cookie
- *
  * @param array $formidable_page The full Formidable_page option array.
  * @return string Cookie value or 'NULL'
  */
-function dk_get_formidable_cookie_if_enabled(array $formidable_page) {
-    if (
-        empty($formidable_page['formidable_cookie_option']) ||
-        (string) $formidable_page['formidable_cookie_option'] !== '1' ||
-        empty($_COOKIE['dk_form_cookie'])
-    ) {
-        return 'NULL';
-    }
+function duplicateKiller_get_formidable_cookie_if_enabled( array $formidable_page ) {
 
-    return sanitize_text_field((string) $_COOKIE['dk_form_cookie']);
+	if (
+		empty( $formidable_page['formidable_cookie_option'] ) ||
+		'1' !== (string) $formidable_page['formidable_cookie_option'] ||
+		empty( $_COOKIE['dk_form_cookie'] )
+	) {
+		return 'NULL';
+	}
+
+	return sanitize_text_field(
+		wp_unslash( $_COOKIE['dk_form_cookie'] )
+	);
 }
-function dk_ip_limit_trigger($plugin, $plugin_options, $form_name) {
+function duplicateKiller_ip_limit_trigger($plugin, $plugin_options, $form_name) {
 
     // Normalize plugin key (avoid casing bugs)
     $plugin = strtolower((string) $plugin);
@@ -481,19 +754,28 @@ function dk_ip_limit_trigger($plugin, $plugin_options, $form_name) {
     $flag_key = $ip_option_key[$plugin];
 
     if (isset($plugin_options[$flag_key]) && (string) $plugin_options[$flag_key] === '1') {
-        $form_ip = dk_get_user_ip();
-        if (dk_check_ip_feature($plugin, $form_name, $form_ip)) {
+        $form_ip = duplicateKiller_get_user_ip();
+        if (duplicateKiller_check_ip_feature($plugin, $form_name, $form_ip)) {
             return true;
         }
     }
 
     return false;
 }
-function dk_check_ip_feature($form_plugin,$form_name,$form_ip){
+function duplicateKiller_check_ip_feature($form_plugin,$form_name,$form_ip){
 	$flag = false;
 	global $wpdb;
-	$table_name = $wpdb->prefix.'dk_forms_duplicate';
-	$result = $wpdb->get_row($wpdb->prepare("SELECT form_ip,form_date FROM $table_name WHERE form_plugin = %s AND form_name = %s AND form_ip = %s ORDER by form_id DESC", $form_plugin, $form_name,$form_ip));
+	$table_name = esc_sql( $wpdb->prefix . 'dk_forms_duplicate' );
+	
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Reading from plugin-owned custom table (admin-only, request-scoped).
+	$result = $wpdb->get_row( $wpdb->prepare(	
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is fixed and plugin-controlled.
+			"SELECT form_ip, form_date FROM {$table_name} WHERE form_plugin = %s AND form_name = %s AND form_ip = %s ORDER BY form_id DESC",
+			$form_plugin,
+			$form_name,
+			$form_ip
+		)
+	);
 	
     //$sql = $wpdb->prepare( "SELECT form_ip FROM {$table_name} WHERE form_plugin = %s AND form_name = %s ORDER BY form_id DESC" , $form_plugin, $form_name );
     if($result){
@@ -511,38 +793,68 @@ function dk_check_ip_feature($form_plugin,$form_name,$form_ip){
 	return $flag;
 }
 
-//inserted from 1.3.0
-function dk_get_user_ip(){
-	$ip_from_cloudflare = isCloudflare();
-	if($ip_from_cloudflare){
-		$ip_unvalided = sanitize_text_field(wp_unslash($_SERVER['HTTP_CF_CONNECTING_IP']));
-			if(filter_var($ip_unvalided, FILTER_VALIDATE_IP)){
-				$ip_valid = $ip_unvalided;
-				return apply_filters( 'dk_get_user_ip', $ip_valid );
-			}
-		} else {
-			$ip_unvalided = sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR']));
-		}
-	if(!empty($_SERVER['HTTP_CLIENT_IP'])){
-	//check ip from share internet
-		$ip_unvalided = sanitize_text_field(wp_unslash($_SERVER['HTTP_CLIENT_IP']));
+function duplicateKiller_get_user_ip() {
+	$ip_valid = 'undefined';
 
-	}elseif(!empty($_SERVER['HTTP_X_FORWARDED_FOR'])){
-	//to check ip is pass from proxy
-		$ip_unvalided = sanitize_text_field(wp_unslash($_SERVER['HTTP_X_FORWARDED_FOR']));
-	}else{
-		$ip_unvalided = sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR']));
+	// Cloudflare
+	if (
+		function_exists( 'duplicateKiller_isCloudflare' ) &&
+		duplicateKiller_isCloudflare() &&
+		isset( $_SERVER['HTTP_CF_CONNECTING_IP'] )
+	) {
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Validated via filter_var(FILTER_VALIDATE_IP).
+		$raw = wp_unslash( $_SERVER['HTTP_CF_CONNECTING_IP'] );
+		$raw = trim( $raw );
+
+		if ( filter_var( $raw, FILTER_VALIDATE_IP ) ) {
+			$ip_valid = $raw;
+			return apply_filters( 'duplicateKiller_get_user_ip', $ip_valid );
+		}
 	}
-	if(filter_var( $ip_unvalided, FILTER_VALIDATE_IP)){
-		$ip_valid = $ip_unvalided;
-	}else{
-		$ip_valid = "undefined";
+
+	// Client IP
+	if ( isset( $_SERVER['HTTP_CLIENT_IP'] ) ) {
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Validated via filter_var(FILTER_VALIDATE_IP).
+		$raw = wp_unslash( $_SERVER['HTTP_CLIENT_IP'] );
+		$raw = trim( $raw );
+
+		if ( filter_var( $raw, FILTER_VALIDATE_IP ) ) {
+			$ip_valid = $raw;
+			return apply_filters( 'duplicateKiller_get_user_ip', $ip_valid );
+		}
 	}
-	return apply_filters( 'dk_get_user_ip', $ip_valid );
+
+	// X-Forwarded-For
+	if ( isset( $_SERVER['HTTP_X_FORWARDED_FOR'] ) ) {
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Validated via filter_var(FILTER_VALIDATE_IP).
+		$raw = wp_unslash( $_SERVER['HTTP_X_FORWARDED_FOR'] );
+		$raw = trim( $raw );
+
+		$parts    = array_map( 'trim', explode( ',', $raw ) );
+		$first_ip = $parts[0] ?? '';
+
+		if ( $first_ip && filter_var( $first_ip, FILTER_VALIDATE_IP ) ) {
+			$ip_valid = $first_ip;
+			return apply_filters( 'duplicateKiller_get_user_ip', $ip_valid );
+		}
+	}
+
+	// Fallback
+	if ( isset( $_SERVER['REMOTE_ADDR'] ) ) {
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Validated via filter_var(FILTER_VALIDATE_IP).
+		$raw = wp_unslash( $_SERVER['REMOTE_ADDR'] );
+		$raw = trim( $raw );
+
+		if ( filter_var( $raw, FILTER_VALIDATE_IP ) ) {
+			$ip_valid = $raw;
+		}
+	}
+
+	return apply_filters( 'duplicateKiller_get_user_ip', $ip_valid );
 }
 
 //Validates that the IP is from cloudflare
-function ip_in_range($ip, $range) {
+function duplicateKiller_ip_in_range($ip, $range) {
     if (strpos($range, '/') == false)
         $range .= '/32';
 
@@ -555,7 +867,7 @@ function ip_in_range($ip, $range) {
     return (($ip_decimal & $netmask_decimal) == ($range_decimal & $netmask_decimal));
 }
 
-function _cloudflare_CheckIP($ip) {
+function duplicateKiller_cloudflare_CheckIP($ip) {
     $cf_ips = array(
         '173.245.48.0/20',
 		'103.21.244.0/22',
@@ -575,14 +887,14 @@ function _cloudflare_CheckIP($ip) {
     );
     $is_cf_ip = false;
     foreach ($cf_ips as $cf_ip) {
-        if (ip_in_range($ip, $cf_ip)) {
+        if (duplicateKiller_ip_in_range($ip, $cf_ip)) {
             $is_cf_ip = true;
             break;
         }
     } return $is_cf_ip;
 }
 
-function _cloudflare_Requests_Check() {
+function duplicateKiller_cloudflare_Requests_Check() {
     $flag = true;
 
     if(!isset($_SERVER['HTTP_CF_CONNECTING_IP']))   $flag = false;
@@ -592,8 +904,12 @@ function _cloudflare_Requests_Check() {
     return $flag;
 }
 
-function isCloudflare(){
-    $ipCheck = _cloudflare_CheckIP($_SERVER['REMOTE_ADDR']);
-    $requestCheck = _cloudflare_Requests_Check();
+function duplicateKiller_isCloudflare(){
+	if ( isset( $_SERVER['REMOTE_ADDR'] ) ) {
+	// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- IP validated inside duplicateKiller_cloudflare_CheckIP().
+	$remote_ip = wp_unslash( $_SERVER['REMOTE_ADDR'] );
+}
+    $ipCheck = duplicateKiller_cloudflare_CheckIP($remote_ip);
+    $requestCheck = duplicateKiller_cloudflare_Requests_Check();
     return ($ipCheck && $requestCheck);
 }

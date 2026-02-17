@@ -1,33 +1,39 @@
 <?php
 /**
  * Plugin Name: Duplicate Killer
- * Version: 1.4.8
- * Description: Stop duplicate form entries for Contact Form 7, Forminator, WPForms, Elementor Forms, Formidable Forms, and Breakdance Page Builder. Prevent duplicate submissions when users submit your forms and limit one submission per email address or other selected fields.
+ * Version: 1.5.0
+ * Description: Block duplicate form submissions by validating unique email, phone and text fields — without CAPTCHA.
  * Author: NIA
  * Author URI: https://profiles.wordpress.org/wpnia/
  * Text Domain: duplicate-killer
- * Domain Path: /languages/
+ * License: GPLv2 or later
+ * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  */
 
 	defined('ABSPATH') or die('You shall not pass!');
 	
-	define('DuplicateKiller_PLUGIN',__FILE__);
-	define('DuplicateKiller_VERSION','1.4.8');
-	define('DuplicateKiller_PLUGIN_DIR', untrailingslashit(dirname(DuplicateKiller_PLUGIN )));
+	define('DUPLICATEKILLER_PLUGIN_FILE',__FILE__);
+	define('DUPLICATEKILLER_VERSION','1.5.0');
+	define('DUPLICATEKILLER_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
+	define('DUPLICATEKILLER_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 	
-	require_once DuplicateKiller_PLUGIN_DIR.'/includes/helpers.php';
-	require_once DuplicateKiller_PLUGIN_DIR.'/includes/dk-cookie-loader.php';
-	require_once DuplicateKiller_PLUGIN_DIR.'/includes/functions_cf7.php';
-	require_once DuplicateKiller_PLUGIN_DIR.'/includes/functions_forminator.php';
-	require_once DuplicateKiller_PLUGIN_DIR.'/includes/functions_wpforms.php';
-	require_once DuplicateKiller_PLUGIN_DIR.'/includes/functions_breakdance.php';
-	require_once DuplicateKiller_PLUGIN_DIR.'/includes/functions_elementor.php';
-	require_once DuplicateKiller_PLUGIN_DIR.'/includes/functions_formidable.php';
-	require_once DuplicateKiller_PLUGIN_DIR.'/includes/functions_ninjaforms.php';
-	require_once DuplicateKiller_PLUGIN_DIR.'/includes/database.php';
-	require_once DuplicateKiller_PLUGIN_DIR.'/includes/pro.php';
-	require_once DuplicateKiller_PLUGIN_DIR.'/includes/support.php';
-
+	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/helpers.php';
+	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/dk-cookie-loader.php';
+	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/functions_cf7.php';
+	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/functions_forminator.php';
+	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/functions_wpforms.php';
+	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/functions_breakdance.php';
+	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/functions_elementor.php';
+	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/functions_formidable.php';
+	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/functions_ninjaforms.php';
+	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/database.php';
+	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/pro.php';
+	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/support.php';
+	
+//location helpers.php
+add_action('admin_init', 'duplicateKiller_handle_delete_records_request');
+add_action('admin_init', 'duplicateKiller_handle_dismiss_milestone_notice');
+add_action('admin_notices', 'duplicateKiller_admin_review_milestone_notice');
 /**
  * Create a new table in db
  */
@@ -51,12 +57,6 @@ function duplicateKiller_create_table(){
         dbDelta( $sql );
 }
 
-function dk_checked_defined_constants($name,$var){
-	if (!defined($name)) {
-		DEFINE($name,$var);
-	}
-}
-
 /**
  * Activation function hook
  */
@@ -67,26 +67,32 @@ register_activation_hook( __FILE__, 'duplicateKiller_on_activate' );
 
 //Fires when the upgrader process is complete
 function duplicateKiller_upgrade_function( $upgrader_object, $options ) {
-	dupplicateKiller_check_folder_and_database();
+	duplicateKiller_check_folder_and_database();
 }
 add_action( 'upgrader_process_complete', 'duplicateKiller_upgrade_function',10, 2);
 
 /**
  * Delete custom tables
  */
-function duplicateKiller_drop_table_uninstall(){
-    global $wpdb;
-    $table_name = $wpdb->prefix.'dk_forms_duplicate';
-    $sql = "DROP TABLE IF EXISTS $table_name";
-    $wpdb->query($sql);
-    delete_option('CF7_page');
-	delete_option('Forminator_page');
-	delete_option('WPForms_page');
-	delete_option('Breakdance_page');
-	delete_option('Elementor_page');
-	delete_option('Formidable_page');
-	delete_option('NinjaForms_page');
-	delete_option('DuplicateKillerSettings');
+function duplicateKiller_drop_table_uninstall() {
+	global $wpdb;
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Plugin uninstall: dropping plugin-owned table.
+	$wpdb->query( "DROP TABLE IF EXISTS `{$wpdb->prefix}dk_forms_duplicate`" );
+
+	// Plugin settings/options
+	delete_option( 'CF7_page' );
+	delete_option( 'Forminator_page' );
+	delete_option( 'WPForms_page' );
+	delete_option( 'Breakdance_page' );
+	delete_option( 'Elementor_page' );
+	delete_option( 'Formidable_page' );
+	delete_option( 'NinjaForms_page' );
+	delete_option( 'DuplicateKillerSettings' );
+
+	// New: review milestones + blocked duplicates counter
+	delete_option( 'duplicateKiller_duplicates_blocked_count' );
+	delete_option( 'duplicateKiller_review_milestones_dismissed' );
 }
 register_uninstall_hook(__FILE__, 'duplicateKiller_drop_table_uninstall');
 
@@ -95,7 +101,7 @@ register_uninstall_hook(__FILE__, 'duplicateKiller_drop_table_uninstall');
  * Show settings link in wordpress installed plugins page
  */
 function duplicateKiller_settings_link($links) {
-    $forms_link = '<a href="'.admin_url('admin.php?page=duplicateKiller').'">'.esc_html__('Settings', 'duplicatekiller').'</a>';
+    $forms_link = '<a href="'.admin_url('admin.php?page=duplicateKiller').'">'.esc_html__('Settings', 'duplicate-killer').'</a>';
     array_unshift($links, $forms_link);
     return $links;
 }
@@ -106,13 +112,22 @@ add_filter("plugin_action_links_$plugin", 'duplicateKiller_settings_link' );
 /**
  * Get the table data
  */
-function duplicateKiller_check_duplicate($form_plugin, $form_name){
+function duplicateKiller_check_duplicate( $form_plugin, $form_name ) {
 	global $wpdb;
-	$table_name = $wpdb->prefix.'dk_forms_duplicate';
-    $sql = $wpdb->prepare( "SELECT form_value,form_cookie FROM {$table_name} WHERE form_plugin = %s AND form_name = %s ORDER BY form_id DESC" , $form_plugin, $form_name );
-    return $wpdb->get_results($sql);
+
+	$table_name = esc_sql( $wpdb->prefix . 'dk_forms_duplicate' );
+	
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Reading from plugin-owned custom table (request-scoped, frequently changing).
+	return $wpdb->get_results(
+		$wpdb->prepare(
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is safe (plugin-owned, prefixed).
+			"SELECT form_value, form_cookie FROM {$table_name} WHERE form_plugin = %s AND form_name = %s ORDER BY form_id DESC",
+			$form_plugin,
+			$form_name
+		)
+	);
 }
-function dk_check_cookie($data){
+function duplicateKiller_check_cookie($data){
 	$option = $data['get_option'];
 	if(isset($option[$data['plugin_name']]) AND $option[$data['plugin_name']] == "1"){
 		if($data['cookie_stored'] == $data['cookie_db_set']){
@@ -158,14 +173,20 @@ function duplicateKiller_check_values($db_values, $form_name, $form_value){
 
 function duplicateKiller_check_duplicate_by_key_value($form_plugin, $form_name, $key, $value, $form_cookie = 'NULL', $checked_cookie = false) {
     global $wpdb;
-    $table_name = $wpdb->prefix . 'dk_forms_duplicate';
 
-    $results = $wpdb->get_results(
-        $wpdb->prepare(
-            "SELECT form_value,form_cookie FROM {$table_name} WHERE form_plugin = %s AND form_name = %s ORDER BY form_id DESC",
-            $form_plugin, $form_name
-        )
-    );
+	// Make Plugin Check happy: sanitize inputs as plain strings (then prepare uses %s).
+	$form_plugin = sanitize_key( (string) $form_plugin );
+	$form_name   = sanitize_text_field( (string) $form_name );
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Reading from plugin-owned custom table; request-scoped.
+	$results = $wpdb->get_results(
+		$wpdb->prepare(
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Plugin-owned table name using $wpdb->prefix.
+			"SELECT form_value, form_cookie FROM {$wpdb->prefix}dk_forms_duplicate WHERE form_plugin = %s AND form_name = %s ORDER BY form_id DESC",
+			$form_plugin,
+			$form_name
+		)
+	);
 
     foreach ($results as $row) {
         $form_data = maybe_unserialize($row->form_value);
@@ -223,25 +244,44 @@ function duplicateKiller_check_values_with_lowercase_filter($var1, $var2){
 /**
  * Include plugin style
  */
-add_action('admin_enqueue_scripts', 'duplicateKiller_callback_for_setting_up_scripts');
+add_action( 'admin_enqueue_scripts', 'duplicateKiller_callback_for_setting_up_scripts' );
 
-function duplicateKiller_callback_for_setting_up_scripts() {
-    if (!isset($_GET['page']) || $_GET['page'] !== 'duplicateKiller') {
-        return;
-    }
-		wp_register_style(
+function duplicateKiller_callback_for_setting_up_scripts( $hook ) {
+
+	if ( 'toplevel_page_duplicateKiller' !== $hook ) {
+		return;
+	}
+
+	wp_register_style(
 		'duplicateKillerStyle',
-		plugins_url('assets/style.css', DuplicateKiller_PLUGIN),
-		[],
-		DuplicateKiller_VERSION
+		plugins_url( 'assets/style.css', DUPLICATEKILLER_PLUGIN_FILE ),
+		array(),
+		DUPLICATEKILLER_VERSION
 	);
-	wp_enqueue_style('duplicateKillerStyle');
+
+	wp_enqueue_style( 'duplicateKillerStyle' );
 
 	wp_enqueue_script(
 		'duplicateKiller-admin',
-		plugins_url('assets/admin-settings.js', DuplicateKiller_PLUGIN),
-		[],
-		DuplicateKiller_VERSION,
+		plugins_url( 'assets/admin-settings.js', DUPLICATEKILLER_PLUGIN_FILE ),
+		array(),
+		DUPLICATEKILLER_VERSION,
+		true
+	);
+	
+	// Only on Support tab
+	// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- UI navigation param only.
+	$tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : '';
+	// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- UI navigation param only.
+	if ( 'support' !== $tab ) {
+		return;
+	}
+
+	wp_enqueue_script(
+		'duplicateKiller-admin-support',
+		plugins_url( 'assets/admin-support.js', DUPLICATEKILLER_PLUGIN_FILE ),
+		array(),
+		DUPLICATEKILLER_VERSION,
 		true
 	);
 }
@@ -262,12 +302,12 @@ function duplicateKiller_admin(){
         'Database', //page title
         'Database', //menu title
         'manage_options', //capability,
-        'duplicateKiller_database',//menu slug
-        'duplicateKiller_db_display_page' //callback function
+        'dk_database',//menu slug
+        'duplicateKiller_database_display_page' //callback function
     );
 }
 //add or update plugin settings
-function updateDuplicateKillerSettings($string,$value){
+function duplicateKiller_update_settings($string,$value){
 	$options = get_option('DuplicateKillerSettings');
 	if($options){
 		$options[$string] = $value;
@@ -279,7 +319,7 @@ function updateDuplicateKillerSettings($string,$value){
 		add_option("DuplicateKillerSettings",$options);
 	}
 }
-function getDuplicateKillerSetting($page,$string = ""){
+function duplicateKiller_get_setting($page,$string = ""){
 	if($page == "settings"){
 		$options = get_option('DuplicateKillerSettings');
 		if($options){
@@ -332,28 +372,51 @@ function getDuplicateKillerSetting($page,$string = ""){
 	
 	return false;
 }
-function createDuplicateKillerFolder(){
+function duplicateKiller_createUploadFolder() {
 	$upload_dir = wp_upload_dir();
-    $dkcf7_folder = $upload_dir['basedir'].'/dkcf7_uploads';
-    if(!file_exists($dkcf7_folder)){
-        wp_mkdir_p($dkcf7_folder);
-        $file = fopen($dkcf7_folder.'/index.php', 'w');
-        fwrite($file,"<?php \n\t // Silence is golden.");
-        fclose($file);
-    }
+
+	// NEW (WP.org compliant): write only inside /uploads/duplicate-killer/
+	$dk_folder = trailingslashit( $upload_dir['basedir'] ) . 'duplicate-killer';
+
+	if ( ! file_exists( $dk_folder ) ) {
+		wp_mkdir_p( $dk_folder );
+	}
+
+	$index_file = trailingslashit( $dk_folder ) . 'index.php';
+
+	if ( ! file_exists( $index_file ) ) {
+		global $wp_filesystem;
+
+		if ( ! $wp_filesystem ) {
+			require_once ABSPATH . 'wp-admin/includes/file.php';
+			WP_Filesystem();
+		}
+
+		if ( $wp_filesystem ) {
+			$wp_filesystem->put_contents(
+				$index_file,
+				"<?php\n// Silence is golden.\n",
+				FS_CHMOD_FILE
+			);
+		}
+	}
+
+	// Backward compat:
+	// Older versions stored files in /uploads/dkcf7_uploads/.
+	// We do not write there anymore, but we keep it untouched so older files remain accessible.
 }
 
-function dupplicateKiller_check_folder_and_database(){
-	 $plugin_version = getDuplicateKillerSetting("settings","plugin_version");
-	 if($plugin_version != DuplicateKiller_VERSION){
-		 updateDuplicateKillerSettings("plugin_version",DuplicateKiller_VERSION);
+function duplicateKiller_check_folder_and_database(){
+	 $plugin_version = duplicateKiller_get_setting("settings","plugin_version");
+	 if($plugin_version != DUPLICATEKILLER_VERSION){
+		 duplicateKiller_update_settings("plugin_version",DUPLICATEKILLER_VERSION);
 		 duplicateKiller_create_table();
-		 createDuplicateKillerFolder();
+		 duplicateKiller_createUploadFolder();
 	 }
 }
 add_action('admin_init', 'duplicateKiller_options');
 function duplicateKiller_options() {
-	dupplicateKiller_check_folder_and_database();
+	duplicateKiller_check_folder_and_database();
 	
 	$settings = array(
 		'CF7_page' => array(
@@ -376,7 +439,7 @@ function duplicateKiller_options() {
 		),
 		'WPForms_page' => array(
 			'title' => 'WPForms',
-			'description_cb' => 'duplicateKiller_wpforms_description',
+			'description_cb' => 'duplicateKiller_WPForms_description',
 			'validate_cb' => 'duplicateKiller_wpforms_validate_input',
 			'fields' => array(
 				array('id' => 'WPForms_forms', 'title' => '', 'callback' => 'duplicateKiller_wpforms_select_form_tag_callback'),
@@ -398,7 +461,7 @@ function duplicateKiller_options() {
 			'validate_cb' => 'duplicateKiller_elementor_validate_input',
 			'fields' => array(
 				array('id' => 'Elementor_forms', 'title' => '', 'callback' => 'duplicateKiller_elementor_select_form_tag_callback'),
-				array('id' => 'Elementor_error_message', 'title' => '', 'callback' => 'duplicateKiller_Elementor_settings_callback'),
+				array('id' => 'Elementor_error_message', 'title' => '', 'callback' => 'duplicateKiller_elementor_settings_callback'),
 			),
 		),
 		'Formidable_page' => array(
@@ -407,16 +470,16 @@ function duplicateKiller_options() {
 			'validate_cb' => 'duplicateKiller_formidable_validate_input',
 			'fields' => array(
 				array('id' => 'Formidable_forms', 'title' => '', 'callback' => 'duplicateKiller_formidable_select_form_tag_callback'),
-				array('id' => 'Formidable_error_message', 'title' => '', 'callback' => 'duplicateKiller_Formidable_settings_callback'),
+				array('id' => 'Formidable_error_message', 'title' => '', 'callback' => 'duplicateKiller_formidable_settings_callback'),
 			),
 		),
 		'NinjaForms_page' => array(
 			'title' => 'Formidable',
-			'description_cb' => 'duplicateKiller_NinjaForms_description',
-			'validate_cb' => 'duplicateKiller_NinjaForms_validate_input',
+			'description_cb' => 'duplicateKiller_ninjaforms_description',
+			'validate_cb' => 'duplicateKiller_ninjaforms_validate_input',
 			'fields' => array(
-				array('id' => 'NinjaForms_forms', 'title' => '', 'callback' => 'duplicateKiller_NinjaForms_select_form_tag_callback'),
-				array('id' => 'NinjaForms_error_message', 'title' => '', 'callback' => 'duplicateKiller_NinjaForms_settings_callback'),
+				array('id' => 'NinjaForms_forms', 'title' => '', 'callback' => 'duplicateKiller_ninjaforms_select_form_tag_callback'),
+				array('id' => 'NinjaForms_error_message', 'title' => '', 'callback' => 'duplicateKiller_ninjaforms_settings_callback'),
 			),
 		),
 		'Pro_page' => array(
@@ -461,7 +524,7 @@ function duplicateKiller_options() {
  * Display Page
 */
 
-function dk_do_settings_sections( $page ) {
+function duplicateKiller_do_settings_sections( $page ) {
 	global $wp_settings_sections, $wp_settings_fields;
 
 	if ( ! isset( $wp_settings_sections[ $page ] ) ) {
@@ -469,8 +532,8 @@ function dk_do_settings_sections( $page ) {
 	}
 
 	foreach ( (array) $wp_settings_sections[ $page ] as $section ) {
-		if ( $section['title'] ) {
-			echo "<h3>{$section['title']}</h3>\n";
+		if ( ! empty( $section['title'] ) ) {
+			echo '<h3>' . esc_html( $section['title'] ) . "</h3>\n";
 		}
 
 		if ( $section['callback'] ) {
@@ -484,12 +547,12 @@ function dk_do_settings_sections( $page ) {
 			continue;
 		}
 		echo '<div class="settings-form-wrapper">';
-		dk_do_settings_fields( $page, $section['id'] );
+		duplicateKiller_do_settings_fields( $page, $section['id'] );
 		echo '</div>';
 	}
 }
 
-function dk_do_settings_fields( $page, $section ) {
+function duplicateKiller_do_settings_fields( $page, $section ) {
 	global $wp_settings_fields;
 
 	if ( ! isset( $wp_settings_fields[ $page ][ $section ] ) ) {
@@ -501,9 +564,9 @@ function dk_do_settings_fields( $page, $section ) {
 
 		echo '<p>';
 		if ( ! empty( $field['args']['label_for'] ) ) {
-			echo '<label for="' . esc_attr( $field['args']['label_for'] ) . '">' . $field['title'] . '</label>';
+			echo '<label for="' . esc_attr( $field['args']['label_for'] ) . '">' . esc_attr($field['title']) . '</label>';
 		} else {
-			echo $field['title'];
+			echo esc_attr($field['title']);
 		}
 
 		call_user_func( $field['callback'], $field['args'] );
@@ -515,65 +578,87 @@ function dk_do_settings_fields( $page, $section ) {
 function duplicateKiller_display_page() {
 ?>
     <div class="wrap">
-        <h2><?php esc_html_e('DuplicateKiller','duplicatekiller');?></h2>  
+        <h2><?php esc_html_e('DuplicateKiller','duplicate-killer');?></h2>  
         <?php settings_errors();   
-            $active_tab = isset($_GET[ 'tab' ]) ? sanitize_text_field($_GET['tab']) : 'first';  
-        ?>  
+            $allowed_tabs = array(
+				'first',
+				'second',
+				'third',
+				'fourth',
+				'fifth',
+				'sixth',
+				'seventh',
+				'pro',
+				'support',
+			);
+
+			$active_tab = 'first';
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading a UI navigation param (non-destructive).
+			if ( isset( $_GET['tab'] ) ) {
+				// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading a UI navigation param (non-destructive).
+				$tab = sanitize_key( wp_unslash( $_GET['tab'] ) );
+
+				if ( in_array( $tab, $allowed_tabs, true ) ) {
+					$active_tab = $tab;
+				}
+			}
+			?>
         <h2 class="nav-tab-wrapper">  
-            <a href="?page=duplicateKiller&tab=first" class="nav-tab <?php echo esc_attr($active_tab == 'first' ? 'nav-tab-active' : ''); ?>"><?php esc_html_e('Contact Form 7','duplicatekiller');?>
+            <a href="?page=duplicateKiller&tab=first" class="nav-tab <?php echo esc_attr($active_tab == 'first' ? 'nav-tab-active' : ''); ?>"><?php esc_html_e('Contact Form 7','duplicate-killer');?>
 			</a>  
-			<a href="?page=duplicateKiller&tab=second" class="nav-tab <?php echo esc_attr($active_tab == 'second' ? 'nav-tab-active' : ''); ?>"><?php esc_html_e('Forminator','duplicatekiller');?>
+			<a href="?page=duplicateKiller&tab=second" class="nav-tab <?php echo esc_attr($active_tab == 'second' ? 'nav-tab-active' : ''); ?>"><?php esc_html_e('Forminator','duplicate-killer');?>
 			</a>
-			<a href="?page=duplicateKiller&tab=third" class="nav-tab <?php echo esc_attr($active_tab == 'third' ? 'nav-tab-active' : ''); ?>"><?php esc_html_e('WPForms Free','duplicatekiller');?></a>
-			<a href="?page=duplicateKiller&tab=fourth" class="nav-tab <?php echo esc_attr($active_tab == 'fourth' ? 'nav-tab-active' : ''); ?>"><?php esc_html_e('Breakdance','duplicatekiller');?></a>
-			<a href="?page=duplicateKiller&tab=fifth" class="nav-tab <?php echo esc_attr($active_tab == 'fifth' ? 'nav-tab-active' : ''); ?>"><?php esc_html_e('Elementor','duplicatekiller');?></a>
+			<a href="?page=duplicateKiller&tab=third" class="nav-tab <?php echo esc_attr($active_tab == 'third' ? 'nav-tab-active' : ''); ?>"><?php esc_html_e('WPForms Free','duplicate-killer');?></a>
+			<a href="?page=duplicateKiller&tab=fourth" class="nav-tab <?php echo esc_attr($active_tab == 'fourth' ? 'nav-tab-active' : ''); ?>"><?php esc_html_e('Breakdance','duplicate-killer');?></a>
+			<a href="?page=duplicateKiller&tab=fifth" class="nav-tab <?php echo esc_attr($active_tab == 'fifth' ? 'nav-tab-active' : ''); ?>"><?php esc_html_e('Elementor','duplicate-killer');?></a>
 			
-			<a href="?page=duplicateKiller&tab=sixth" class="nav-tab <?php echo esc_attr($active_tab == 'sixth' ? 'nav-tab-active' : ''); ?>"><?php esc_html_e('Formidable','duplicatekiller');?></a>
+			<a href="?page=duplicateKiller&tab=sixth" class="nav-tab <?php echo esc_attr($active_tab == 'sixth' ? 'nav-tab-active' : ''); ?>"><?php esc_html_e('Formidable','duplicate-killer');?></a>
 			
-			<a href="?page=duplicateKiller&tab=seventh" class="nav-tab <?php echo esc_attr($active_tab == 'seventh' ? 'nav-tab-active' : ''); ?>"><?php esc_html_e('Ninja Forms','duplicatekiller');?></a>
+			<a href="?page=duplicateKiller&tab=seventh" class="nav-tab <?php echo esc_attr($active_tab == 'seventh' ? 'nav-tab-active' : ''); ?>"><?php esc_html_e('Ninja Forms','duplicate-killer');?></a>
 			
 			<a href="?page=duplicateKiller&tab=pro"
 			   class="nav-tab dk-pro-tab <?php echo esc_attr($active_tab == 'pro' ? 'nav-tab-active' : ''); ?>">
-			   <?php esc_html_e('PRO','duplicatekiller');?>
+			   <?php esc_html_e('PRO','duplicate-killer');?>
 			</a>
-			<a href="?page=duplicateKiller&tab=support" class="nav-tab <?php echo esc_attr($active_tab == 'support' ? 'nav-tab-active' : ''); ?>"><?php esc_html_e('Get support','duplicatekiller');?></a>
+			<a href="?page=duplicateKiller&tab=support" class="nav-tab <?php echo esc_attr($active_tab == 'support' ? 'nav-tab-active' : ''); ?>"><?php esc_html_e('Get support','duplicate-killer');?></a>
         </h2>  
         <form method="post" action="options.php">  
-            <?php 
+            <?php
+			wp_nonce_field('dk_delete_logs', 'dk_nonce' );
             if($active_tab == 'first') {  
                 settings_fields('CF7_page');
-				dk_do_settings_sections('CF7_page');
+				duplicateKiller_do_settings_sections('CF7_page');
 				submit_button();
             }elseif($active_tab == 'second') {
                 settings_fields('Forminator_page');
-				dk_do_settings_sections('Forminator_page');
+				duplicateKiller_do_settings_sections('Forminator_page');
 				submit_button();
             }elseif($active_tab == 'third') {
                 settings_fields('WPForms_page');
-				dk_do_settings_sections('WPForms_page');
+				duplicateKiller_do_settings_sections('WPForms_page');
 				submit_button();
             }elseif($active_tab == 'fourth') {
                 settings_fields('Breakdance_page');
-				dk_do_settings_sections('Breakdance_page');
+				duplicateKiller_do_settings_sections('Breakdance_page');
 				submit_button();	
             }elseif($active_tab == 'fifth') {
                 settings_fields('Elementor_page');
-				dk_do_settings_sections('Elementor_page');
+				duplicateKiller_do_settings_sections('Elementor_page');
 				submit_button();
 			}elseif($active_tab == 'sixth') {
                 settings_fields('Formidable_page');
-				dk_do_settings_sections('Formidable_page');
+				duplicateKiller_do_settings_sections('Formidable_page');
 				submit_button();
 			}elseif($active_tab == 'seventh') {
                 settings_fields('NinjaForms_page');
-				dk_do_settings_sections('NinjaForms_page');
+				duplicateKiller_do_settings_sections('NinjaForms_page');
 				submit_button();				
             }elseif($active_tab == 'pro') {
                 settings_fields('Pro_page');
-				dk_do_settings_sections('Pro_page');
+				duplicateKiller_do_settings_sections('Pro_page');
             }elseif ($active_tab == 'support') {
 				settings_fields('Get_support'); 
-				dk_do_settings_sections('Get_support');
+				duplicateKiller_do_settings_sections('Get_support');
 			}
             ?>
         </form> 

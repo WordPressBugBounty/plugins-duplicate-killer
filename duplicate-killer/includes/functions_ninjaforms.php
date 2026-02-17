@@ -6,7 +6,7 @@ defined( 'ABSPATH' ) or die( 'You shall not pass!' );
  * Runs on action settings right before actions execute.
  */
 add_action('ninja_forms_loaded', function () {
-    add_filter('ninja_forms_run_action_settings', 'dk_nf_hotfix_payment_total_type', 1, 3);
+    add_filter('ninja_forms_run_action_settings', 'duplicateKiller_nf_hotfix_payment_total_type', 1, 3);
 });
 
 /**
@@ -15,7 +15,7 @@ add_action('ninja_forms_loaded', function () {
  * @param int   $form_id   Form ID.
  * @return array
  */
-function dk_nf_hotfix_payment_total_type(array $settings, int $action_id, int $form_id): array
+function duplicateKiller_nf_hotfix_payment_total_type(array $settings, int $action_id, int $form_id): array
 {
     // If Ninja Forms stores an empty payment_total but forgets payment_total_type,
     // it can trigger PHP warnings in MergeTags processing. Ensure the key exists.
@@ -105,15 +105,17 @@ function duplicateKiller_ninjaforms_before_send_email( $form_data ) {
 	// =========================
 	// 1) IP check
 	// =========================
-	if ( dk_ip_limit_trigger(DK_NINJA_FORMS, $ninja_page, $form_name ) ) {
+	if ( duplicateKiller_ip_limit_trigger(DK_NINJA_FORMS, $ninja_page, $form_name ) ) {
 		$message = ! empty( $ninja_page['ninjaforms_error_message_limit_ip'] )
 			? (string) $ninja_page['ninjaforms_error_message_limit_ip']
 			: 'This IP has been already submitted.';
 
 		// REQUIRED: field error to actually stop submission
-		$first_fid = dk_nf_get_first_field_id( $fields );
+		$first_fid = duplicateKiller_nf_get_first_field_id( $fields );
 		if ( $first_fid > 0 ) {
 			$form_data['errors']['fields'][ $first_fid ] = $message;
+			// Increment blocked duplicates counter
+			duplicateKiller_increment_duplicates_blocked_count();
 		}
 
 		return $form_data;
@@ -122,7 +124,7 @@ function duplicateKiller_ninjaforms_before_send_email( $form_data ) {
 	// 2) Duplicate field check (by FIELD_ID toggles in config)
 	// =========================
 	
-	$cookie = dk_get_form_cookie_simple($ninja_page, $form_name);
+	$cookie = duplicateKiller_get_form_cookie_simple($ninja_page, $form_name);
 
 	$form_cookie = $cookie['form_cookie'];
 	$checked_cookie = $cookie['checked_cookie'];
@@ -183,7 +185,8 @@ function duplicateKiller_ninjaforms_before_send_email( $form_data ) {
 			// Block submission: form-level + field-level errors
 			$form_data['errors']['form']           = $duplicate_message;
 			$form_data['errors']['fields'][ $fid ] = $duplicate_message;
-
+			// Increment blocked duplicates counter
+			duplicateKiller_increment_duplicates_blocked_count();
 			return $form_data;
 		}
 	}
@@ -192,11 +195,12 @@ function duplicateKiller_ninjaforms_before_send_email( $form_data ) {
 	// 3) Save to DB
 	// =========================
 	$ip_enabled = ( isset( $ninja_page['ninjaforms_user_ip'] ) && (string) $ninja_page['ninjaforms_user_ip'] === '1' );
-	$form_ip    = $ip_enabled ? dk_get_user_ip() : 'NULL';
+	$form_ip    = $ip_enabled ? duplicateKiller_get_user_ip() : 'NULL';
 
 	$form_value = serialize( $storage_fields );
 	$form_date  = current_time( 'Y-m-d H:i:s' );
 
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- Inserting into plugin-owned custom table.
 	$wpdb->insert(
 		$table_name,
 		array(
@@ -212,7 +216,7 @@ function duplicateKiller_ninjaforms_before_send_email( $form_data ) {
 	return $form_data;
 }
 
-function dk_nf_get_first_field_id( array $fields ): int {
+function duplicateKiller_nf_get_first_field_id( array $fields ): int {
 	foreach ( $fields as $k => $field ) {
 		if ( is_numeric( $k ) ) {
 			return (int) $k;
@@ -381,43 +385,6 @@ function duplicateKiller_ninjaforms_validate_input( $input ) {
 
 	$output = array();
 
-	// DELETE records if checkbox is checked (Ninja Forms)
-	if (isset($_POST['NinjaForms_delete_records'] ) ) {
-		$table       = $wpdb->prefix . 'dk_forms_duplicate';
-
-		// If there is only one checkbox checked and it is NOT an array
-		// (ex: name="NinjaForms_delete_records[Some Form]")
-		if ( ! is_array( $_POST['NinjaForms_delete_records'] ) ) {
-
-			$form_name = sanitize_text_field( wp_unslash( $_POST['NinjaForms_delete_records'] ) );
-			error_log($form_name);
-			$wpdb->delete(
-				$table,
-				array(
-					'form_plugin' => DK_NINJA_FORMS,
-					'form_name'   => $form_name,
-				)
-			);
-
-		} else {
-
-			// If there are multiple checkboxes checked
-			foreach ( $_POST['NinjaForms_delete_records'] as $raw_form_name => $delete_flag ) {
-				// Checkbox values can come as "1" or 1
-				if ( (string) $delete_flag === '1' ) {
-					$form_name = sanitize_text_field( wp_unslash( $raw_form_name ) );
-					$wpdb->delete(
-						$table,
-						array(
-							'form_plugin' => DK_NINJA_FORMS,
-							'form_name'   => $form_name,
-						)
-					);
-				}
-			}
-		}
-	}
-
 	// Create our array for storing the validated options (keep numeric field keys, add labels)
 	foreach ( $input as $form_key => $value ) {
 
@@ -492,10 +459,10 @@ function duplicateKiller_ninjaforms_validate_input( $input ) {
 	}
 
 	// Return the array processing any additional functions filtered by this action
-	return apply_filters( 'ninjaforms_error_message', $output, $input );
+	return apply_filters( 'duplicateKiller_ninjaforms_error_message', $output, $input );
 }
 
-function dk_ninjaforms_is_ready(): bool {
+function duplicateKiller_ninjaforms_is_ready(): bool {
 
     // 1) Is Ninja Forms available (core)?
     // Prefer the public function Ninja_Forms(), but also allow class-based detection.
@@ -540,7 +507,7 @@ function dk_ninjaforms_is_ready(): bool {
 function duplicateKiller_ninjaforms_description() {
 
     // Check if Ninja Forms is present and ready
-    if ( ! dk_ninjaforms_is_ready() ) {
+    if ( ! duplicateKiller_ninjaforms_is_ready() ) {
         echo '<h3 style="color:red"><strong>' .
             esc_html__('Ninja Forms is not activated! Please activate it in order to continue.', 'duplicate-killer') .
         '</strong></h3>';
@@ -624,7 +591,7 @@ function duplicateKiller_ninjaforms_select_form_tag_callback($args){
 
 	$forms_ids = ""; // [ 'Form name' => 123 ]
 
-	duplicate_killer_render_forms_ui(
+	duplicateKiller_render_forms_ui(
 		DK_NINJA_FORMS,
 		DK_NINJA_FORMS_LABEL,
 		$args,
