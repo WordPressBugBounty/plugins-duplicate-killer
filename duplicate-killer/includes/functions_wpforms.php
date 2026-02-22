@@ -217,7 +217,14 @@ function duplicateKiller_wpforms_settings_callback($args){
 	<h4 class="dk-form-header">Duplicate Killer settings</h4>
 	<div class="dk-set-error-message">
 		<fieldset class="dk-fieldset">
-		<legend><strong>Set error message:</strong></legend>
+		<legend>
+			<strong>Set error message:</strong>
+			<small style="font-weight:normal; margin-left:8px;">
+				<a href="https://verselabwp.com/what-is-the-set-error-message-field-in-duplicate-killer/" target="_blank" rel="noopener">
+					What is this?
+				</a>
+			</small>
+		</legend>
 		<span>Warn the user that the value inserted has been already submitted!</span>
 		</br>
 		<input type="text" size="70" name="<?php echo esc_attr($args[0].'[wpforms_error_message]');?>" value="<?php echo esc_attr($stored_error_message);?>"></input>
@@ -226,7 +233,14 @@ function duplicateKiller_wpforms_settings_callback($args){
 	</br>
 	<div class="dk-set-unique-entries-per-user">
 		<fieldset class="dk-fieldset">
-		<legend><strong>Unique entries per user</strong></legend>
+		<legend>
+			<strong>Unique entries per user:</strong>
+			<small style="font-weight:normal; margin-left:8px;">
+				<a href="https://verselabwp.com/unique-entries-per-user-in-wordpress-how-to-use-it/" target="_blank" rel="noopener">
+					How to use it?
+				</a>
+			</small>
+		</legend>
 		<strong>This feature use cookies.</strong><span> Please note that multiple users <strong>can submit the same entry</strong>, but a single user cannot submit an entry they have already submitted before.</span>
 		</br>
 		</br>
@@ -243,7 +257,14 @@ function duplicateKiller_wpforms_settings_callback($args){
 	</div>
 	<div class="dk-limit_submission_by_ip">
 		<fieldset class="dk-fieldset">
-		<legend><strong>Limit submissions by IP address for 7 days for all forms!</strong></legend>
+		<legend>
+			<strong>Limit submissions by IP address</strong>
+			<small style="font-weight:normal; margin-left:8px;">
+				<a href="https://verselabwp.com/limit-submissions-by-ip-address-in-wordpress-free-pro/" target="_blank" rel="noopener">
+					How it works
+				</a>
+			</small>
+		</legend>
 		<strong>This feature </strong><span> restrict form entries based on IP address for 7 days</span>
 		</br>
 		</br>

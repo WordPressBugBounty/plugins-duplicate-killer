@@ -239,7 +239,9 @@ function duplicateKiller_elementor_get_forms(): array {
 		// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Admin-only scan for Elementor forms (paged, IDs only).
 		$post_ids = get_posts(
 			array(
-				'post_type'      => array( 'post', 'page' ), // Add more post types if needed (e.g. 'elementor_library').
+				'post_type'      => post_type_exists( 'elementor_library' )
+					? array( 'post', 'page', 'elementor_library' )
+					: array( 'post', 'page' ),
 				'posts_per_page' => $per_page,
 				'paged'          => $paged,
 				'fields'         => 'ids',
@@ -257,6 +259,9 @@ function duplicateKiller_elementor_get_forms(): array {
 
 		foreach ( $post_ids as $post_id ) {
 			$post_id = (int) $post_id;
+			if ( $post_id <= 0 ) {
+				continue;
+			}
 
 			$meta_raw = get_post_meta( $post_id, '_elementor_data', true );
 			if ( empty( $meta_raw ) ) {
@@ -267,13 +272,20 @@ function duplicateKiller_elementor_get_forms(): array {
 			$data = $meta_raw;
 
 			if ( is_string( $meta_raw ) ) {
-				$decoded = json_decode( $meta_raw, true );
+				// IMPORTANT: wp_unslash to prevent json_decode failures on slashed JSON.
+				$decoded = json_decode( wp_unslash( $meta_raw ), true );
 				if ( is_array( $decoded ) ) {
 					$data = $decoded;
 				} else {
 					$maybe = maybe_unserialize( $meta_raw );
 					if ( is_array( $maybe ) ) {
 						$data = $maybe;
+					} else {
+						// Last resort: try decoding the raw string (in case it's not slashed).
+						$decoded2 = json_decode( $meta_raw, true );
+						if ( is_array( $decoded2 ) ) {
+							$data = $decoded2;
+						}
 					}
 				}
 			}
@@ -282,8 +294,11 @@ function duplicateKiller_elementor_get_forms(): array {
 				continue;
 			}
 
-			// DFS: Elementor tree is an array of root elements, each may contain "elements".
-			$stack = $data;
+			// Normalize root: Elementor data is usually a numeric array of nodes,
+			// but in some edge cases it can be a single associative node.
+			$stack = array();
+			$is_list = array_keys( $data ) === range( 0, count( $data ) - 1 );
+			$stack   = $is_list ? $data : array( $data );
 
 			while ( ! empty( $stack ) ) {
 				$node = array_pop( $stack );
@@ -363,6 +378,7 @@ function duplicateKiller_elementor_get_forms(): array {
 					}
 
 					// Field id: prefer custom_id; fallback to _id; fallback to label.
+					// Keep the existing field_ prefix behavior to avoid breaking saved option keys.
 					$fid = '';
 					if ( ! empty( $f['custom_id'] ) ) {
 						$fid = (string) $f['custom_id'];
@@ -394,11 +410,15 @@ function duplicateKiller_elementor_get_forms(): array {
 		$clean = array();
 
 		foreach ( $bundle['fields'] as $f ) {
-			if ( isset( $seen[ $f['id'] ] ) ) {
+			$fid = (string) ( $f['id'] ?? '' );
+			if ( '' === $fid ) {
 				continue;
 			}
-			$seen[ $f['id'] ] = true;
-			$clean[]          = $f;
+			if ( isset( $seen[ $fid ] ) ) {
+				continue;
+			}
+			$seen[ $fid ] = true;
+			$clean[]      = $f;
 		}
 
 		$out[ $key ]['fields'] = array_values( $clean );
@@ -628,7 +648,14 @@ function duplicateKiller_elementor_settings_callback($args){
 	<h4 class="dk-form-header">Duplicate Killer settings</h4>
 	<div class="dk-set-error-message">
 		<fieldset class="dk-fieldset">
-		<legend><strong>Set error message:</strong></legend>
+		<legend>
+			<strong>Set error message:</strong>
+			<small style="font-weight:normal; margin-left:8px;">
+				<a href="https://verselabwp.com/what-is-the-set-error-message-field-in-duplicate-killer/" target="_blank" rel="noopener">
+					What is this?
+				</a>
+			</small>
+		</legend>
 		<span>Warn the user that the value inserted has been already submitted!</span>
 		</br>
 		<input type="text" size="70" name="<?php echo esc_attr($args[0].'[elementor_error_message]');?>" value="<?php echo esc_attr($stored_error_message);?>"></input>
@@ -637,7 +664,14 @@ function duplicateKiller_elementor_settings_callback($args){
 	</br>
 	<div class="dk-set-unique-entries-per-user">
 		<fieldset class="dk-fieldset">
-		<legend><strong>Unique entries per user</strong></legend>
+		<legend>
+			<strong>Unique entries per user:</strong>
+			<small style="font-weight:normal; margin-left:8px;">
+				<a href="https://verselabwp.com/unique-entries-per-user-in-wordpress-how-to-use-it/" target="_blank" rel="noopener">
+					How to use it?
+				</a>
+			</small>
+		</legend>
 		<strong>This feature use cookies.</strong><span> Please note that multiple users <strong>can submit the same entry</strong>, but a single user cannot submit an entry they have already submitted before.</span>
 		</br>
 		</br>
@@ -654,7 +688,14 @@ function duplicateKiller_elementor_settings_callback($args){
 	</div>
 	<div class="dk-limit_submission_by_ip">
 		<fieldset class="dk-fieldset">
-		<legend><strong>Limit submissions by IP address for 7 days for all forms!</strong></legend>
+		<legend>
+			<strong>Limit submissions by IP address</strong>
+			<small style="font-weight:normal; margin-left:8px;">
+				<a href="https://verselabwp.com/limit-submissions-by-ip-address-in-wordpress-free-pro/" target="_blank" rel="noopener">
+					How it works
+				</a>
+			</small>
+		</legend>
 		<strong>This feature </strong><span> restrict form entries based on IP address for 7 days</span>
 		</br>
 		</br>

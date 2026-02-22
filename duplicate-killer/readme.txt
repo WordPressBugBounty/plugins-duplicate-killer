@@ -1,5 +1,5 @@
 === Duplicate Killer – Prevent Duplicate Form Submissions ===
-Version: 1.5.0
+Version: 1.5.1
 Author: NIA
 Author URI: https://profiles.wordpress.org/wpnia/
 Contributors: wpnia
@@ -7,7 +7,7 @@ Tags: duplicates, forms, validation, elementor, cf7
 Donate link: https://www.paypal.com/paypalme/wpnia
 Requires at least: 5.2
 Tested up to: 6.9
-Stable tag: 1.5.0
+Stable tag: 1.5.1
 Requires PHP: 5.6.20
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -71,13 +71,14 @@ This feature works with Formidable Forms native fields, requires no additional c
 
 Does not affect form design or user experience.
 
-== NEW: Elementor Forms Support ==
+== Elementor Forms Support ==
 
-Duplicate Killer now fully supports Elementor Forms.
+Duplicate Killer fully supports Elementor Forms.
 
 You can prevent duplicate submissions in Elementor contact forms, lead forms and popups by enforcing unique values such as email or phone number.
 
-This feature works with Elementor’s native form widget and requires no additional configuration.
+NEW in <strong>PRO</strong> version:
+Elementor Group Mode allows you to treat multiple forms with the same Form Name as one unified protected form — even if Elementor generates different form IDs internally.
 
 
 == Plugin Integrations ==
@@ -173,10 +174,16 @@ Use the PRO version if your site has multiple forms with different purposes — 
 5. Works with popular WordPress form plugins
 
 == Upgrade Notice ==
-= 1.5.0 =
-Track how many duplicate submissions your site has been protected from and unlock milestone insights inside the admin.
+= 1.5.1 =
+New PRO feature for Elementor: Enable Group Mode — treat forms with the same Form Name as one form across pages. Minor Elementor fixes included.
 
 == Changelog ==
+
+= 1.5.1 =
+* Minor fix for Elementor “Show Forms” integration.
+* Added new PRO feature: Enable Group Mode (Elementor).
+* Group Mode allows treating Elementor forms with the same Form Name as a single form across multiple pages.
+* Improved Elementor compatibility and stability.
 
 = 1.5.0 =
 * New milestone system: track total duplicates blocked.

@@ -339,6 +339,25 @@ function duplicateKiller_render_forms_ui( $plugin_key, $plugin_label, $args, $fo
 	<h2 class="dk-form-header">
 		<?php echo esc_html( sprintf( '%s Forms Overview', $plugin_label ) ); ?>
 	</h2>
+	<?php if ( $plugin_label === 'Elementor' ) : ?>
+
+		<div class="dk-locked dk-elementor-group-mode" style="margin:15px 0;padding:12px 15px;background:#f8f9fa;border-left:4px solid #0073aa;">
+			<label style="display:flex;align-items:center;gap:8px;font-weight:600;cursor:not-allowed;">
+				<input type="checkbox" >
+				Enable Group Mode (Treat forms with the same Form Name as one form)
+				<span style="font-size:11px;font-weight:600;color:#fff;background:#2271b1;padding:2px 6px;border-radius:3px;">
+					PRO
+				</span>
+			</label>
+
+			<p style="margin:6px 0 0 24px;font-size:13px;color:#555;">
+				When enabled, all Elementor forms that share the same Form Name will be treated as a single form.
+				Recommended if you duplicated forms across multiple pages.
+			</p>
+
+		</div>
+
+<?php endif; ?>
 	
 	<?php $dk_index = 0; ?>
 	<?php foreach ( $forms as $form_name => $tags ) : ?>
@@ -385,7 +404,16 @@ function duplicateKiller_render_forms_ui( $plugin_key, $plugin_label, $args, $fo
 				<?php echo esc_html( $form_key ); ?>
 			</h4>
 
-			<h4><?php esc_html_e( 'Choose the unique fields', 'duplicate-killer' ); ?></h4>
+			<h4>
+				<?php esc_html_e( 'Choose the unique fields', 'duplicate-killer' ); ?>
+				<small style="font-weight:normal; margin-left:8px;">
+					<a href="https://verselabwp.com/choose-the-unique-fields-in-wordpress-forms-how-it-works/" 
+					   target="_blank" 
+					   rel="noopener">
+						What to choose?
+					</a>
+				</small>
+			</h4>
 
 			<?php
 				/**
