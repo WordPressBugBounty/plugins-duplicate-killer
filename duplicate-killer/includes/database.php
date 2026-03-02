@@ -12,7 +12,16 @@ class duplicateKiller_DisplayDatabase{
     public function list_table_page(){
 		$ListTable = new duplicateKiller_DatabaseMainListTable();
 		$ListTable->prepare_items();
+		
+		$upgrade_url = add_query_arg(
+			array(
+				'page' => 'duplicateKiller',
+				'tab'  => 'pro',
+			),
+			admin_url( 'admin.php' )
+		);
 
+		$upgrade_url = esc_url( $upgrade_url );
 		$total_blocked = (int) get_option( 'duplicateKiller_duplicates_blocked_count', 0 );
 		?>
 			<div class="wrap">
@@ -22,16 +31,192 @@ class duplicateKiller_DisplayDatabase{
 				<?php if ( $total_blocked > 0 ) : ?>
 					<div class="notice notice-info" style="margin: 10px 0 15px; padding: 10px 12px;">
 						<p style="margin:0;">
-							<strong><?php esc_html_e( 'Total duplicates blocked:', 'duplicate-killer' ); ?></strong>
+							<strong><?php esc_html_e( 'Total forms duplicates blocked:', 'duplicate-killer' ); ?></strong>
 							<?php echo esc_html( number_format_i18n( $total_blocked ) ); ?>
 						</p>
 					</div>
-				<?php endif; ?>
+				<?php endif;
+				if ( class_exists( 'duplicateKiller_WooCommerce' ) && class_exists( 'WooCommerce' ) ) {
+					$wc = duplicateKiller_WooCommerce::get_db_notice_summary();
 
-				<form method="post" action="">
+					if ( ! empty( $wc['count'] ) ) : ?>
+						<div class="notice notice-info" style="margin: 10px 0 15px; padding: 10px 12px;">
+							<p style="margin:0;">
+								<strong><?php esc_html_e( 'WooCommerce duplicates logged:', 'duplicate-killer' ); ?></strong>
+								<?php echo esc_html( number_format_i18n( (int) $wc['count'] ) ); ?>
+
+								<?php if ( ! empty( $wc['last_date'] ) ) : ?>
+									<br>
+									<strong><?php esc_html_e( 'Last WooCommerce duplicate:', 'duplicate-killer' ); ?></strong>
+									<?php echo esc_html( (string) $wc['last_date'] ); ?>
+								<?php endif; ?>
+							</p>
+						</div>
+						<div class="duplicateKiller_analytics_wrap duplicateKiller_analytics_wrap--locked">
+
+						  <!-- Header -->
+						  <div class="duplicateKiller_analytics_header">
+							<div class="duplicateKiller_analytics_title">WooCommerce Duplicate Analytics</div>
+							<button class="duplicateKiller_btn duplicateKiller_btn--secondary" type="button" disabled>
+							  Export CSV
+							</button>
+						  </div>
+
+						  <div class="duplicateKiller_analytics_grid">
+
+							<!-- Trend -->
+							<div class="duplicateKiller_card duplicateKiller_card--trend duplicateKiller_blur">
+							  <div class="duplicateKiller_card_title">Trend (last 14 days)</div>
+
+							  <div class="duplicateKiller_trend_row">
+								<div class="duplicateKiller_trend_date">2026-02-26</div>
+								<div class="duplicateKiller_trend_bar"><div class="duplicateKiller_trend_fill" style="width: 28%;"></div></div>
+								<div class="duplicateKiller_trend_count">(3)</div>
+							  </div>
+
+							  <div class="duplicateKiller_trend_row">
+								<div class="duplicateKiller_trend_date">2026-02-28</div>
+								<div class="duplicateKiller_trend_bar"><div class="duplicateKiller_trend_fill" style="width: 55%;"></div></div>
+								<div class="duplicateKiller_trend_count">(9)</div>
+							  </div>
+
+							  <div class="duplicateKiller_trend_row">
+								<div class="duplicateKiller_trend_date">2026-03-01</div>
+								<div class="duplicateKiller_trend_bar"><div class="duplicateKiller_trend_fill" style="width: 95%;"></div></div>
+								<div class="duplicateKiller_trend_count">(28)</div>
+							  </div>
+
+							  <div class="duplicateKiller_trend_row">
+								<div class="duplicateKiller_trend_date">2026-03-02</div>
+								<div class="duplicateKiller_trend_bar"><div class="duplicateKiller_trend_fill" style="width: 40%;"></div></div>
+								<div class="duplicateKiller_trend_count">(9)</div>
+							  </div>
+							</div>
+
+							<!-- Top KPI cards -->
+							<div class="duplicateKiller_card duplicateKiller_card--kpi duplicateKiller_blur">
+							  <div class="duplicateKiller_kpi_value">49</div>
+							  <div class="duplicateKiller_kpi_label">Total duplicates logged</div>
+							</div>
+
+							<div class="duplicateKiller_card duplicateKiller_card--kpi duplicateKiller_blur">
+							  <div class="duplicateKiller_kpi_value">37</div>
+							  <div class="duplicateKiller_kpi_label">Last 24 hours</div>
+							</div>
+
+							<div class="duplicateKiller_card duplicateKiller_card--kpi duplicateKiller_blur">
+							  <div class="duplicateKiller_kpi_value">49</div>
+							  <div class="duplicateKiller_kpi_label">Last 7 days</div>
+							</div>
+
+							<!-- Second row KPI cards -->
+							<div class="duplicateKiller_card duplicateKiller_card--kpi duplicateKiller_blur">
+							  <div class="duplicateKiller_kpi_value">4</div>
+							  <div class="duplicateKiller_kpi_label">Unique fingerprints (sample)</div>
+							</div>
+
+							<div class="duplicateKiller_card duplicateKiller_card--kpi duplicateKiller_blur">
+							  <div class="duplicateKiller_kpi_value">32</div>
+							  <div class="duplicateKiller_kpi_label">Orders created (sample)</div>
+							</div>
+
+							<div class="duplicateKiller_card duplicateKiller_card--kpi duplicateKiller_blur">
+							  <div class="duplicateKiller_kpi_value">800</div>
+							  <div class="duplicateKiller_kpi_label">Rows scanned</div>
+							</div>
+
+							<!-- Bottom cards -->
+							<div class="duplicateKiller_card duplicateKiller_card--list duplicateKiller_blur">
+							  <div class="duplicateKiller_card_title">Top affected products</div>
+							  <ul class="duplicateKiller_list">
+								<li><a href="#" onclick="return false;">Produsul unu</a> <span class="duplicateKiller_muted">(49)</span></li>
+								<li><a href="#" onclick="return false;">Produsul nou 2</a> <span class="duplicateKiller_muted">(7)</span></li>
+							  </ul>
+							</div>
+
+							<div class="duplicateKiller_card duplicateKiller_card--list duplicateKiller_blur">
+							  <div class="duplicateKiller_card_title">Top email domains</div>
+							  <ul class="duplicateKiller_list">
+								<li>protonmail.com <span class="duplicateKiller_muted">(37)</span></li>
+								<li>yahoo.com <span class="duplicateKiller_muted">(12)</span></li>
+							  </ul>
+							</div>
+
+							<div class="duplicateKiller_card duplicateKiller_card--list duplicateKiller_blur">
+							  <div class="duplicateKiller_card_title">Top payment methods</div>
+							  <ul class="duplicateKiller_list">
+								<li>Cash on delivery <span class="duplicateKiller_muted">(9)</span></li>
+							  </ul>
+							</div>
+
+							<div class="duplicateKiller_card duplicateKiller_card--list duplicateKiller_blur">
+							  <div class="duplicateKiller_card_title">Top checkout types</div>
+							  <ul class="duplicateKiller_list">
+								<li>Blocks <span class="duplicateKiller_muted">(37)</span></li>
+							  </ul>
+							</div>
+
+							<div class="duplicateKiller_card duplicateKiller_card--list duplicateKiller_blur">
+							  <div class="duplicateKiller_card_title">Top IP addresses</div>
+							  <ul class="duplicateKiller_list">
+								<li>::1 <span class="duplicateKiller_muted">(37)</span></li>
+							  </ul>
+							</div>
+
+						  </div>
+
+						  <!-- Overlay lock -->
+						  <div class="duplicateKiller_analytics_lock" aria-hidden="false">
+							<div class="duplicateKiller_analytics_lock_box">
+							  <div class="duplicateKiller_analytics_lock_title">PRO Feature</div>
+							  <div class="duplicateKiller_analytics_lock_text">
+								Analytics, trends, breakdowns and export are available in Duplicate Killer PRO.
+							  </div>
+							  <a
+								class="duplicateKiller_btn duplicateKiller_btn--primary"
+								href="<?php echo esc_url( $upgrade_url ); ?>"
+							  >
+								Upgrade to PRO
+							  </a>
+							</div>
+						  </div>
+
+						</div>
+					<?php endif;
+				}
+
+				// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading search query for UI filtering (non-destructive).
+				$search = isset( $_REQUEST['s'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['s'] ) ) : '';
+				?>
+
+				<!-- SEARCH: GET (ca in WP core, ca sa ramana s in URL si la paginare) -->
+				<form method="get" action="">
+					<?php // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- UI navigation param only. ?>
+					<input type="hidden" name="page" value="<?php echo esc_attr( sanitize_text_field( wp_unslash( $_REQUEST['page'] ?? '' ) ) ); ?>">
+					<?php if ( isset( $_REQUEST['tab'] ) ) : ?>
+						<?php // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- UI navigation param only. ?>
+						<input type="hidden" name="tab" value="<?php echo esc_attr( sanitize_text_field( wp_unslash( $_REQUEST['tab'] ) ) ); ?>">
+					<?php endif; ?>
+
 					<?php $ListTable->search_box( __( 'Search', 'duplicate-killer' ), 'search' ); ?>
+				</form>
+
+				<!-- TABLE + BULK: POST (delete ramane POST + nonce) -->
+				<form method="post" action="">
+					<?php // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- UI navigation param only. ?>
+					<input type="hidden" name="page" value="<?php echo esc_attr( sanitize_text_field( wp_unslash( $_REQUEST['page'] ?? '' ) ) ); ?>">
+					<?php if ( isset( $_REQUEST['tab'] ) ) : ?>
+						<?php // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- UI navigation param only. ?>
+						<input type="hidden" name="tab" value="<?php echo esc_attr( sanitize_text_field( wp_unslash( $_REQUEST['tab'] ) ) ); ?>">
+					<?php endif; ?>
+
+					<?php if ( '' !== $search ) : ?>
+						<input type="hidden" name="s" value="<?php echo esc_attr( $search ); ?>">
+					<?php endif; ?>
+
 					<?php $ListTable->display(); ?>
 				</form>
+				
 			</div>
 		<?php
 	}
@@ -56,10 +241,10 @@ class duplicateKiller_DatabaseMainListTable extends WP_List_Table{
     public function prepare_items() {
 
 		$search = '';
-		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading a UI navigation param (non-destructive).
-		if ( isset( $_GET['s'] ) ) {
-				// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading search query for UI filtering (non-destructive).
-			$search = sanitize_text_field( wp_unslash( $_GET['s'] ) );
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading search query for UI filtering (non-destructive).
+		if ( isset( $_REQUEST['s'] ) ) {
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading search query for UI filtering (non-destructive).
+			$search = sanitize_text_field( wp_unslash( $_REQUEST['s'] ) );
 		}
 
 		global $wpdb;
@@ -71,10 +256,10 @@ class duplicateKiller_DatabaseMainListTable extends WP_List_Table{
 
 		$columns     = $this->get_columns();
 		$hidden      = $this->get_hidden_columns();
-		$data        = $this->table_data(); // dacă folosești $search, pasează-l: table_data( $search )
+		$data        = $this->table_data($search ); // dacă folosești $search, pasează-l: table_data( $search )
 		$perPage     = 20;
 		$currentPage = $this->get_pagenum();
-		$totalItems  = $this->countDKFormsDB();
+		$totalItems  = $this->countDKFormsDB( $search );
 
 		$this->set_pagination_args(
 			array(
@@ -92,11 +277,11 @@ class duplicateKiller_DatabaseMainListTable extends WP_List_Table{
 
         $columns = array(
 			'cb' => '<input type="checkbox" />',
-			'form_plugin'=> __( 'Form plugin', 'duplicate-killer' ),
-            'form_name' => __( 'Form Name', 'duplicate-killer' ),
-            'form_value'=> __( 'Form Value', 'duplicate-killer' ),
-			'form_date'=> __( 'Form Date', 'duplicate-killer' ),
-			'form_ip'=> __( 'Form IP', 'duplicate-killer' )
+			'form_plugin'=> __( 'Plugin', 'duplicate-killer' ),
+            'form_name' => __( 'Name', 'duplicate-killer' ),
+            'form_value'=> __( 'Value', 'duplicate-killer' ),
+			'form_date'=> __( 'Date', 'duplicate-killer' ),
+			'form_ip'=> __( 'IP', 'duplicate-killer' )
         );
 
         return $columns;
@@ -121,15 +306,16 @@ class duplicateKiller_DatabaseMainListTable extends WP_List_Table{
         );
     }
 	
-	private function table_data() {
+	private function table_data( string $search = '' ) {
 		global $wpdb;
 		$data = array();
-		$search = '';
-		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading a UI navigation param (non-destructive).
-		if(isset($_GET['s'])){
-				// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading search query for UI filtering (non-destructive).
-			$search = sanitize_text_field( wp_unslash( $_GET['s'] ) );
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading search query for UI filtering (non-destructive).
+		if ( '' === $search && isset( $_REQUEST['s'] ) ) {
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading search query for UI filtering (non-destructive).
+			$search = sanitize_text_field( wp_unslash( $_REQUEST['s'] ) );
 		}
+		
 		$table_name = $wpdb->prefix . 'dk_forms_duplicate';
 		$per_page = 20;
 		$page     = max( 1, (int) $this->get_pagenum() );
@@ -142,7 +328,8 @@ class duplicateKiller_DatabaseMainListTable extends WP_List_Table{
 			$result = $wpdb->get_results(
 				$wpdb->prepare(
 					// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-					"SELECT * FROM {$table_name} WHERE form_value LIKE %s ORDER BY form_id DESC LIMIT %d OFFSET %d", $like, $per_page, $offset
+					"SELECT * FROM {$table_name}  WHERE form_value  LIKE %s OR form_plugin LIKE %s OR form_name   LIKE %s ORDER BY form_id DESC LIMIT %d OFFSET %d",
+			$like, $like, $like, $per_page, $offset
 				),
 				OBJECT
 			);
@@ -221,7 +408,10 @@ class duplicateKiller_DatabaseMainListTable extends WP_List_Table{
 
 			} elseif ( 'elementor' === $data_value['form_plugin'] ) {
 				$store = $this->organize_array_cf7( $form_value );
-
+			
+			} elseif ( 'WooCommerce' === $data_value['form_plugin'] ) {
+				$store = $this->duplicateKiller_organize_array_woocommerce( $form_value );
+				
 			}else {
 				// Fallback for unknown plugins.
 				$store = is_string( $form_value )
@@ -238,7 +428,82 @@ class duplicateKiller_DatabaseMainListTable extends WP_List_Table{
 
 		return $data;
 	}
+	
+	/**
+	 * WooCommerce (FREE): show a simple readable summary (fingerprint/email/total),
+	 * plus a blurred PRO teaser.
+	 *
+	 * @param mixed $form_value Unserialized form_value payload
+	 * @return string HTML (sanitized later by wp_kses in table_data()).
+	 */
+	private function duplicateKiller_organize_array_woocommerce( $form_value ): string {
 
+		$form_value = maybe_unserialize( $form_value );
+
+		if ( ! is_array( $form_value ) ) {
+			return '';
+		}
+
+		$type = isset( $form_value['type'] ) ? (string) $form_value['type'] : '';
+		if ( 'wc_checkout_duplicate' !== $type ) {
+			return '<p><em>' . esc_html__( 'WooCommerce duplicate entry.', 'duplicate-killer' ) . '</em></p>';
+		}
+
+		$fingerprint = isset( $form_value['fingerprint'] ) ? (string) $form_value['fingerprint'] : '';
+		$email       = isset( $form_value['email'] ) ? (string) $form_value['email'] : '';
+		$total       = isset( $form_value['total'] ) ? (string) $form_value['total'] : '';
+		$currency    = isset( $form_value['currency'] ) ? (string) $form_value['currency'] : '';
+		$products    = isset( $form_value['products'] ) && is_array( $form_value['products'] ) ? $form_value['products'] : array();
+
+		$fp_short = '';
+		if ( $fingerprint !== '' ) {
+			$fp_short = substr( preg_replace( '/[^a-f0-9]/i', '', $fingerprint ), 0, 12 );
+		}
+
+		$products = array_map( 'absint', $products );
+		$products = array_filter( $products );
+
+		$pro_url = admin_url( 'admin.php?page=duplicateKiller&tab=pro' );
+
+		// Unique wrapper id (so multiple rows can toggle independently)
+		$wrap_id = 'dk-pro-wc-' . wp_rand( 10000, 99999 );
+
+		$out  = '<div class="dk-wc-dup">';
+
+		if ( $fp_short !== '' ) {
+			$out .= '<p><strong>' . esc_html__( 'Fingerprint:', 'duplicate-killer' ) . '</strong> ' . esc_html( $fp_short ) . '</p>';
+		}
+
+		if ( $email !== '' ) {
+			$out .= '<p><strong>' . esc_html__( 'Email:', 'duplicate-killer' ) . '</strong> ' . esc_html( $email ) . '</p>';
+		}
+
+		if ( $total !== '' ) {
+			$line = $total . ( $currency !== '' ? ' ' . $currency : '' );
+			$out .= '<p><strong>' . esc_html__( 'Total:', 'duplicate-killer' ) . '</strong> ' . esc_html( $line ) . '</p>';
+		}
+
+		if ( ! empty( $products ) ) {
+			$out .= '<p><strong>' . esc_html__( 'Products:', 'duplicate-killer' ) . '</strong> #' . esc_html( implode( ', #', $products ) ) . '</p>';
+		}
+
+		// PRO teaser toggle (uses your CSS)
+		$out .= '<div class="dk-pro-rules-wrapper" id="' . esc_attr( $wrap_id ) . '">';
+		$out .= '<div class="dk-pro-toggle" role="button" tabindex="0" onclick="...">';
+
+		$out .= '<div class="dk-pro-cta">';
+		$out .= '<span class="dk-pro-mini">' . esc_html__( 'Unlock full details for this entry and more.', 'duplicate-killer' ) . '</span>';
+		$out .= '<a href="' . esc_url( $pro_url ) . '">' . esc_html__( 'Upgrade to PRO →', 'duplicate-killer' ) . '</a>';
+		$out .= '</div>';
+
+		$out .= '</div>'; // panel
+		$out .= '</div>'; // content
+		$out .= '</div>'; // wrapper
+
+		$out .= '</div>';
+
+		return $out;
+	}
 	/**
 	 * Breakdance: render fields as "label - value" lines.
 	 * Supports multiple uploaded files (comma-separated signed URLs) and converts them
@@ -708,12 +973,30 @@ class duplicateKiller_DatabaseMainListTable extends WP_List_Table{
         echo "\n";
         $nonce = wp_create_nonce( 'dknonce' );
     }
-	public function countDKFormsDB(){
+	public function countDKFormsDB( string $search = '' ) {
 		global $wpdb;
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Reading from plugin-owned custom table.
+
+		$table_name = esc_sql( $wpdb->prefix . 'dk_forms_duplicate' );
+
+		if ( '' !== $search ) {
+			$search = sanitize_text_field( $search );
+			$like   = '%' . $wpdb->esc_like( $search ) . '%';
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Reading from plugin-owned custom table (admin-only).
+			return (int) $wpdb->get_var(
+				$wpdb->prepare(
+					// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					"SELECT COUNT(form_id) FROM {$table_name}
+					 WHERE form_value  LIKE %s
+						OR form_plugin LIKE %s
+						OR form_name   LIKE %s",
+					$like, $like, $like
+				)
+			);
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Reading from plugin-owned custom table (admin-only).
 		return (int) $wpdb->get_var(
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Plugin-owned table name using $wpdb->prefix.
-			"SELECT COUNT(form_id) FROM {$wpdb->prefix}dk_forms_duplicate"
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			"SELECT COUNT(form_id) FROM {$table_name}"
 		);
 	}
 		

@@ -1,8 +1,230 @@
 /*
 Plugin Name: Duplicate Killer
-Version: 1.1.5
+Version: 1.1.6
 */
+/* ===== Duplicate Killer FREE - Locked Analytics (Dummy/Blurred) ===== */
 
+.duplicateKiller_analytics_wrap {
+  position: relative;
+  background: #fff;
+  border: 1px solid #dcdcde;
+  border-radius: 10px;
+  padding: 14px;
+  margin: 15px 0;
+}
+
+.duplicateKiller_analytics_header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #dcdcde;
+  margin-bottom: 14px;
+}
+
+.duplicateKiller_analytics_title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1d2327;
+}
+
+.duplicateKiller_btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 6px;
+  border: 1px solid #2271b1;
+  text-decoration: none;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+
+.duplicateKiller_btn--primary {
+  background: #2271b1;
+  color: #fff;
+}
+
+.duplicateKiller_btn--secondary {
+  background: #f6f7f7;
+  color: #2271b1;
+  border-color: #2271b1;
+}
+
+.duplicateKiller_btn[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Grid similar to screenshot */
+.duplicateKiller_analytics_grid {
+  display: grid;
+  grid-template-columns: 320px 1fr 1fr 1fr;
+  gap: 14px;
+}
+
+.duplicateKiller_card {
+  background: #fff;
+  border: 1px solid #dcdcde;
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.duplicateKiller_card_title {
+  font-weight: 600;
+  margin-bottom: 10px;
+  color: #1d2327;
+}
+
+/* Trend card */
+.duplicateKiller_card--trend {
+  grid-row: span 1;
+}
+
+.duplicateKiller_trend_row {
+  display: grid;
+  grid-template-columns: 95px 1fr 48px;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+}
+
+.duplicateKiller_trend_date {
+  font-size: 12px;
+  color: #1d2327;
+}
+
+.duplicateKiller_trend_bar {
+  height: 10px;
+  background: #f0f0f1;
+  border: 1px solid #dcdcde;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.duplicateKiller_trend_fill {
+  height: 100%;
+  background: #2271b1;
+  border-radius: 999px;
+}
+
+.duplicateKiller_trend_count {
+  font-size: 12px;
+  color: #50575e;
+  text-align: right;
+}
+
+/* KPI cards */
+.duplicateKiller_card--kpi {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 72px;
+}
+
+.duplicateKiller_kpi_value {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: #1d2327;
+}
+
+.duplicateKiller_kpi_label {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #50575e;
+}
+
+/* Bottom list cards full-width row */
+.duplicateKiller_card--list {
+  min-height: 92px;
+}
+
+.duplicateKiller_list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.duplicateKiller_list li {
+  margin: 6px 0;
+}
+
+.duplicateKiller_list a {
+  color: #2271b1;
+  text-decoration: underline;
+}
+
+.duplicateKiller_muted {
+  color: #50575e;
+  opacity: 0.85;
+}
+
+/* Make bottom row 5 cards (like screenshot) */
+@media (min-width: 1100px) {
+  .duplicateKiller_card--list {
+    grid-column: span 1;
+  }
+}
+
+/* Responsive fallback */
+@media (max-width: 1100px) {
+  .duplicateKiller_analytics_grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .duplicateKiller_analytics_grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ===== Blur/Dummy lock effect ===== */
+.duplicateKiller_blur {
+  filter: blur(4px);
+  opacity: 0.55;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* ===== Overlay in middle ===== */
+.duplicateKiller_analytics_lock {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(1px);
+}
+
+.duplicateKiller_analytics_lock_box {
+  width: min(520px, 92%);
+  background: #fff;
+  border: 1px solid #dcdcde;
+  border-radius: 12px;
+  padding: 18px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.10);
+  text-align: center;
+}
+
+.duplicateKiller_analytics_lock_title {
+  font-weight: 800;
+  font-size: 14px;
+  letter-spacing: 0.3px;
+  color: #1d2327;
+  margin-bottom: 8px;
+}
+
+.duplicateKiller_analytics_lock_text {
+  color: #50575e;
+  font-size: 13px;
+  line-height: 1.4;
+  margin-bottom: 14px;
+}
 /* ===== Locked Form Overlay (FREE: only first form active) ===== */
 
 .dk-single-form {

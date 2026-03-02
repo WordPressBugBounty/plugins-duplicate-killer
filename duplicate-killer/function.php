@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: Duplicate Killer
- * Version: 1.5.1
+ * Version: 1.5.2
  * Description: Block duplicate form submissions by validating unique email, phone and text fields — without CAPTCHA.
  * Author: NIA
  * Author URI: https://profiles.wordpress.org/wpnia/
@@ -13,7 +13,7 @@
 	defined('ABSPATH') or die('You shall not pass!');
 	
 	define('DUPLICATEKILLER_PLUGIN_FILE',__FILE__);
-	define('DUPLICATEKILLER_VERSION','1.5.1');
+	define('DUPLICATEKILLER_VERSION','1.5.2');
 	define('DUPLICATEKILLER_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 	define('DUPLICATEKILLER_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 	
@@ -29,6 +29,9 @@
 	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/database.php';
 	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/pro.php';
 	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/support.php';
+	
+	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/class-duplicateKiller-woocommerce.php';
+	duplicateKiller_WooCommerce::init();
 	
 //location helpers.php
 add_action('admin_init', 'duplicateKiller_handle_delete_records_request');
@@ -248,9 +251,11 @@ add_action( 'admin_enqueue_scripts', 'duplicateKiller_callback_for_setting_up_sc
 
 function duplicateKiller_callback_for_setting_up_scripts( $hook ) {
 
-	if ( 'toplevel_page_duplicateKiller' !== $hook ) {
-		return;
-	}
+	// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Admin page slug only.
+		$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : '';
+		if ( 'toplevel_page_duplicateKiller' !== $hook && 'dk_database' !== $page ) {
+			return;
+		}
 
 	wp_register_style(
 		'duplicateKillerStyle',
@@ -482,6 +487,14 @@ function duplicateKiller_options() {
 				array('id' => 'NinjaForms_error_message', 'title' => '', 'callback' => 'duplicateKiller_ninjaforms_settings_callback'),
 			),
 		),
+		'WooCommerce_page' => array(
+			'title' => 'WooCommerce',
+			'description_cb' => array( 'duplicateKiller_WooCommerce', 'render_section' ),
+			'validate_cb'    => '', // settings already registered by class; keep empty here
+			'fields' => array(
+				array('id' => 'dk_wc_settings', 'title' => '', 'callback' => array( 'duplicateKiller_WooCommerce', 'render_settings_field' )),
+			),
+		),
 		'Pro_page' => array(
 			'title' => 'Pro',
 			'description_cb' => 'duplicateKiller_pro_plugin',
@@ -588,6 +601,7 @@ function duplicateKiller_display_page() {
 				'fifth',
 				'sixth',
 				'seventh',
+				'woocommerce',
 				'pro',
 				'support',
 			);
@@ -616,6 +630,9 @@ function duplicateKiller_display_page() {
 			
 			<a href="?page=duplicateKiller&tab=seventh" class="nav-tab <?php echo esc_attr($active_tab == 'seventh' ? 'nav-tab-active' : ''); ?>"><?php esc_html_e('Ninja Forms','duplicate-killer');?></a>
 			
+			<a href="?page=duplicateKiller&tab=woocommerce" class="nav-tab <?php echo esc_attr($active_tab == 'woocommerce' ? 'nav-tab-active' : ''); ?>">
+				<?php esc_html_e('WooCommerce','duplicate-killer'); ?>
+			</a>
 			<a href="?page=duplicateKiller&tab=pro"
 			   class="nav-tab dk-pro-tab <?php echo esc_attr($active_tab == 'pro' ? 'nav-tab-active' : ''); ?>">
 			   <?php esc_html_e('PRO','duplicate-killer');?>
@@ -652,7 +669,11 @@ function duplicateKiller_display_page() {
 			}elseif($active_tab == 'seventh') {
                 settings_fields('NinjaForms_page');
 				duplicateKiller_do_settings_sections('NinjaForms_page');
-				submit_button();				
+				submit_button();
+			}elseif($active_tab == 'woocommerce') {
+				settings_fields('WooCommerce_page');
+				duplicateKiller_do_settings_sections('WooCommerce_page');
+				submit_button();
             }elseif($active_tab == 'pro') {
                 settings_fields('Pro_page');
 				duplicateKiller_do_settings_sections('Pro_page');

@@ -1,13 +1,13 @@
 === Duplicate Killer – Prevent Duplicate Form Submissions ===
-Version: 1.5.1
+Version: 1.5.2
 Author: NIA
 Author URI: https://profiles.wordpress.org/wpnia/
 Contributors: wpnia
-Tags: duplicates, forms, validation, elementor, cf7
+Tags: woocommerce, duplicate orders, duplicate submissions, elementor forms, contact form 7
 Donate link: https://www.paypal.com/paypalme/wpnia
 Requires at least: 5.2
 Tested up to: 6.9
-Stable tag: 1.5.1
+Stable tag: 1.5.2
 Requires PHP: 5.6.20
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -17,6 +17,23 @@ Block duplicate form submissions by validating unique email, phone and text fiel
 == Description ==
 
 Duplicate Killer – Block Duplicate Form Submissions in WordPress.
+
+== WooCommerce – Prevent Accidental Duplicate Orders == 
+
+Duplicate Killer also protects WooCommerce Classic Checkout from accidental duplicate orders.
+
+WooCommerce already disables the “Place order” button, but duplicate orders can still happen when:
+
+- Checkout is slow
+- Payment gateways lag or retry
+- Customers refresh the page
+- Multiple tabs are used
+- Network requests are retried
+
+Duplicate Killer FREE adds lightweight server-side duplicate protection for WooCommerce Classic Checkout.
+
+If the same customer attempts to submit an identical order within 60 seconds, the duplicate is blocked and a validation message is shown.
+!!! No changes to your checkout design. No impact on performance. No additional configuration required.
 
 If your forms receive the same email address multiple times, fake leads, or repeated submissions, this plugin blocks them instantly.
 
@@ -50,6 +67,12 @@ PRO: Duplicate Killer PRO enables multi-form protection with individual rules an
 ✔ Store unique entries securely in your WordPress database  
 ✔ Automatically store uploaded files from Contact Form 7  
 ✔ Lightweight, fast and easy to configure  
+
+✔ WooCommerce Classic Checkout duplicate protection
+✔ Server-side fingerprint validation (Email + Cart + Total + Currency)
+✔ Fixed 60-second protection window (FREE)
+✔ Structured duplicate logging (ready for PRO analytics upgrade)
+✔ No changes to checkout or form design
 
 == Common use cases ==
 - Prevent duplicate leads in contact and lead generation forms
@@ -115,6 +138,12 @@ Elementor Group Mode allows you to treat multiple forms with the same Form Name 
 - Global IP-based submission limits
 - Unique entries per user (cookie-based)
 
+WooCommerce (FREE):
+- Protect Classic Checkout only
+- Fixed 60-second lock window
+- Basic duplicate detection
+- Stores structured logs for seamless upgrade to PRO analytics
+
 === Duplicate Killer PRO ===
 - Protect multiple forms
 - Per-form duplicate protection rules
@@ -123,6 +152,17 @@ Elementor Group Mode allows you to treat multiple forms with the same Form Name 
 - Unique entries per user, configurable per form
 - Designed for sites with multiple forms and different submission needs
 - Duplicate Killer PRO is ideal for sites with multiple forms and different audiences.
+
+WooCommerce PRO adds:
+- Checkout Blocks (Store API) support
+- Configurable lock window (30–300 seconds)
+- Advanced fingerprint controls (phone, shipping, IP, customer ID)
+- Order linking (direct link to matching WooCommerce order)
+- Gateway breakdown (Stripe, PayPal, COD, etc.)
+- Trends dashboard (Last 24h, 7 days, 14 days)
+- CSV export for audits and support teams
+- Detailed analytics (top products, domains, checkout types, IPs)
+- Designed for real-world edge cases such as slow hosting, gateway retries, reverse proxies and unstable mobile networks.
 
 
 == Installation ==
@@ -143,8 +183,12 @@ No. Duplicate Killer performs lightweight database checks only on form submissio
 = Why should I use Duplicate Killer? =
 Duplicate Killer prevents duplicate emails and repeated form submissions, helping you keep your leads and contact data clean.
 
+= Does Duplicate Killer support WooCommerce? =
+Yes. The FREE version protects WooCommerce Classic Checkout from accidental duplicate submissions within a 60-second window.
+
 = How does Duplicate Killer work? =
 When a form is submitted, selected field values are stored in the database. If the same value is submitted again, the submission is blocked and a validation message is shown.
+For WooCommerce, a unique order fingerprint is generated from billing email, cart items, order total and currency.
 
 = Can multiple users submit the same value? =
 Yes. In the PRO version, you can enable “Unique entries per user”, allowing multiple users to submit the same value while blocking repeat submissions from the same user.
@@ -165,6 +209,16 @@ If you only need basic spam protection, a CAPTCHA plugin may be enough.
 == When should I use Duplicate Killer PRO? ==
 Use the PRO version if your site has multiple forms with different purposes — for example a contact form, a registration form and a newsletter signup — and each one needs different duplicate submission rules.
 
+= Does FREE support WooCommerce Checkout Blocks? =
+No. Checkout Blocks use a different system (Store API) and require the PRO version.
+
+= What happens if I upgrade to PRO later? =
+All WooCommerce duplicate logs stored in the FREE version are automatically used by PRO analytics. No database migration is required.
+
+= Does this prevent payment gateway retries? =
+FREE prevents accidental duplicate submissions on Classic Checkout.
+PRO adds enhanced idempotency handling and deeper gateway analytics.
+
 == Screenshots ==
 
 1. Custom error message shown when a duplicate submission is detected
@@ -174,10 +228,21 @@ Use the PRO version if your site has multiple forms with different purposes — 
 5. Works with popular WordPress form plugins
 
 == Upgrade Notice ==
-= 1.5.1 =
-New PRO feature for Elementor: Enable Group Mode — treat forms with the same Form Name as one form across pages. Minor Elementor fixes included.
+= 1.5.2 =
+New: WooCommerce Checkout duplicate protection added.
+Server-side protection for accidental duplicate WooCommerce orders
+All WooCommerce duplicate logs are now stored in a structured format.
+WooCommerce Checkout Blocks (Store API) support is available in the PRO version.
 
 == Changelog ==
+
+= 1.5.2 =
+* New: WooCommerce Classic Checkout duplicate order protection (FREE).
+* Prevent accidental duplicate orders within a 60-second lock window.
+* Structured duplicate logging added for seamless upgrade to PRO analytics.
+* Compatibility notice for Checkout Blocks (PRO required).
+* Internal improvements for WooCommerce validation flow.
+* Minor admin UI refinements.
 
 = 1.5.1 =
 * Minor fix for Elementor “Show Forms” integration.
