@@ -58,7 +58,75 @@ function duplicateKiller_pro_plugin() {
 				<?php echo esc_html__( 'Example: your newsletter can say “You’re already subscribed”, while your booking form can say “This email already has a reservation”.', 'duplicate-killer' ); ?>
 			</p>
 		</div>
-				<div class="dk-pro-panel">
+		<div class="dk-pro-panel">
+			<div class="dk-pro-head">
+				<div class="dk-pro-icon">🔗</div>
+				<div>
+					<h4 class="dk-pro-title"><?php echo esc_html__( 'Cross-Form Duplicate Protection', 'duplicate-killer' ); ?></h4>
+					<p class="dk-pro-text">
+						<?php echo esc_html__( 'Prevent the same user from submitting the same data across multiple forms on your website. Useful for newsletters, lead forms, bookings, and any situation where the same person might try multiple forms.', 'duplicate-killer' ); ?>
+					</p>
+					<p class="dk-pro-kicker">
+						<?php echo esc_html__( 'Available in Duplicate Killer PRO.', 'duplicate-killer' ); ?>
+					</p>
+				</div>
+			</div>
+
+			<div class="dk-pro-grid">
+				<div class="dk-pro-box">
+					
+					<div class="dk-cross-form-option">
+						<fieldset class="dk-fieldset">
+							<legend class="dk-legend-title">
+								Cross-Form Duplicate Protection
+							</legend>
+
+							<p>
+								Allow this form to participate in cross-form duplicate detection.
+							</p>
+
+							<div class="dk-input-switch-ios">
+								<input
+									type="checkbox"
+									class="ios-switch-input"
+									id="cross_form_demo"
+									value="1"
+									disabled
+								/>
+
+								<label
+									class="ios-switch-label"
+									for="cross_form_demo"
+								></label>
+
+								<span class="ios-switch-text">
+									Enable Cross-Form Duplicate Protection for this form
+								</span>
+							</div>
+
+							<p class="dk-pro-kicker" style="margin-top:10px;">
+								<?php echo esc_html__( 'In PRO, multiple forms can share duplicate detection rules.', 'duplicate-killer' ); ?>
+							</p>
+						</fieldset>
+					</div>
+
+				</div>
+
+				<div class="dk-pro-box">
+					<div class="dk-pro-badge dk-pro-badge--pro">PRO</div>
+					<ul class="dk-pro-list">
+						<li><?php echo esc_html__( 'Detect duplicates across multiple forms.', 'duplicate-killer' ); ?></li>
+						<li><?php echo esc_html__( 'Useful for multi-step funnels and multiple contact forms.', 'duplicate-killer' ); ?></li>
+						<li><?php echo esc_html__( 'Stop users from bypassing protection by switching forms.', 'duplicate-killer' ); ?></li>
+					</ul>
+				</div>
+			</div>
+
+			<p class="dk-pro-kicker">
+				<?php echo esc_html__( 'Example: a visitor submits your Contact form, then tries again through your Booking form with the same email. Cross-Form Protection detects the duplicate and blocks the second submission.', 'duplicate-killer' ); ?>
+			</p>
+		</div>
+		<div class="dk-pro-panel">
 			<div class="dk-pro-head">
 				<div class="dk-pro-icon">🛒</div>
 				<div>

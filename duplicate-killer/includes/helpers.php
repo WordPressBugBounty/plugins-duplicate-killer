@@ -646,6 +646,40 @@ function duplicateKiller_render_forms_ui( $plugin_key, $plugin_label, $args, $fo
 							</div>
 						</fieldset>
 					</div>
+					<div class="dk-cross-form-option">
+						<fieldset class="dk-fieldset">
+							<legend class="dk-legend-title">
+								Cross-Form Duplicate Protection (PRO)
+							</legend>
+
+							<p>
+								Allow this form to participate in cross-form duplicate detection.
+							</p>
+
+							<div class="dk-input-switch-ios">
+								<input
+									type="checkbox"
+									class="ios-switch-input"
+									id="cross_form_demo"
+									value="1"
+									disabled
+								/>
+
+								<label
+									class="ios-switch-label"
+									for="cross_form_demo"
+								></label>
+
+								<span class="ios-switch-text">
+									Enable Cross-Form Duplicate Protection for this form
+								</span>
+							</div>
+
+							<p class="dk-pro-note">
+								This feature is available in <strong>Duplicate Killer PRO</strong>.
+							</p>
+						</fieldset>
+					</div>
 				</div>
 			</div>
 			<div class="dk-box dk-delete-records">

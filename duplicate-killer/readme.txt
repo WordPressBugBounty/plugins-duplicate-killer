@@ -1,5 +1,5 @@
 === Duplicate Killer – Prevent Duplicate Form Submissions ===
-Version: 1.5.2
+Version: 1.5.3
 Author: NIA
 Author URI: https://profiles.wordpress.org/wpnia/
 Contributors: wpnia
@@ -7,7 +7,7 @@ Tags: woocommerce, duplicate orders, duplicate submissions, elementor forms, con
 Donate link: https://www.paypal.com/paypalme/wpnia
 Requires at least: 5.2
 Tested up to: 6.9
-Stable tag: 1.5.2
+Stable tag: 1.5.3
 Requires PHP: 5.6.20
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -41,6 +41,22 @@ Choose which fields must be unique (email, phone, text) and block duplicate entr
 
 Duplicate Killer works silently in the background and integrates seamlessly with popular WordPress form plugins and page builders.
 
+== Cross-Form Duplicate Protection (PRO) ==
+
+Duplicate Killer PRO introduces Cross-Form Duplicate Protection.
+
+This feature allows duplicate detection across multiple forms on your website.
+
+For example, if a user submits the same email address in two different forms, Duplicate Killer PRO can detect the duplicate and block the second submission.
+
+This is useful when:
+- multiple contact forms exist across different pages
+- marketing forms collect the same email address
+- lead capture forms should only allow one submission per user
+- different form plugins are used on the same site
+
+This feature is available in Duplicate Killer PRO.
+
 Free: In the free version, duplicate protection can be enabled for one form per supported plugin.
 
 PRO: Duplicate Killer PRO enables multi-form protection with individual rules and messages per form.
@@ -63,6 +79,8 @@ PRO: Duplicate Killer PRO enables multi-form protection with individual rules an
 ✔ Prevent duplicate submissions by Email, Phone or Text fields  
 ✔ Stop duplicate emails and repeated leads  
 ✔ One global error message for all forms (Free version)  
+✔ Cross-Form Duplicate Protection (PRO)
+✔ Detect duplicates across multiple forms
 ✔ Optional IP-based duplicate protection  
 ✔ Store unique entries securely in your WordPress database  
 ✔ Automatically store uploaded files from Contact Form 7  
@@ -147,6 +165,7 @@ WooCommerce (FREE):
 === Duplicate Killer PRO ===
 - Protect multiple forms
 - Per-form duplicate protection rules
+- Cross-Form Duplicate Protection (detect duplicates across different forms)
 - Custom error message for each form
 - Different IP limits per form
 - Unique entries per user, configurable per form
@@ -228,13 +247,17 @@ PRO adds enhanced idempotency handling and deeper gateway analytics.
 5. Works with popular WordPress form plugins
 
 == Upgrade Notice ==
-= 1.5.2 =
-New: WooCommerce Checkout duplicate protection added.
-Server-side protection for accidental duplicate WooCommerce orders
-All WooCommerce duplicate logs are now stored in a structured format.
-WooCommerce Checkout Blocks (Store API) support is available in the PRO version.
+= 1.5.3 =
+New: Cross-Form Duplicate Protection added to Duplicate Killer PRO.
+Detect duplicate submissions across multiple forms.
 
 == Changelog ==
+
+= 1.5.3 =
+* New PRO feature: Cross-Form Duplicate Protection.
+* Allows duplicate detection across multiple forms.
+* Compatible with all supported form plugins.
+* Internal improvements preparing cross-form validation engine.
 
 = 1.5.2 =
 * New: WooCommerce Classic Checkout duplicate order protection (FREE).
