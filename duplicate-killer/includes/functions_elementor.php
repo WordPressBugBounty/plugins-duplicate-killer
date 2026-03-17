@@ -228,203 +228,585 @@ function duplicateKiller_elementor_save_only($record, $handler) {
     );
 }
 
-function duplicateKiller_elementor_get_forms(): array {
+/**
+ * Safely get an Elementor document instance.
+ *
+ * @param int $post_id WordPress post/document ID.
+ * @return object|null
+ */
+function duplicateKiller_elementor_get_document( int $post_id ) {
+	if ( $post_id <= 0 ) {
+		return null;
+	}
 
-	$out = array();
+	if ( ! did_action( 'elementor/loaded' ) ) {
+		return null;
+	}
+
+	if ( ! class_exists( '\Elementor\Plugin' ) ) {
+		return null;
+	}
+
+	try {
+		$plugin = \Elementor\Plugin::$instance;
+
+		if ( ! isset( $plugin->documents ) || ! method_exists( $plugin->documents, 'get' ) ) {
+			return null;
+		}
+
+		$document = $plugin->documents->get( $post_id );
+
+		return is_object( $document ) ? $document : null;
+	} catch ( \Throwable $e ) {
+		return null;
+	}
+}
+
+/**
+ * Safely get Elementor elements data for a document.
+ *
+ * @param int $post_id WordPress post/document ID.
+ * @return array
+ */
+function duplicateKiller_elementor_get_document_elements_data( int $post_id ): array {
+	$document = duplicateKiller_elementor_get_document( $post_id );
+
+	if ( ! $document || ! method_exists( $document, 'get_elements_data' ) ) {
+		return [];
+	}
+
+	try {
+		$data = $document->get_elements_data();
+
+		return is_array( $data ) ? $data : [];
+	} catch ( \Throwable $e ) {
+		return [];
+	}
+}
+
+/**
+ * Build a stable field ID for a form field.
+ *
+ * Keeps backward compatibility with the current plugin storage format.
+ *
+ * @param array $field Elementor form field config.
+ * @return string
+ */
+function duplicateKiller_elementor_build_field_id( array $field ): string {
+	if ( ! empty( $field['custom_id'] ) ) {
+		return (string) $field['custom_id'];
+	}
+
+	if ( ! empty( $field['_id'] ) ) {
+		return 'field_' . (string) $field['_id'];
+	}
+
+	if ( ! empty( $field['field_label'] ) ) {
+		return sanitize_key( (string) $field['field_label'] );
+	}
+
+	return '';
+}
+
+/**
+ * Normalize Elementor widget settings into an array.
+ *
+ * @param mixed $settings Raw settings.
+ * @return array
+ */
+function duplicateKiller_elementor_normalize_settings( $settings ): array {
+	if ( is_array( $settings ) ) {
+		return $settings;
+	}
+
+	if ( is_object( $settings ) ) {
+		return (array) $settings;
+	}
+
+	return [];
+}
+
+/**
+ * Extract supported Duplicate Killer fields from an Elementor form widget settings array.
+ *
+ * @param array $settings Elementor widget settings.
+ * @return array
+ */
+function duplicateKiller_elementor_extract_form_fields_from_settings( array $settings ): array {
+	$out    = [];
+	$fields = $settings['form_fields'] ?? [];
+
+	if ( ! is_array( $fields ) ) {
+		return [];
+	}
+
+	foreach ( $fields as $field ) {
+		if ( ! is_array( $field ) ) {
+			continue;
+		}
+
+		$label = (string) ( $field['field_label'] ?? '' );
+		$type  = strtolower( (string) ( $field['field_type'] ?? '' ) );
+
+		// Elementor default behavior for plain text fields.
+		if ( '' === $type ) {
+			$type = 'text';
+		}
+
+		// Keep current plugin intent / compatibility.
+		if ( ! in_array( $type, [ 'text', 'textarea', 'email', 'tel', 'phone', 'url' ], true ) ) {
+			continue;
+		}
+
+		$field_id = duplicateKiller_elementor_build_field_id( $field );
+
+		if ( '' === $field_id ) {
+			continue;
+		}
+
+		$out[] = [
+			'type'  => $type,
+			'label' => $label,
+			'id'    => $field_id,
+		];
+	}
+
+	return $out;
+}
+
+/**
+ * Merge new fields into an existing form bundle without duplicates.
+ *
+ * @param array $bundle Existing form bundle.
+ * @param array $fields New fields to merge.
+ * @return array
+ */
+function duplicateKiller_elementor_merge_fields_into_bundle( array $bundle, array $fields ): array {
+	if ( empty( $bundle['fields'] ) || ! is_array( $bundle['fields'] ) ) {
+		$bundle['fields'] = [];
+	}
+
+	$bundle['fields'] = array_merge( $bundle['fields'], $fields );
+
+	$seen  = [];
+	$clean = [];
+
+	foreach ( $bundle['fields'] as $field ) {
+		if ( ! is_array( $field ) ) {
+			continue;
+		}
+
+		$field_id = (string) ( $field['id'] ?? '' );
+
+		if ( '' === $field_id || isset( $seen[ $field_id ] ) ) {
+			continue;
+		}
+
+		$seen[ $field_id ] = true;
+		$clean[]           = $field;
+	}
+
+	$bundle['fields'] = array_values( $clean );
+
+	return $bundle;
+}
+
+/**
+ * Register one found Elementor form into output list.
+ *
+ * @param array  $out              Output forms array (by reference).
+ * @param string $effective_node_id Effective runtime/widget instance ID.
+ * @param int    $post_id          Source document post ID.
+ * @param string $form_name        Form name.
+ * @param array  $fields           Parsed fields.
+ * @return void
+ */
+function duplicateKiller_elementor_register_found_form( array &$out, string $effective_node_id, int $post_id, string $form_name, array $fields ): void {
+	$effective_node_id = trim( $effective_node_id );
+	$form_name         = trim( $form_name );
+
+	if ( '' === $effective_node_id ) {
+		return;
+	}
+
+	if ( '' === $form_name ) {
+		$form_name = (string) get_the_title( $post_id );
+	}
+
+	if ( '' === $form_name ) {
+		$form_name = 'Elementor Form';
+	}
+
+	$display_key = sprintf( '%s.%s', $form_name, $effective_node_id );
+
+	if ( ! isset( $out[ $display_key ] ) || ! is_array( $out[ $display_key ] ) ) {
+		$out[ $display_key ] = [
+			'form_id'   => $effective_node_id,
+			'post_id'   => $post_id,
+			'form_name' => $form_name,
+			'fields'    => [],
+		];
+	}
+
+	$out[ $display_key ] = duplicateKiller_elementor_merge_fields_into_bundle( $out[ $display_key ], $fields );
+}
+
+/**
+ * Try to detect a referenced Elementor template/global widget document ID.
+ *
+ * This is intentionally permissive because different Elementor versions/addons
+ * may store reusable widget references under different keys.
+ *
+ * @param array $node Elementor node.
+ * @return int
+ */
+function duplicateKiller_elementor_get_referenced_document_id_from_node( array $node ): int {
+	$settings = duplicateKiller_elementor_normalize_settings( $node['settings'] ?? [] );
+
+	$candidate_keys = [
+		'template_id',
+		'saved_widget',
+		'global_widget_id',
+		'global_template_id',
+		'_template_id',
+		'content_template_id',
+	];
+
+	foreach ( $candidate_keys as $key ) {
+		if ( isset( $settings[ $key ] ) && '' !== (string) $settings[ $key ] ) {
+			return absint( $settings[ $key ] );
+		}
+	}
+
+	// Some structures may keep the reference directly on the node.
+	$node_candidate_keys = [
+		'templateID',
+		'template_id',
+		'global_widget_id',
+		'saved_widget',
+	];
+
+	foreach ( $node_candidate_keys as $key ) {
+		if ( isset( $node[ $key ] ) && '' !== (string) $node[ $key ] ) {
+			return absint( $node[ $key ] );
+		}
+	}
+
+	return 0;
+}
+
+/**
+ * Recursively scan Elementor elements and collect form widgets.
+ *
+ * @param array $elements           Elements tree.
+ * @param int   $source_post_id     Source document post ID.
+ * @param array $out                Output forms array (by reference).
+ * @param array $visited_docs       Visited document IDs (by reference) to avoid loops.
+ * @param array $context            Scan context.
+ * @return void
+ */
+function duplicateKiller_elementor_collect_forms_from_elements(
+	array $elements,
+	int $source_post_id,
+	array &$out,
+	array &$visited_docs,
+	array $context = []
+): void {
+	foreach ( $elements as $node ) {
+		if ( ! is_array( $node ) ) {
+			continue;
+		}
+
+		$node_id     = isset( $node['id'] ) ? (string) $node['id'] : '';
+		$el_type     = isset( $node['elType'] ) ? (string) $node['elType'] : '';
+		$widget_type = isset( $node['widgetType'] ) ? (string) $node['widgetType'] : '';
+		$settings    = duplicateKiller_elementor_normalize_settings( $node['settings'] ?? [] );
+
+		// Direct Elementor Form widget.
+		if ( 'widget' === $el_type && 'form' === $widget_type ) {
+			$form_name = trim( (string) ( $settings['form_name'] ?? '' ) );
+			$fields    = duplicateKiller_elementor_extract_form_fields_from_settings( $settings );
+
+			duplicateKiller_elementor_register_found_form(
+				$out,
+				$node_id,
+				$source_post_id,
+				$form_name,
+				$fields
+			);
+		}
+
+		/*
+		 * Reusable/global/template widgets:
+		 * If the current node references another Elementor document/template,
+		 * scan that referenced document too. When we discover form widgets inside
+		 * that referenced document, we additionally register them under the current
+		 * wrapper node ID, because frontend submit may use the instance ID from the
+		 * page rather than the source template element ID.
+		 */
+		$referenced_doc_id = duplicateKiller_elementor_get_referenced_document_id_from_node( $node );
+
+		if ( $referenced_doc_id > 0 && empty( $visited_docs[ $referenced_doc_id ] ) ) {
+			$visited_docs[ $referenced_doc_id ] = true;
+
+			$referenced_elements = duplicateKiller_elementor_get_document_elements_data( $referenced_doc_id );
+
+			if ( ! empty( $referenced_elements ) ) {
+				$temp_out = [];
+
+				duplicateKiller_elementor_collect_forms_from_elements(
+					$referenced_elements,
+					$referenced_doc_id,
+					$temp_out,
+					$visited_docs,
+					[
+						'parent_wrapper_id' => $node_id,
+						'parent_post_id'    => $source_post_id,
+					]
+				);
+
+				foreach ( $temp_out as $bundle ) {
+					if ( ! is_array( $bundle ) ) {
+						continue;
+					}
+
+					$bundle_form_name = isset( $bundle['form_name'] ) ? (string) $bundle['form_name'] : '';
+					$bundle_fields    = isset( $bundle['fields'] ) && is_array( $bundle['fields'] ) ? $bundle['fields'] : [];
+
+					// Register original discovered bundle.
+					if ( ! empty( $bundle['form_id'] ) ) {
+						duplicateKiller_elementor_register_found_form(
+							$out,
+							(string) $bundle['form_id'],
+							isset( $bundle['post_id'] ) ? (int) $bundle['post_id'] : $referenced_doc_id,
+							$bundle_form_name,
+							$bundle_fields
+						);
+					}
+
+					// Also register the same form under the current wrapper/instance ID.
+					if ( '' !== $node_id ) {
+						duplicateKiller_elementor_register_found_form(
+							$out,
+							$node_id,
+							$source_post_id,
+							$bundle_form_name,
+							$bundle_fields
+						);
+					}
+				}
+			}
+		}
+
+		// Recurse into child elements.
+		if ( ! empty( $node['elements'] ) && is_array( $node['elements'] ) ) {
+			duplicateKiller_elementor_collect_forms_from_elements(
+				$node['elements'],
+				$source_post_id,
+				$out,
+				$visited_docs,
+				$context
+			);
+		}
+	}
+}
+
+/**
+ * Get all Elementor forms from all relevant Elementor documents.
+ *
+ * Uses Elementor Documents API instead of reading raw _elementor_data directly.
+ * Preserves the current Duplicate Killer return structure.
+ *
+ * @return array
+ */
+function duplicateKiller_elementor_get_forms(): array {
+	$out = [];
+
+	// Fail safe if Elementor is not ready.
+	if ( ! did_action( 'elementor/loaded' ) || ! class_exists( '\Elementor\Plugin' ) ) {
+		return [];
+	}
+
+	/*
+	 * We intentionally scan all public/document-like post types that may contain
+	 * Elementor data, including elementor_library.
+	 *
+	 * Using 'fields' => 'ids' keeps memory usage lower and is WP-friendly.
+	 */
+	$post_types = [ 'post', 'page' ];
+
+	if ( post_type_exists( 'elementor_library' ) ) {
+		$post_types[] = 'elementor_library';
+	}
+
+	$post_types = array_values( array_unique( array_filter( $post_types ) ) );
 
 	$per_page = 200;
 	$paged    = 1;
 
 	do {
-		// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Admin-only scan for Elementor forms (paged, IDs only).
-		$post_ids = get_posts(
-			array(
-				'post_type'      => post_type_exists( 'elementor_library' )
-					? array( 'post', 'page', 'elementor_library' )
-					: array( 'post', 'page' ),
-				'posts_per_page' => $per_page,
-				'paged'          => $paged,
-				'fields'         => 'ids',
-				// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Admin-only scan for Elementor forms (paged, IDs only).
-				'meta_key'       => '_elementor_data',
-				'orderby'        => 'ID',
-				'order'          => 'DESC',
-				'no_found_rows'  => true,
-			)
-		);
+		$query_args = [
+			'post_type'              => $post_types,
+			'post_status'            => [ 'publish', 'private', 'draft', 'pending', 'future' ],
+			'posts_per_page'         => $per_page,
+			'paged'                  => $paged,
+			'fields'                 => 'ids',
+			'orderby'                => 'ID',
+			'order'                  => 'DESC',
+			'no_found_rows'          => true,
+			'update_post_meta_cache' => false,
+			'update_post_term_cache' => false,
+			'meta_query'             => [
+				[
+					'key'     => '_elementor_data',
+					'compare' => 'EXISTS',
+				],
+			],
+		];
 
-		if ( empty( $post_ids ) ) {
+		// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- Admin-only scan for Elementor documents.
+		$post_ids = get_posts( $query_args );
+
+		if ( empty( $post_ids ) || ! is_array( $post_ids ) ) {
 			break;
 		}
 
 		foreach ( $post_ids as $post_id ) {
 			$post_id = (int) $post_id;
+
 			if ( $post_id <= 0 ) {
 				continue;
 			}
 
-			$meta_raw = get_post_meta( $post_id, '_elementor_data', true );
-			if ( empty( $meta_raw ) ) {
-				continue;
-			}
+			$elements_data = duplicateKiller_elementor_get_document_elements_data( $post_id );
 
-			// Elementor stores JSON string in _elementor_data (sometimes already array).
-			$data = $meta_raw;
+			// Fallback only if Documents API returned nothing.
+			if ( empty( $elements_data ) ) {
+				$meta_raw = get_post_meta( $post_id, '_elementor_data', true );
 
-			if ( is_string( $meta_raw ) ) {
-				// IMPORTANT: wp_unslash to prevent json_decode failures on slashed JSON.
-				$decoded = json_decode( wp_unslash( $meta_raw ), true );
-				if ( is_array( $decoded ) ) {
-					$data = $decoded;
-				} else {
-					$maybe = maybe_unserialize( $meta_raw );
-					if ( is_array( $maybe ) ) {
-						$data = $maybe;
-					} else {
-						// Last resort: try decoding the raw string (in case it's not slashed).
-						$decoded2 = json_decode( $meta_raw, true );
-						if ( is_array( $decoded2 ) ) {
-							$data = $decoded2;
+				if ( is_string( $meta_raw ) && '' !== $meta_raw ) {
+					$decoded = json_decode( wp_unslash( $meta_raw ), true );
+
+					if ( is_array( $decoded ) ) {
+						/*
+						 * Some stored structures may be:
+						 * - pure numeric array of elements
+						 * - full document array with ['content'] key
+						 */
+						if ( isset( $decoded['content'] ) && is_array( $decoded['content'] ) ) {
+							$elements_data = $decoded['content'];
+						} else {
+							$elements_data = $decoded;
 						}
 					}
 				}
 			}
 
-			if ( ! is_array( $data ) || empty( $data ) ) {
+			if ( empty( $elements_data ) || ! is_array( $elements_data ) ) {
 				continue;
 			}
 
-			// Normalize root: Elementor data is usually a numeric array of nodes,
-			// but in some edge cases it can be a single associative node.
-			$stack = array();
-			$is_list = array_keys( $data ) === range( 0, count( $data ) - 1 );
-			$stack   = $is_list ? $data : array( $data );
+			$visited_docs           = [];
+			$visited_docs[ $post_id ] = true;
 
-			while ( ! empty( $stack ) ) {
-				$node = array_pop( $stack );
-				if ( ! is_array( $node ) ) {
-					continue;
-				}
-
-				// Push children.
-				if ( ! empty( $node['elements'] ) && is_array( $node['elements'] ) ) {
-					foreach ( $node['elements'] as $child ) {
-						$stack[] = $child;
-					}
-				}
-
-				// Detect Elementor Form widget.
-				$widgetType = (string) ( $node['widgetType'] ?? '' );
-				$elType     = (string) ( $node['elType'] ?? '' );
-
-				if ( 'widget' !== $elType || 'form' !== $widgetType ) {
-					continue;
-				}
-
-				$settings = $node['settings'] ?? array();
-				if ( ! is_array( $settings ) ) {
-					$settings = array();
-				}
-
-				$form_name = trim( (string) ( $settings['form_name'] ?? '' ) );
-				if ( '' === $form_name ) {
-					$form_name = (string) get_the_title( $post_id );
-				}
-
-				// Elementor element id (string like 'a1b2c3d').
-				$node_id = (string) ( $node['id'] ?? '' );
-				if ( '' === $node_id ) {
-					continue;
-				}
-
-				$display_key = sprintf( '%s.%s', $form_name, $node_id );
-
-				if ( ! isset( $out[ $display_key ] ) ) {
-					$out[ $display_key ] = array(
-						'form_id'   => $node_id,   // Elementor element id (string).
-						'post_id'   => $post_id,
-						'form_name' => $form_name,
-						'fields'    => array(),
-					);
-				}
-
-				$fields = $settings['form_fields'] ?? array();
-				if ( ! is_array( $fields ) ) {
-					$fields = array();
-				}
-
-				foreach ( $fields as $f ) {
-					if ( ! is_array( $f ) ) {
-						continue;
-					}
-
-					// Extra safety: skip items that don't look like real fields.
-					$label = (string) ( $f['field_label'] ?? '' );
-					$cid   = (string) ( $f['custom_id'] ?? '' );
-					if ( '' === $label && '' === $cid ) {
-						continue;
-					}
-
-					$ftype = strtolower( (string) ( $f['field_type'] ?? '' ) );
-
-					// Elementor behavior: missing field_type => default Text field.
-					if ( '' === $ftype ) {
-						$ftype = 'text';
-					}
-
-					// Eligible types (align with your original intent).
-					if ( ! in_array( $ftype, array( 'text', 'textarea', 'email', 'tel', 'phone', 'url' ), true ) ) {
-						continue;
-					}
-
-					// Field id: prefer custom_id; fallback to _id; fallback to label.
-					// Keep the existing field_ prefix behavior to avoid breaking saved option keys.
-					$fid = '';
-					if ( ! empty( $f['custom_id'] ) ) {
-						$fid = (string) $f['custom_id'];
-					} elseif ( ! empty( $f['_id'] ) ) {
-						$fid = 'field_' . (string) $f['_id'];
-					} elseif ( ! empty( $f['field_label'] ) ) {
-						$fid = sanitize_key( (string) $f['field_label'] );
-					}
-
-					if ( '' === $fid ) {
-						continue;
-					}
-
-					$out[ $display_key ]['fields'][] = array(
-						'type'  => $ftype,
-						'label' => $label,
-						'id'    => $fid,
-					);
-				}
-			}
+			duplicateKiller_elementor_collect_forms_from_elements(
+				$elements_data,
+				$post_id,
+				$out,
+				$visited_docs
+			);
 		}
 
 		$paged++;
 	} while ( count( $post_ids ) === $per_page );
 
-	// Deduplicate fields (by id) per form.
+	// Final dedupe safety per form bundle.
 	foreach ( $out as $key => $bundle ) {
-		$seen  = array();
-		$clean = array();
-
-		foreach ( $bundle['fields'] as $f ) {
-			$fid = (string) ( $f['id'] ?? '' );
-			if ( '' === $fid ) {
-				continue;
-			}
-			if ( isset( $seen[ $fid ] ) ) {
-				continue;
-			}
-			$seen[ $fid ] = true;
-			$clean[]      = $f;
+		if ( ! is_array( $bundle ) ) {
+			unset( $out[ $key ] );
+			continue;
 		}
 
-		$out[ $key ]['fields'] = array_values( $clean );
+		$bundle = duplicateKiller_elementor_merge_fields_into_bundle( $bundle, [] );
+
+		$out[ $key ] = $bundle;
 	}
 
-	return $out;
+	/*
+	 * Preserve existing group mode behavior.
+	 */
+	$group_mode = (int) get_option( 'duplicateKiller_elementor_group_mode', 0 );
+
+	if ( 1 !== $group_mode ) {
+		return $out;
+	}
+
+	$form_counts = [];
+
+	foreach ( $out as $bundle ) {
+		$name = isset( $bundle['form_name'] ) ? (string) $bundle['form_name'] : '';
+
+		if ( '' === $name ) {
+			continue;
+		}
+
+		if ( ! isset( $form_counts[ $name ] ) ) {
+			$form_counts[ $name ] = 0;
+		}
+
+		$form_counts[ $name ]++;
+	}
+
+	$grouped = [];
+
+	foreach ( $out as $bundle ) {
+		$form_name = isset( $bundle['form_name'] ) ? (string) $bundle['form_name'] : '';
+
+		if ( '' === $form_name ) {
+			continue;
+		}
+
+		if ( (int) ( $form_counts[ $form_name ] ?? 0 ) < 2 ) {
+			continue;
+		}
+
+		if ( ! isset( $grouped[ $form_name ] ) ) {
+			$grouped[ $form_name ] = [
+				'form_id'   => '__group__',
+				'post_id'   => isset( $bundle['post_id'] ) ? (int) $bundle['post_id'] : 0,
+				'form_name' => $form_name,
+				'fields'    => isset( $bundle['fields'] ) && is_array( $bundle['fields'] ) ? $bundle['fields'] : [],
+			];
+		} else {
+			$grouped[ $form_name ] = duplicateKiller_elementor_merge_fields_into_bundle(
+				$grouped[ $form_name ],
+				isset( $bundle['fields'] ) && is_array( $bundle['fields'] ) ? $bundle['fields'] : []
+			);
+		}
+	}
+
+	$final = [];
+
+	foreach ( $out as $key => $bundle ) {
+		$form_name = isset( $bundle['form_name'] ) ? (string) $bundle['form_name'] : '';
+
+		if ( '' === $form_name ) {
+			$final[ $key ] = $bundle;
+			continue;
+		}
+
+		if ( (int) ( $form_counts[ $form_name ] ?? 0 ) >= 2 ) {
+			continue;
+		}
+
+		$final[ $key ] = $bundle;
+	}
+
+	foreach ( $grouped as $name => $bundle ) {
+		$final[ $name . '.__group__' ] = $bundle;
+	}
+
+	return $final;
 }
 
 /*********************************
