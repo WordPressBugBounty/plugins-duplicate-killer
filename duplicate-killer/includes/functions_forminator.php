@@ -1,12 +1,191 @@
 <?php
 defined( 'ABSPATH' ) or die( 'You shall not pass!' );
 
+add_action( 'forminator_custom_form_submit_errors','duplicateKiller_forminator_before_send_email',10,3);
+function duplicateKiller_forminator_before_send_email($submit_errors, $form_id, $field_data_array){
+	global $wpdb;
+    $table_name = $wpdb->prefix.'dk_forms_duplicate';
+	$forminator_page = get_option("forminator_page");
+
+    $request_debug_id = uniqid('dk_forminator_validate_', true);
+	$dk_enabled       = class_exists('duplicateKiller_Diagnostics');
+
+	$form_title = get_the_title( $form_id );
+
+	if (!is_array($forminator_page)) $forminator_page = [];
+
+    if ($dk_enabled) {
+        duplicateKiller_Diagnostics::log('forminator', 'validate_start', [
+            'request_debug_id' => $request_debug_id,
+            'form_id'          => $form_id,
+            'form_title'       => $form_title,
+            'fields_raw'       => is_array($field_data_array) ? $field_data_array : [],
+        ]);
+    }
+
+	// IP check
+	if (($forminator_page['forminator_user_ip'] ?? "0") === "1") {
+		$form_ip = duplicateKiller_get_user_ip();
+		$duplicateKiller_check_ip_feature = duplicateKiller_check_ip_feature("Forminator",$form_title,$form_ip);
+
+        if ($dk_enabled) {
+            duplicateKiller_Diagnostics::log('forminator', 'ip_check', [
+                'request_debug_id' => $request_debug_id,
+                'form_ip'          => $form_ip,
+                'ip_blocked'       => $duplicateKiller_check_ip_feature ? 1 : 0,
+            ]);
+        }
+
+		if($duplicateKiller_check_ip_feature){
+			$message = $forminator_page['forminator_error_message_limit_ip'];
+
+			add_filter('forminator_custom_form_invalid_form_message',function($invalid_form_message, $form_id) use($message){
+				$invalid_form_message = $message;
+				return $invalid_form_message = $message;
+			},15,2);
+
+			$submit_errors[] = $message;
+
+			if ($dk_enabled) {
+                duplicateKiller_Diagnostics::log('forminator', 'ip_blocked', [
+                    'request_debug_id' => $request_debug_id,
+                    'message'          => $message,
+                ]);
+            }
+
+			duplicateKiller_increment_duplicates_blocked_count();
+			return $submit_errors;
+		}
+	}
+
+	$abort = false;
+
+	$form_cookie = 'NULL';
+	if ( isset( $_COOKIE['dk_form_cookie'] ) ) {
+		$form_cookie = sanitize_text_field(
+			wp_unslash( $_COOKIE['dk_form_cookie'] )
+		);
+	}
+
+    if ($dk_enabled) {
+        duplicateKiller_Diagnostics::log('forminator', 'cookie_resolved', [
+            'request_debug_id' => $request_debug_id,
+            'form_cookie'      => $form_cookie,
+        ]);
+    }
+
+	$storage_fields = array();
+	$no_form = true;
+
+	$result = duplicateKiller_check_duplicate("Forminator",$form_title);
+
+    if ($dk_enabled) {
+        duplicateKiller_Diagnostics::log('forminator', 'duplicate_query_result', [
+            'request_debug_id' => $request_debug_id,
+            'has_results'      => !empty($result) ? 1 : 0,
+        ]);
+    }
+
+	if($result AND $forminator_page){
+
+	foreach($field_data_array as $data){
+
+		$storage_fields[] = [
+			"name" => $data['name'],
+			"value" => $data['value']
+		];
+
+        if ($dk_enabled) {
+            duplicateKiller_Diagnostics::log('forminator', 'field_check_start', [
+                'request_debug_id' => $request_debug_id,
+                'field_name'       => $data['name'],
+                'field_value'      => $data['value'],
+            ]);
+        }
+
+		foreach($forminator_page as $form => $value){
+			if($form_title == $form){
+				if(isset($value[$data['name']]) and $value[$data['name']] == 1){
+
+					foreach($result as $row){
+						$form_value = unserialize($row->form_value);
+
+						$res = duplicateKiller_check_values($form_value,$data['name'],$data['value']);
+
+                        if ($dk_enabled) {
+                            duplicateKiller_Diagnostics::log('forminator', 'field_duplicate_compare', [
+                                'request_debug_id' => $request_debug_id,
+                                'field_name'       => $data['name'],
+                                'match'            => $res ? 1 : 0,
+                            ]);
+                        }
+
+						if($res){
+							$cookies_setup = [
+								'plugin_name' => "forminator_cookie_option",
+								'get_option' => $forminator_page,
+								'cookie_stored' => $form_cookie,
+								'cookie_db_set' => $row->form_cookie
+							];
+
+							if(duplicateKiller_check_cookie($cookies_setup)){
+
+                                if ($dk_enabled) {
+                                    duplicateKiller_Diagnostics::log('forminator', 'duplicate_blocked', [
+                                        'request_debug_id' => $request_debug_id,
+                                        'field_name'       => $data['name'],
+                                    ]);
+                                }
+
+								if(is_array($data['value'])){
+									$submit_errors[][$data['name'].'-first-name'] = $forminator_page['forminator_error_message'];
+									$submit_errors[][$data['name'].'-middle-name'] = $forminator_page['forminator_error_message'];
+									$submit_errors[][$data['name'].'-last-name'] = $forminator_page['forminator_error_message'];
+									$abort = true;
+									duplicateKiller_increment_duplicates_blocked_count();
+								}else{
+									$submit_errors[][$data['name']] = $forminator_page['forminator_error_message'];
+									$abort = true;
+									duplicateKiller_increment_duplicates_blocked_count();
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	}
+
+    if ($dk_enabled) {
+        duplicateKiller_Diagnostics::log('forminator', 'validate_end', [
+            'request_debug_id' => $request_debug_id,
+            'abort'            => $abort ? 1 : 0,
+            'errors'           => $submit_errors,
+        ]);
+    }
+
+	return $submit_errors;
+}
+
 add_action( 'forminator_custom_form_submit_before_set_fields', 'duplicateKiller_forminator_save_fields', 10, 3 );
 function duplicateKiller_forminator_save_fields($entry, $id, $field_data) {
     global $wpdb;
 
     $table_name  = $wpdb->prefix . 'dk_forms_duplicate';
     $form_title  = get_the_title($id);
+
+    $request_debug_id = uniqid('dk_forminator_save_', true);
+	$dk_enabled       = class_exists('duplicateKiller_Diagnostics');
+
+    if ($dk_enabled) {
+        duplicateKiller_Diagnostics::log('forminator', 'save_start', [
+            'request_debug_id' => $request_debug_id,
+            'form_id'          => $id,
+            'form_title'       => $form_title,
+            'field_data_raw'   => is_array($field_data) ? $field_data : [],
+        ]);
+    }
 
     $form_cookie = 'NULL';
 	if ( isset( $_COOKIE['dk_form_cookie'] ) ) {
@@ -15,8 +194,23 @@ function duplicateKiller_forminator_save_fields($entry, $id, $field_data) {
 		);
 	}
 
+    if ($dk_enabled) {
+        duplicateKiller_Diagnostics::log('forminator', 'cookie_resolved', [
+            'request_debug_id' => $request_debug_id,
+            'form_cookie'      => $form_cookie,
+        ]);
+    }
+
     $duplicateKiller_check_ip_feature = duplicateKiller_get_setting("Forminator_page", "forminator_user_ip");
     $form_ip = $duplicateKiller_check_ip_feature ? duplicateKiller_get_user_ip() : 'NULL';
+
+    if ($dk_enabled) {
+        duplicateKiller_Diagnostics::log('forminator', 'ip_resolved', [
+            'request_debug_id' => $request_debug_id,
+            'ip_enabled'       => $duplicateKiller_check_ip_feature ? 1 : 0,
+            'form_ip'          => $form_ip,
+        ]);
+    }
 
     $storage_fields = [];
 
@@ -24,7 +218,14 @@ function duplicateKiller_forminator_save_fields($entry, $id, $field_data) {
         $name  = isset($data['name']) ? $data['name'] : '';
         $value = $data['value'] ?? null;
 
-        // File upload (Forminator poate returna structuri diferite)
+        if ($dk_enabled) {
+            duplicateKiller_Diagnostics::log('forminator', 'field_parsed', [
+                'request_debug_id' => $request_debug_id,
+                'field_name'       => $name,
+                'field_value'      => $value,
+            ]);
+        }
+
         if (is_array($value) && isset($value['file']) && is_array($value['file']) && !empty($value['file'])) {
             $file = $value['file'];
 
@@ -48,9 +249,9 @@ function duplicateKiller_forminator_save_fields($entry, $id, $field_data) {
 
     $form_value = serialize($storage_fields);
     $form_date  = current_time('Y-m-d H:i:s');
-	
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- Inserting into plugin-owned custom table.
-    $wpdb->insert($table_name, [
+
+    // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+    $insert_result = $wpdb->insert($table_name, [
         'form_plugin' => "Forminator",
         'form_name'   => $form_title,
         'form_value'  => $form_value,
@@ -58,92 +259,15 @@ function duplicateKiller_forminator_save_fields($entry, $id, $field_data) {
         'form_date'   => $form_date,
         'form_ip'     => $form_ip,
     ]);
-}
 
-add_action( 'forminator_custom_form_submit_errors','duplicateKiller_forminator_before_send_email',10,3);
-function duplicateKiller_forminator_before_send_email($submit_errors, $form_id, $field_data_array){
-	global $wpdb;
-    $table_name = $wpdb->prefix.'dk_forms_duplicate';
-	$forminator_page = get_option("forminator_page");
-	
-	$form_title = get_the_title( $form_id );
-	
-	if (!is_array($forminator_page)) $forminator_page = [];
-	//check if IP limit feature is active
-	if (($forminator_page['forminator_user_ip'] ?? "0") === "1") {
-		$form_ip = duplicateKiller_get_user_ip();
-		$duplicateKiller_check_ip_feature = duplicateKiller_check_ip_feature("Forminator",$form_title,$form_ip);
-		if($duplicateKiller_check_ip_feature){
-			$message = $forminator_page['forminator_error_message_limit_ip'];
-			//change the general error message with the dk_custom_error_message
-			add_filter('forminator_custom_form_invalid_form_message',function($invalid_form_message, $form_id) use($message){
-				$invalid_form_message = $message;
-				return $invalid_form_message = $message;
-			},15,2);
-			//stop form for submission if IP limit is triggered
-				$submit_errors[] = $message;
-				// Increment blocked duplicates counter
-				duplicateKiller_increment_duplicates_blocked_count();
-				return $submit_errors;
-		}
-	}
-	$abort = false;
-	$form_cookie = 'NULL';
-	if ( isset( $_COOKIE['dk_form_cookie'] ) ) {
-		$form_cookie = sanitize_text_field(
-			wp_unslash( $_COOKIE['dk_form_cookie'] )
-		);
-	}
-	$storage_fields = array();
-	$no_form = true;
-	
-	$result = duplicateKiller_check_duplicate("Forminator",$form_title);
-	if($result AND $forminator_page){
-	//$form_data = array(); deprecated from 1.2.1
-	
-	foreach($field_data_array as $data){
-		//store form values
-		$storage_fields[] = [
-			"name" => $data['name'],
-			"value" => $data['value']
-		];
-		foreach($forminator_page as $form => $value){
-			if($form_title == $form){
-				if(isset($value[$data['name']]) and $value[$data['name']] == 1){
-						foreach($result as $row){
-							$form_value = unserialize($row->form_value);
-							//inserted from v1.2.1
-							$res = duplicateKiller_check_values($form_value,$data['name'],$data['value']);
-								if($res){
-									$cookies_setup = [
-										'plugin_name' => "forminator_cookie_option",
-										'get_option' => $forminator_page,
-										'cookie_stored' => $form_cookie,
-										'cookie_db_set' => $row->form_cookie
-									];
-									if(duplicateKiller_check_cookie($cookies_setup)){
-										if(is_array($data['value'])){
-											$submit_errors[][$data['name'].'-first-name'] = $forminator_page['forminator_error_message'];
-											$submit_errors[][$data['name'].'-middle-name'] = $forminator_page['forminator_error_message'];
-											$submit_errors[][$data['name'].'-last-name'] = $forminator_page['forminator_error_message'];
-											$abort = true;
-											// Increment blocked duplicates counter
-											duplicateKiller_increment_duplicates_blocked_count();
-										}else{
-											$submit_errors[][$data['name']] = $forminator_page['forminator_error_message'];
-											$abort = true;
-											// Increment blocked duplicates counter
-											duplicateKiller_increment_duplicates_blocked_count();
-										}
-									}
-								}
-						}
-					}
-				}
-			}
-		}
-	}
-	return $submit_errors;
+    if ($dk_enabled) {
+        duplicateKiller_Diagnostics::log('forminator', 'save_after_insert', [
+            'request_debug_id' => $request_debug_id,
+            'insert_ok'        => empty($wpdb->last_error) && false !== $insert_result ? 1 : 0,
+            'wpdb_last_error'  => $wpdb->last_error,
+            'insert_id'        => $wpdb->insert_id,
+        ]);
+    }
 }
 
 function duplicateKiller_forminator_get_forms(){

@@ -193,6 +193,7 @@ final class duplicateKiller_WooCommerce {
 
 		// Classic checkout validation stage
 		add_action( 'woocommerce_after_checkout_validation', array( __CLASS__, 'check_duplicate_checkout' ), 10, 2 );
+
 		// Save order_id + received URL into the same lock transient so duplicates can link to the real order.
 		add_action( 'woocommerce_checkout_order_processed', array( __CLASS__, 'duplicateKiller_wc_record_successful_order' ), 10, 3 );
 	}
@@ -206,6 +207,9 @@ final class duplicateKiller_WooCommerce {
 	 */
 	public static function duplicateKiller_wc_record_successful_order( $order_id, $posted_data, $order ): void {
 
+		$dk_enabled       = class_exists('duplicateKiller_Diagnostics');
+		$request_debug_id = uniqid('dk_wc_record_order_', true);
+
 		$order_id = absint( $order_id );
 		if ( $order_id <= 0 ) {
 			return;
@@ -215,9 +219,23 @@ final class duplicateKiller_WooCommerce {
 			$posted_data = array();
 		}
 
+		if ( $dk_enabled ) {
+			duplicateKiller_Diagnostics::log('woocommerce', 'record_order_start', array(
+				'request_debug_id' => $request_debug_id,
+				'order_id'         => $order_id,
+				'posted_data'      => $posted_data,
+			));
+		}
+
 		// Rebuild the same fingerprint used at validation time.
 		$fingerprint = self::build_fingerprint( $posted_data );
 		if ( '' === $fingerprint ) {
+			if ( $dk_enabled ) {
+				duplicateKiller_Diagnostics::log('woocommerce', 'record_order_no_fingerprint', array(
+					'request_debug_id' => $request_debug_id,
+					'order_id'         => $order_id,
+				));
+			}
 			return;
 		}
 
@@ -250,6 +268,19 @@ final class duplicateKiller_WooCommerce {
 		// Keep same expiration window (do NOT extend it unexpectedly).
 		$window = (int) apply_filters( 'duplicateKiller_wc_lock_window_seconds', self::LOCK_WINDOW_SECONDS, $posted_data );
 		set_transient( $key, $existing, max( 10, $window ) );
+
+		if ( $dk_enabled ) {
+			duplicateKiller_Diagnostics::log('woocommerce', 'record_order_saved_to_lock', array(
+				'request_debug_id' => $request_debug_id,
+				'order_id'         => $order_id,
+				'fingerprint'      => $fingerprint,
+				'transient_key'    => $key,
+				'received_url'     => $received_url,
+				'payment_method'   => $payment_method,
+				'window'           => max( 10, $window ),
+				'existing'         => $existing,
+			));
+		}
 	}
 	/**
 	 * Main FREE checker: block accidental duplicate orders.
@@ -258,34 +289,71 @@ final class duplicateKiller_WooCommerce {
 	 * @param WP_Error $errors Validation error object.
 	 */
 	public static function check_duplicate_checkout( $data, $errors ): void {
+		$dk_enabled       = class_exists('duplicateKiller_Diagnostics');
+		$request_debug_id = uniqid('dk_wc_validate_', true);
+
 		// Safety: only if cart exists
 		if ( ! function_exists( 'WC' ) || ! WC()->cart ) {
 			return;
 		}
 
+		if ( $dk_enabled ) {
+			duplicateKiller_Diagnostics::log('woocommerce', 'validate_start', array(
+				'request_debug_id' => $request_debug_id,
+				'data'             => is_array( $data ) ? $data : array(),
+			));
+		}
+
 		$fingerprint = self::build_fingerprint( $data );
 
+		if ( $dk_enabled ) {
+			duplicateKiller_Diagnostics::log('woocommerce', 'fingerprint_built', array(
+				'request_debug_id' => $request_debug_id,
+				'fingerprint'      => $fingerprint,
+			));
+		}
+
 		if ( '' === $fingerprint ) {
+			if ( $dk_enabled ) {
+				duplicateKiller_Diagnostics::log('woocommerce', 'validate_no_fingerprint', array(
+					'request_debug_id' => $request_debug_id,
+				));
+			}
 			return;
 		}
-		//error_log('DK WC check_duplicate_checkout fired');
-		/**
-		 * Filter for PRO/extensions: allow overriding lock window.
-		 * FREE uses 60 seconds but PRO can change it via this filter.
-		 */
-		$window = (int) apply_filters( 'duplicateKiller_wc_lock_window_seconds', self::LOCK_WINDOW_SECONDS, $data );
 
-		$key = 'duplicateKiller_wc_' . $fingerprint;
+		$window = (int) apply_filters( 'duplicateKiller_wc_lock_window_seconds', self::LOCK_WINDOW_SECONDS, $data );
+		$key    = 'duplicateKiller_wc_' . $fingerprint;
 
 		$existing = get_transient( $key );
+
+		if ( $dk_enabled ) {
+			duplicateKiller_Diagnostics::log('woocommerce', 'lock_checked', array(
+				'request_debug_id' => $request_debug_id,
+				'transient_key'    => $key,
+				'lock_exists'      => ! empty( $existing ) ? 1 : 0,
+				'existing_lock'    => is_array( $existing ) ? $existing : $existing,
+				'window'           => max( 10, $window ),
+			));
+		}
+
 		if ( ! empty( $existing ) ) {
 
 			// Log duplicate attempt into wp_dk_forms_duplicate (minimal payload)
 			self::log_duplicate_event( $fingerprint, $data );
 			self::increment_blocked_counter();
+
 			$custom_message = (string) self::get_setting( 'message', '' );
 			if ( $custom_message === '' ) {
 				$custom_message = __( 'It looks like your order was already submitted. Please wait a moment and check your email for confirmation.', 'duplicate-killer' );
+			}
+
+			if ( $dk_enabled ) {
+				duplicateKiller_Diagnostics::log('woocommerce', 'duplicate_blocked', array(
+					'request_debug_id' => $request_debug_id,
+					'fingerprint'      => $fingerprint,
+					'message'          => $custom_message,
+				));
 			}
 
 			wc_add_notice(
@@ -306,6 +374,15 @@ final class duplicateKiller_WooCommerce {
 			),
 			max( 10, $window )
 		);
+
+		if ( $dk_enabled ) {
+			duplicateKiller_Diagnostics::log('woocommerce', 'lock_created', array(
+				'request_debug_id' => $request_debug_id,
+				'fingerprint'      => $fingerprint,
+				'transient_key'    => $key,
+				'window'           => max( 10, $window ),
+			));
+		}
 	}
 	private static function increment_blocked_counter(): void {
 		$key = 'duplicateKiller_duplicates_blocked_count';
@@ -367,6 +444,9 @@ final class duplicateKiller_WooCommerce {
 	private static function log_duplicate_event( string $fingerprint, array $data ): void {
 		global $wpdb;
 
+		$dk_enabled       = class_exists('duplicateKiller_Diagnostics');
+		$request_debug_id = uniqid('dk_wc_log_duplicate_', true);
+
 		// Insert only on duplicates -> low volume, performance-safe.
 		$table = $wpdb->prefix . 'dk_forms_duplicate';
 
@@ -404,6 +484,7 @@ final class duplicateKiller_WooCommerce {
 				}
 			}
 		}
+
 		// Read lock transient details (might include linked order info from successful checkout).
 		$lock_key  = 'duplicateKiller_wc_' . $fingerprint;
 		$existing  = get_transient( $lock_key );
@@ -418,24 +499,35 @@ final class duplicateKiller_WooCommerce {
 		if ( '' === $payment_method && isset( $data['payment_method'] ) ) {
 			$payment_method = sanitize_key( (string) $data['payment_method'] );
 		}
+
 		$payload = array(
 			'type'               => 'wc_checkout_duplicate',
-			'fingerprint'         => $fingerprint,
-			'order_id'            => $order_id,
-			'email'               => $email_masked,
-			'total'               => $total,
-			'products'            => $product_ids,
-			'currency'            => function_exists( 'get_woocommerce_currency' ) ? get_woocommerce_currency() : '',
-			'timestamp'           => time(),
-			'mode'                => $mode,
-			'customer_id'         => $customer_id,
-			'payment_method'      => $payment_method,
-			'order_received_url'  => $order_received,
-			'ip'                  => $ip !== '' ? $ip : '',
+			'fingerprint'        => $fingerprint,
+			'order_id'           => $order_id,
+			'email'              => $email_masked,
+			'total'              => $total,
+			'products'           => $product_ids,
+			'currency'           => function_exists( 'get_woocommerce_currency' ) ? get_woocommerce_currency() : '',
+			'timestamp'          => time(),
+			'mode'               => $mode,
+			'customer_id'        => $customer_id,
+			'payment_method'     => $payment_method,
+			'order_received_url' => $order_received,
+			'ip'                 => $ip !== '' ? $ip : '',
 		);
 
+		if ( $dk_enabled ) {
+			duplicateKiller_Diagnostics::log('woocommerce', 'duplicate_log_prepare', array(
+				'request_debug_id' => $request_debug_id,
+				'fingerprint'      => $fingerprint,
+				'payload'          => $payload,
+				'lock_key'         => $lock_key,
+				'existing_lock'    => $existing,
+			));
+		}
+
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- Logging into plugin-owned custom table.
-		$wpdb->insert(
+		$insert_result = $wpdb->insert(
 			$table,
 			array(
 				'form_plugin' => 'WooCommerce',
@@ -447,6 +539,16 @@ final class duplicateKiller_WooCommerce {
 			),
 			array( '%s', '%s', '%s', '%s', '%s', '%s' )
 		);
+
+		if ( $dk_enabled ) {
+			duplicateKiller_Diagnostics::log('woocommerce', 'duplicate_log_saved', array(
+				'request_debug_id' => $request_debug_id,
+				'insert_ok'        => empty( $wpdb->last_error ) && false !== $insert_result ? 1 : 0,
+				'wpdb_last_error'  => $wpdb->last_error,
+				'insert_id'        => $wpdb->insert_id,
+				'table'            => $table,
+			));
+		}
 
 		// Invalidate cached stats if you add caching.
 		delete_transient( 'duplicateKiller_wc_stats' );

@@ -30,6 +30,9 @@ add_filter( 'ninja_forms_submit_data', 'duplicateKiller_ninjaforms_before_send_e
 
 function duplicateKiller_ninjaforms_before_send_email( $form_data ) {
 	global $wpdb;
+
+	$request_debug_id = uniqid('dk_ninjaforms_', true);
+	$dk_enabled       = class_exists('duplicateKiller_Diagnostics');
 	
 	$table_name = $wpdb->prefix . 'dk_forms_duplicate';
 
@@ -39,6 +42,13 @@ function duplicateKiller_ninjaforms_before_send_email( $form_data ) {
 	$ninja_page = get_option( 'NinjaForms_page' );
 	if ( ! is_array( $ninja_page ) ) {
 		return $form_data;
+	}
+
+	if ( $dk_enabled ) {
+		duplicateKiller_Diagnostics::log('ninjaforms', 'validate_start', [
+			'request_debug_id' => $request_debug_id,
+			'form_data_raw'    => is_array($form_data) ? $form_data : [],
+		]);
 	}
 
 	// Basic sanity checks
@@ -83,6 +93,15 @@ function duplicateKiller_ninjaforms_before_send_email( $form_data ) {
 	// The per-form key inside NinjaForms_page is: "formkey.formid"
 	$form_name = $form_key . '.' . $form_id; // e.g. "contactme.1"
 
+	if ( $dk_enabled ) {
+		duplicateKiller_Diagnostics::log('ninjaforms', 'context_resolved', [
+			'request_debug_id' => $request_debug_id,
+			'form_id'          => $form_id,
+			'form_key'         => $form_key,
+			'form_name'        => $form_name,
+		]);
+	}
+
 	// Per-form config must exist under that exact key
 	if ( empty( $ninja_page[ $form_name ] ) || ! is_array( $ninja_page[ $form_name ] ) ) {
 		return $form_data;
@@ -102,10 +121,28 @@ function duplicateKiller_ninjaforms_before_send_email( $form_data ) {
 		return $form_data;
 	}
 
+	if ( $dk_enabled ) {
+		duplicateKiller_Diagnostics::log('ninjaforms', 'fields_loaded', [
+			'request_debug_id' => $request_debug_id,
+			'fields'           => $fields,
+			'cfg'              => $cfg,
+		]);
+	}
+
 	// =========================
 	// 1) IP check
 	// =========================
-	if ( duplicateKiller_ip_limit_trigger(DK_NINJA_FORMS, $ninja_page, $form_name ) ) {
+	$ip_triggered = duplicateKiller_ip_limit_trigger(DK_NINJA_FORMS, $ninja_page, $form_name);
+
+	if ( $dk_enabled ) {
+		duplicateKiller_Diagnostics::log('ninjaforms', 'ip_check', [
+			'request_debug_id' => $request_debug_id,
+			'form_name'        => $form_name,
+			'ip_triggered'     => $ip_triggered ? 1 : 0,
+		]);
+	}
+
+	if ( $ip_triggered ) {
 		$message = ! empty( $ninja_page['ninjaforms_error_message_limit_ip'] )
 			? (string) $ninja_page['ninjaforms_error_message_limit_ip']
 			: 'This IP has been already submitted.';
@@ -114,21 +151,39 @@ function duplicateKiller_ninjaforms_before_send_email( $form_data ) {
 		$first_fid = duplicateKiller_nf_get_first_field_id( $fields );
 		if ( $first_fid > 0 ) {
 			$form_data['errors']['fields'][ $first_fid ] = $message;
-			// Increment blocked duplicates counter
 			duplicateKiller_increment_duplicates_blocked_count();
+		}
+
+		if ( $dk_enabled ) {
+			duplicateKiller_Diagnostics::log('ninjaforms', 'ip_blocked', [
+				'request_debug_id' => $request_debug_id,
+				'form_name'        => $form_name,
+				'message'          => $message,
+				'first_field_id'   => $first_fid,
+				'errors_after'     => $form_data['errors'],
+			]);
 		}
 
 		return $form_data;
 	}
+
 	// =========================
 	// 2) Duplicate field check (by FIELD_ID toggles in config)
 	// =========================
-	
 	$cookie = duplicateKiller_get_form_cookie_simple($ninja_page, $form_name);
 
-	$form_cookie = $cookie['form_cookie'];
+	$form_cookie    = $cookie['form_cookie'];
 	$checked_cookie = $cookie['checked_cookie'];
-	
+
+	if ( $dk_enabled ) {
+		duplicateKiller_Diagnostics::log('ninjaforms', 'cookie_resolved', [
+			'request_debug_id' => $request_debug_id,
+			'form_name'        => $form_name,
+			'form_cookie'      => $form_cookie,
+			'checked_cookie'   => $checked_cookie,
+		]);
+	}
+
 	// Storage for DB: field_id => value
 	$storage_fields = array();
 
@@ -167,11 +222,22 @@ function duplicateKiller_ninjaforms_before_send_email( $form_data ) {
 		// Save for DB (always)
 		$storage_fields[ $fid ] = $submitted_value;
 
+		if ( $dk_enabled ) {
+			duplicateKiller_Diagnostics::log('ninjaforms', 'field_inspected', [
+				'request_debug_id' => $request_debug_id,
+				'form_name'        => $form_name,
+				'field_id'         => $fid,
+				'field_value'      => $submitted_value,
+				'is_enabled'       => ( isset( $cfg[ $fid ] ) && (int) $cfg[ $fid ] === 1 ) ? 1 : 0,
+			]);
+		}
+
 		// Only check duplicates if this FIELD_ID is enabled in per-form config (e.g. 2 => "1")
 		// NOTE: $cfg also contains 'labels' array; ignore that.
 		if ( ! isset( $cfg[ $fid ] ) || (int) $cfg[ $fid ] !== 1 ) {
 			continue;
 		}
+
 		$is_dup = duplicateKiller_check_duplicate_by_key_value(
 			DK_NINJA_FORMS,
 			$form_name, // e.g. "contactme.1"
@@ -180,13 +246,33 @@ function duplicateKiller_ninjaforms_before_send_email( $form_data ) {
 			$form_cookie,
 			$checked_cookie
 		);
+
+		if ( $dk_enabled ) {
+			duplicateKiller_Diagnostics::log('ninjaforms', 'field_duplicate_result', [
+				'request_debug_id' => $request_debug_id,
+				'form_name'        => $form_name,
+				'field_id'         => $fid,
+				'field_value'      => $submitted_value,
+				'is_duplicate'     => $is_dup ? 1 : 0,
+			]);
+		}
 			
 		if ( $is_dup ) {
 			// Block submission: form-level + field-level errors
 			$form_data['errors']['form']           = $duplicate_message;
 			$form_data['errors']['fields'][ $fid ] = $duplicate_message;
-			// Increment blocked duplicates counter
 			duplicateKiller_increment_duplicates_blocked_count();
+
+			if ( $dk_enabled ) {
+				duplicateKiller_Diagnostics::log('ninjaforms', 'duplicate_blocked', [
+					'request_debug_id' => $request_debug_id,
+					'form_name'        => $form_name,
+					'field_id'         => $fid,
+					'message'          => $duplicate_message,
+					'errors_after'     => $form_data['errors'],
+				]);
+			}
+
 			return $form_data;
 		}
 	}
@@ -200,18 +286,37 @@ function duplicateKiller_ninjaforms_before_send_email( $form_data ) {
 	$form_value = serialize( $storage_fields );
 	$form_date  = current_time( 'Y-m-d H:i:s' );
 
+	if ( $dk_enabled ) {
+		duplicateKiller_Diagnostics::log('ninjaforms', 'save_start', [
+			'request_debug_id' => $request_debug_id,
+			'form_name'        => $form_name,
+			'storage_fields'   => $storage_fields,
+			'form_ip'          => $form_ip,
+		]);
+	}
+
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- Inserting into plugin-owned custom table.
-	$wpdb->insert(
+	$insert_result = $wpdb->insert(
 		$table_name,
 		array(
 			'form_plugin' => DK_NINJA_FORMS,
-			'form_name'   => $form_name,   // e.g. "contactme.1"
-			'form_value'  => $form_value,  // field_id => value
+			'form_name'   => $form_name,
+			'form_value'  => $form_value,
 			'form_cookie' => $form_cookie,
 			'form_date'   => $form_date,
 			'form_ip'     => $form_ip,
 		)
 	);
+
+	if ( $dk_enabled ) {
+		duplicateKiller_Diagnostics::log('ninjaforms', 'save_after_insert', [
+			'request_debug_id' => $request_debug_id,
+			'form_name'        => $form_name,
+			'insert_ok'        => empty($wpdb->last_error) && false !== $insert_result ? 1 : 0,
+			'wpdb_last_error'  => $wpdb->last_error,
+			'insert_id'        => $wpdb->insert_id,
+		]);
+	}
 
 	return $form_data;
 }

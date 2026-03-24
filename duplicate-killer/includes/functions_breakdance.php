@@ -8,6 +8,9 @@ function duplicateKiller_breakdance_guard_action($canExecute, $action, $extra, $
 {
     if (is_wp_error($canExecute)) return $canExecute;
 
+    $request_debug_id = uniqid('dk_breakdance_', true);
+    $dk_enabled       = class_exists('duplicateKiller_Diagnostics');
+
     static $dk_state = [
         'checked_once'    => false,
         'duplicate_found' => false,
@@ -16,30 +19,65 @@ function duplicateKiller_breakdance_guard_action($canExecute, $action, $extra, $
         'error_message'   => '',
     ];
 
+    if ($dk_enabled) {
+        duplicateKiller_Diagnostics::log('breakdance', 'guard_start', [
+            'request_debug_id' => $request_debug_id,
+            'action'           => $action,
+            'extra'            => is_array($extra) ? $extra : [],
+        ]);
+    }
+
     if ($dk_state['checked_once']) {
+
+        if ($dk_enabled) {
+            duplicateKiller_Diagnostics::log('breakdance', 'already_checked', [
+                'request_debug_id' => $request_debug_id,
+                'duplicate_found'  => $dk_state['duplicate_found'] ? 1 : 0,
+            ]);
+        }
+
         if ($dk_state['duplicate_found']) {
             if (!$dk_state['error_sent']) {
                 $dk_state['error_sent'] = true;
+
+                if ($dk_enabled) {
+                    duplicateKiller_Diagnostics::log('breakdance', 'return_error_repeat', [
+                        'request_debug_id' => $request_debug_id,
+                        'message'          => $dk_state['error_message'],
+                    ]);
+                }
+
                 return new \WP_Error('dk_duplicate', $dk_state['error_message'] ?: __('Duplicate found.', 'duplicate-killer'));
             }
             return false;
         }
         return $canExecute;
     }
+
     $dk_state['checked_once'] = true;
 
     $post_id = isset($extra['postId']) ? $extra['postId'] : '';
-	$node_id = isset($extra['formId']) ? $extra['formId'] : '';
+    $node_id = isset($extra['formId']) ? $extra['formId'] : '';
+
+    if ($dk_enabled) {
+        duplicateKiller_Diagnostics::log('breakdance', 'context_resolved', [
+            'request_debug_id' => $request_debug_id,
+            'post_id'          => $post_id,
+            'node_id'          => $node_id,
+        ]);
+    }
+
     if (!$post_id || !$node_id) return $canExecute;
 
     $bd_form   = $settings['form'] ?? [];
     $base_name = trim((string)($bd_form['form_name'] ?? ''));
+
     if ($base_name === '') {
         $post = get_post($post_id);
         $base_name = $post ? $post->post_title : 'Breakdance Form';
     }
 
-	$db_form_name = $base_name . '.' . (int)$post_id . '.' . (int)$node_id;
+    $db_form_name = $base_name . '.' . (int)$post_id . '.' . (int)$node_id;
 
     $options = get_option('Breakdance_page');
     if (!is_array($options)) $options = [];
@@ -48,8 +86,15 @@ function duplicateKiller_breakdance_guard_action($canExecute, $action, $extra, $
         ? $options[$db_form_name]
         : [];
 
+    if ($dk_enabled) {
+        duplicateKiller_Diagnostics::log('breakdance', 'config_lookup', [
+            'request_debug_id' => $request_debug_id,
+            'db_form_name'     => $db_form_name,
+            'has_config'       => !empty($perForm) ? 1 : 0,
+        ]);
+    }
+
     $global_cookie_enabled   = isset($options['breakdance_cookie_option']) && $options['breakdance_cookie_option'] === '1';
-    $global_cookie_days_raw  = isset($options['breakdance_cookie_option_days']) ? $options['breakdance_cookie_option_days'] : '7';
     $global_ip_enabled       = isset($options['breakdance_user_ip']) && $options['breakdance_user_ip'] === '1';
     $global_err_msg_ip       = isset($options['breakdance_error_message_limit_ip']) ? (string)$options['breakdance_error_message_limit_ip'] : '';
     $global_err_msg_fields   = isset($options['breakdance_error_message']) ? (string)$options['breakdance_error_message'] : '';
@@ -67,20 +112,26 @@ function duplicateKiller_breakdance_guard_action($canExecute, $action, $extra, $
 
     if (empty($perForm)) return $canExecute;
 
-	$form_cookie = isset( $_COOKIE['dk_form_cookie'] )
-			? sanitize_text_field( wp_unslash( $_COOKIE['dk_form_cookie'] ) )
-			: 'NULL';
-    $default_msg_fields = __('Please check all fields! These values have been submitted already!', 'duplicate-killer');
-    $default_msg_ip     = __('This IP has been already submitted.', 'duplicate-killer');
+    $form_cookie = isset($_COOKIE['dk_form_cookie'])
+        ? sanitize_text_field(wp_unslash($_COOKIE['dk_form_cookie']))
+        : 'NULL';
+
+    if ($dk_enabled) {
+        duplicateKiller_Diagnostics::log('breakdance', 'cookie_resolved', [
+            'request_debug_id' => $request_debug_id,
+            'form_cookie'      => $form_cookie,
+        ]);
+    }
 
     $error_message_base = $global_err_msg_fields !== '' ? $global_err_msg_fields
-                        : (isset($perForm['error_message']) ? (string)$perForm['error_message'] : $default_msg_fields);
+                        : (isset($perForm['error_message']) ? (string)$perForm['error_message'] : __('Please check all fields!', 'duplicate-killer'));
 
     $error_message_ip   = $global_err_msg_ip !== '' ? $global_err_msg_ip
-                        : (isset($perForm['error_message_limit_ip_option']) ? (string)$perForm['error_message_limit_ip_option'] : $default_msg_ip);
+                        : (isset($perForm['error_message_limit_ip_option']) ? (string)$perForm['error_message_limit_ip_option'] : __('IP blocked', 'duplicate-killer'));
 
     $id_to_val   = [];
     $id_to_label = [];
+
     foreach ($form as $field) {
         $fid = \Breakdance\Forms\getIdFromField($field);
         $id_to_val[$fid]   = (string)($field['value'] ?? '');
@@ -91,73 +142,97 @@ function duplicateKiller_breakdance_guard_action($canExecute, $action, $extra, $
     $ip_triggered = false;
     if (function_exists('duplicateKiller_ip_limit_trigger')) {
         $ip_triggered = duplicateKiller_ip_limit_trigger('breakdance', $options, $db_form_name);
-	}
+    }
+
+    if ($dk_enabled) {
+        duplicateKiller_Diagnostics::log('breakdance', 'ip_check', [
+            'request_debug_id' => $request_debug_id,
+            'triggered'        => $ip_triggered ? 1 : 0,
+        ]);
+    }
+
     if ($ip_triggered) {
         $dk_state['duplicate_found'] = true;
         $dk_state['error_sent']      = true;
         $dk_state['error_message']   = $error_message_ip;
-		// Increment blocked duplicates counter
-		duplicateKiller_increment_duplicates_blocked_count();
-		return new \WP_Error('dk_duplicate_ip', $error_message_ip);
+
+        duplicateKiller_increment_duplicates_blocked_count();
+
+        if ($dk_enabled) {
+            duplicateKiller_Diagnostics::log('breakdance', 'ip_blocked', [
+                'request_debug_id' => $request_debug_id,
+                'message'          => $error_message_ip,
+            ]);
+        }
+
+        return new \WP_Error('dk_duplicate_ip', $error_message_ip);
     }
 
-    /* 2) check for duplicates
-     */
+    /* 2) duplicate check */
     $unique_ids = [];
     foreach ($perForm as $k => $v) {
         if ($k === 'form_id') continue;
         if ($v === '1') $unique_ids[] = (string)$k;
     }
 
-    if ($unique_ids) {
-        $checked_cookie = $global_cookie_enabled;
+    foreach ($unique_ids as $field_id) {
 
-        foreach ($unique_ids as $field_id) {
-            $submitted_value = isset($id_to_val[$field_id]) ? $id_to_val[$field_id] : '';
+        $submitted_value = isset($id_to_val[$field_id]) ? $id_to_val[$field_id] : '';
 
-            if ($submitted_value === '' || $submitted_value === null) continue;
+        if ($dk_enabled) {
+            duplicateKiller_Diagnostics::log('breakdance', 'field_check', [
+                'request_debug_id' => $request_debug_id,
+                'field_id'         => $field_id,
+                'value'            => $submitted_value,
+            ]);
+        }
 
-            if (is_array($submitted_value)) {
-                $submitted_value = implode(' ', array_map('strval', $submitted_value));
-            } else {
-                $submitted_value = (string)$submitted_value;
+        if ($submitted_value === '') continue;
+
+        $exists = duplicateKiller_check_duplicate_by_key_value(
+            'breakdance',
+            $db_form_name,
+            $field_id,
+            $submitted_value,
+            $form_cookie,
+            $global_cookie_enabled
+        );
+
+        if ($exists) {
+            $label  = $id_to_label[$field_id] ?? $field_id;
+            $pretty = sprintf('%s: %s', $label, $error_message_base);
+
+            $dk_state['duplicate_found'] = true;
+            $dk_state['error_sent']      = true;
+            $dk_state['error_message']   = $pretty;
+
+            duplicateKiller_increment_duplicates_blocked_count();
+
+            if ($dk_enabled) {
+                duplicateKiller_Diagnostics::log('breakdance', 'duplicate_blocked', [
+                    'request_debug_id' => $request_debug_id,
+                    'field_id'         => $field_id,
+                    'message'          => $pretty,
+                ]);
             }
 
-            $exists = duplicateKiller_check_duplicate_by_key_value(
-                'breakdance',          // $form_plugin
-                $db_form_name,         // $form_name
-                $field_id,             // $key
-                $submitted_value,      // $value
-                $form_cookie,          // $form_cookie
-                $checked_cookie        // $checked_cookie
-            );
-
-            if ($exists) {
-                $label  = $id_to_label[$field_id] ?? $field_id;
-                $pretty = sprintf('%s: %s', $label, $error_message_base);
-                $dk_state['duplicate_found'] = true;
-                $dk_state['error_sent']      = true;
-                $dk_state['error_message']   = $pretty;
-				// Increment blocked duplicates counter
-				duplicateKiller_increment_duplicates_blocked_count();
-                return new \WP_Error('dk_duplicate', $pretty);
-            }
+            return new \WP_Error('dk_duplicate', $pretty);
         }
     }
 
-    /* 3) save only one time (first action) */
+    /* 3) save */
     if (!$dk_state['saved_once']) {
+
         global $wpdb;
 
         $payload = serialize($extra['fields'] ?? []);
-
         $form_ip = $global_ip_enabled ? duplicateKiller_get_user_ip() : 'NULL';
-
         $now_gmt = current_time('Y-m-d H:i:s');
-		
-		$table_name = $wpdb->prefix . 'dk_forms_duplicate';
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- Inserting into plugin-owned custom table.
-        $wpdb->insert($table_name, [
+
+        $table_name = $wpdb->prefix . 'dk_forms_duplicate';
+
+        // phpcs:ignore
+        $insert_result = $wpdb->insert($table_name, [
             'form_plugin' => 'breakdance',
             'form_name'   => $db_form_name,
             'form_value'  => $payload,
@@ -165,6 +240,15 @@ function duplicateKiller_breakdance_guard_action($canExecute, $action, $extra, $
             'form_date'   => $now_gmt,
             'form_ip'     => $form_ip,
         ], ['%s','%s','%s','%s','%s','%s']);
+
+        if ($dk_enabled) {
+            duplicateKiller_Diagnostics::log('breakdance', 'save_after_insert', [
+                'request_debug_id' => $request_debug_id,
+                'insert_ok'        => empty($wpdb->last_error) && false !== $insert_result ? 1 : 0,
+                'wpdb_last_error'  => $wpdb->last_error,
+                'insert_id'        => $wpdb->insert_id,
+            ]);
+        }
 
         $dk_state['saved_once'] = true;
     }

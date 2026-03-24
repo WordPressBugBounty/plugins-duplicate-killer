@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: Duplicate Killer
- * Version: 1.5.4
+ * Version: 1.5.5
  * Description: Block duplicate form submissions by validating unique email, phone and text fields — without CAPTCHA.
  * Author: NIA
  * Author URI: https://profiles.wordpress.org/wpnia/
@@ -13,7 +13,7 @@
 	defined('ABSPATH') or die('You shall not pass!');
 	
 	define('DUPLICATEKILLER_PLUGIN_FILE',__FILE__);
-	define('DUPLICATEKILLER_VERSION','1.5.4');
+	define('DUPLICATEKILLER_VERSION','1.5.5');
 	define('DUPLICATEKILLER_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 	define('DUPLICATEKILLER_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 	
@@ -28,10 +28,13 @@
 	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/functions_ninjaforms.php';
 	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/database.php';
 	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/pro.php';
-	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/support.php';
 	
 	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/class-duplicateKiller-woocommerce.php';
 	duplicateKiller_WooCommerce::init();
+	
+	//debug/diagnostics
+	require_once DUPLICATEKILLER_PLUGIN_DIR . '/includes/class-duplicateKiller-diagnostics.php';
+	duplicateKiller_Diagnostics::init();
 	
 //location helpers.php
 add_action('admin_init', 'duplicateKiller_handle_delete_records_request');
@@ -96,6 +99,11 @@ function duplicateKiller_drop_table_uninstall() {
 	// New: review milestones + blocked duplicates counter
 	delete_option( 'duplicateKiller_duplicates_blocked_count' );
 	delete_option( 'duplicateKiller_review_milestones_dismissed' );
+	
+	delete_option( 'duplicateKillerWooCommerceSettings' );
+	
+	delete_option( 'duplicateKiller_diagnostics_settings' );
+	delete_option( 'duplicateKiller_diagnostics_logs' );
 }
 register_uninstall_hook(__FILE__, 'duplicateKiller_drop_table_uninstall');
 
@@ -252,10 +260,15 @@ add_action( 'admin_enqueue_scripts', 'duplicateKiller_callback_for_setting_up_sc
 function duplicateKiller_callback_for_setting_up_scripts( $hook ) {
 
 	// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Admin page slug only.
-		$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : '';
-		if ( 'toplevel_page_duplicateKiller' !== $hook && 'dk_database' !== $page ) {
-			return;
-		}
+	$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : '';
+
+	if (
+		'duplicatekiller' !== $page &&
+		'dk_database' !== $page &&
+		'duplicatekiller_diagnostics' !== $page
+	) {
+		return;
+	}
 
 	wp_register_style(
 		'duplicateKillerStyle',
@@ -500,11 +513,6 @@ function duplicateKiller_options() {
 			'description_cb' => 'duplicateKiller_pro_plugin',
 			'fields' => array(),
 		),
-		'Get_support' => array(
-			'title' => 'Get Support',
-			'description_cb' => 'duplicateKiller_support_plugin', // Definește această funcție
-			'fields' => array(),
-		),
 	);
 
 	foreach ($settings as $page => $data) {
@@ -637,7 +645,9 @@ function duplicateKiller_display_page() {
 			   class="nav-tab dk-pro-tab <?php echo esc_attr($active_tab == 'pro' ? 'nav-tab-active' : ''); ?>">
 			   <?php esc_html_e('PRO','duplicate-killer');?>
 			</a>
-			<a href="?page=duplicateKiller&tab=support" class="nav-tab <?php echo esc_attr($active_tab == 'support' ? 'nav-tab-active' : ''); ?>"><?php esc_html_e('Get support','duplicate-killer');?></a>
+			<a href="<?php echo esc_url( admin_url('admin.php?page=duplicateKiller_diagnostics') ); ?>" class="nav-tab dk-nav-tab-diagnostics">
+				<?php esc_html_e('Diagnostics','duplicate-killer'); ?>
+			</a>
         </h2>  
         <form method="post" action="options.php">  
             <?php
@@ -677,10 +687,7 @@ function duplicateKiller_display_page() {
             }elseif($active_tab == 'pro') {
                 settings_fields('Pro_page');
 				duplicateKiller_do_settings_sections('Pro_page');
-            }elseif ($active_tab == 'support') {
-				settings_fields('Get_support'); 
-				duplicateKiller_do_settings_sections('Get_support');
-			}
+            }
             ?>
         </form> 
     </div> 

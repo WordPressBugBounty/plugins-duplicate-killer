@@ -5,11 +5,22 @@ add_filter('frm_validate_entry', 'duplicateKiller_formidable_before_send_email',
 function duplicateKiller_formidable_before_send_email($errors, $values) {
 	global $wpdb;
 
+	$request_debug_id = uniqid('dk_formidable_', true);
+	$dk_enabled       = class_exists('duplicateKiller_Diagnostics');
+
 	$table_name = $wpdb->prefix . 'dk_forms_duplicate';
 
 	$formidable_page = get_option('Formidable_page');
 	if (!is_array($formidable_page)) {
 		return $errors;
+	}
+
+	if ($dk_enabled) {
+		duplicateKiller_Diagnostics::log('formidable', 'validate_start', [
+			'request_debug_id' => $request_debug_id,
+			'values_raw'       => is_array($values) ? $values : [],
+			'errors_before'    => is_array($errors) ? $errors : [],
+		]);
 	}
 
 	// Only handle real create submissions
@@ -26,6 +37,15 @@ function duplicateKiller_formidable_before_send_email($errors, $values) {
 	// Form identifier (e.g. "contact-us.2")
 	$wanted_form_id = $form_key . '.' . $form_id;
 
+	if ($dk_enabled) {
+		duplicateKiller_Diagnostics::log('formidable', 'context_resolved', [
+			'request_debug_id' => $request_debug_id,
+			'form_id'          => $form_id,
+			'form_key'         => $form_key,
+			'wanted_form_id'   => $wanted_form_id,
+		]);
+	}
+
 	// Config is keyed by wanted_form_id directly (e.g. $formidable_page['contact-us.2'])
 	if (empty($formidable_page[$wanted_form_id]) || !is_array($formidable_page[$wanted_form_id])) {
 		return $errors;
@@ -38,16 +58,43 @@ function duplicateKiller_formidable_before_send_email($errors, $values) {
 	// Cookie id (whatever your helper does)
 	$form_cookie = duplicateKiller_get_formidable_cookie_if_enabled($formidable_page);
 
+	if ($dk_enabled) {
+		duplicateKiller_Diagnostics::log('formidable', 'cookie_resolved', [
+			'request_debug_id' => $request_debug_id,
+			'form_name'        => $form_name,
+			'form_cookie'      => $form_cookie,
+		]);
+	}
+
 	// =========================
 	// 1) IP check
 	// =========================
-	if (duplicateKiller_ip_limit_trigger('Formidable', $formidable_page, $form_name)) {
+	$ip_triggered = duplicateKiller_ip_limit_trigger('Formidable', $formidable_page, $form_name);
+
+	if ($dk_enabled) {
+		duplicateKiller_Diagnostics::log('formidable', 'ip_check', [
+			'request_debug_id' => $request_debug_id,
+			'form_name'        => $form_name,
+			'ip_triggered'     => $ip_triggered ? 1 : 0,
+		]);
+	}
+
+	if ($ip_triggered) {
 		$message = !empty($formidable_page['formidable_error_message_limit_ip'])
 			? (string)$formidable_page['formidable_error_message_limit_ip']
 			: 'This IP has been already submitted.';
 
 		$errors['frm_error'] = $message;
-		// Increment blocked duplicates counter
+
+		if ($dk_enabled) {
+			duplicateKiller_Diagnostics::log('formidable', 'ip_blocked', [
+				'request_debug_id' => $request_debug_id,
+				'form_name'        => $form_name,
+				'message'          => $message,
+				'errors_after'     => $errors,
+			]);
+		}
+
 		duplicateKiller_increment_duplicates_blocked_count();
 		return $errors;
 	}
@@ -61,6 +108,16 @@ function duplicateKiller_formidable_before_send_email($errors, $values) {
 	}
 
 	$checked_cookie = !empty($formidable_page['formidable_cookie_option']) && (string)$formidable_page['formidable_cookie_option'] === '1';
+
+	if ($dk_enabled) {
+		duplicateKiller_Diagnostics::log('formidable', 'duplicate_check_start', [
+			'request_debug_id' => $request_debug_id,
+			'form_name'        => $form_name,
+			'checked_cookie'   => $checked_cookie ? 1 : 0,
+			'posted_raw'       => $posted,
+			'cfg'              => $cfg,
+		]);
+	}
 
 	// Storage for DB: field_id => value
 	$storage_fields = array();
@@ -89,6 +146,16 @@ function duplicateKiller_formidable_before_send_email($errors, $values) {
 		// Save for DB (always)
 		$storage_fields[$fid] = $submitted_value;
 
+		if ($dk_enabled) {
+			duplicateKiller_Diagnostics::log('formidable', 'field_inspected', [
+				'request_debug_id' => $request_debug_id,
+				'form_name'        => $form_name,
+				'field_id'         => $fid,
+				'field_value'      => $submitted_value,
+				'is_enabled'       => (!empty($cfg[$fid]) && (string)$cfg[$fid] === '1') ? 1 : 0,
+			]);
+		}
+
 		// Only check duplicates if this FIELD_ID is enabled in config (e.g. 8 => "1")
 		// Note: labels is stored under $cfg['labels'], we ignore it here.
 		if (empty($cfg[$fid]) || (string)$cfg[$fid] !== '1') {
@@ -104,13 +171,33 @@ function duplicateKiller_formidable_before_send_email($errors, $values) {
 			$checked_cookie
 		);
 
+		if ($dk_enabled) {
+			duplicateKiller_Diagnostics::log('formidable', 'field_duplicate_result', [
+				'request_debug_id' => $request_debug_id,
+				'form_name'        => $form_name,
+				'field_id'         => $fid,
+				'field_value'      => $submitted_value,
+				'is_duplicate'     => $is_dup ? 1 : 0,
+			]);
+		}
+
 		if ($is_dup) {
 			$errors['field' . $fid] = $duplicate_message;
 			if (empty($errors['frm_error'])) {
 				$errors['frm_error'] = $duplicate_message;
-				// Increment blocked duplicates counter
 				duplicateKiller_increment_duplicates_blocked_count();
 			}
+
+			if ($dk_enabled) {
+				duplicateKiller_Diagnostics::log('formidable', 'duplicate_blocked', [
+					'request_debug_id' => $request_debug_id,
+					'form_name'        => $form_name,
+					'field_id'         => $fid,
+					'message'          => $duplicate_message,
+					'errors_after'     => $errors,
+				]);
+			}
+
 			return $errors;
 		}
 	}
@@ -124,19 +211,38 @@ function duplicateKiller_formidable_before_send_email($errors, $values) {
 
 	$form_value = serialize($storage_fields);
 	$form_date  = current_time('Y-m-d H:i:s');
-	
+
+	if ($dk_enabled) {
+		duplicateKiller_Diagnostics::log('formidable', 'save_start', [
+			'request_debug_id' => $request_debug_id,
+			'form_name'        => $form_name,
+			'storage_fields'   => $storage_fields,
+			'form_ip'          => $form_ip,
+		]);
+	}
+
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- Inserting into plugin-owned custom table.
-	$wpdb->insert(
+	$insert_result = $wpdb->insert(
 		$table_name,
 		array(
 			'form_plugin' => 'Formidable',
-			'form_name'   => $form_name,   // "contact-us.2"
-			'form_value'  => $form_value,  // field_id => value
+			'form_name'   => $form_name,
+			'form_value'  => $form_value,
 			'form_cookie' => $form_cookie,
 			'form_date'   => $form_date,
 			'form_ip'     => $form_ip,
 		)
 	);
+
+	if ($dk_enabled) {
+		duplicateKiller_Diagnostics::log('formidable', 'save_after_insert', [
+			'request_debug_id' => $request_debug_id,
+			'form_name'        => $form_name,
+			'insert_ok'        => empty($wpdb->last_error) && false !== $insert_result ? 1 : 0,
+			'wpdb_last_error'  => $wpdb->last_error,
+			'insert_id'        => $wpdb->insert_id,
+		]);
+	}
 
 	return $errors;
 }

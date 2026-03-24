@@ -4,6 +4,9 @@ defined( 'ABSPATH' ) or die( 'You shall not pass!' );
 add_action('elementor_pro/forms/validation', 'duplicateKiller_elementor_guard_only', 1, 2);
 function duplicateKiller_elementor_guard_only($record, $ajax_handler) {
 
+    $request_debug_id = uniqid('dk_elementor_validate_', true);
+    $dk_enabled       = class_exists('duplicateKiller_Diagnostics');
+
     $opt = get_option('Elementor_page');
     if (!is_array($opt)) $opt = [];
 
@@ -34,6 +37,15 @@ function duplicateKiller_elementor_guard_only($record, $ajax_handler) {
     }
     if ($form_name === '' || $node_id === '') return;
 
+    if ($dk_enabled) {
+        duplicateKiller_Diagnostics::log('elementor', 'validate_start', [
+            'request_debug_id' => $request_debug_id,
+            'post_id'          => $post_id,
+            'form_name'        => $form_name,
+            'node_id'          => $node_id,
+        ]);
+    }
+
     // key in option
     $db_form_name = $form_name . '.' . $node_id;
 
@@ -44,6 +56,13 @@ function duplicateKiller_elementor_guard_only($record, $ajax_handler) {
 			wp_unslash( $_COOKIE['dk_form_cookie'] )
 		);
 	}
+
+    if ($dk_enabled) {
+        duplicateKiller_Diagnostics::log('elementor', 'cookie_resolved', [
+            'request_debug_id' => $request_debug_id,
+            'form_cookie'      => $form_cookie,
+        ]);
+    }
 
     // --- per-form cfg (only fields in new structure) ---
     $cfg = [];
@@ -63,6 +82,14 @@ function duplicateKiller_elementor_guard_only($record, $ajax_handler) {
     }
     if (empty($cfg) || !is_array($cfg)) return;
 
+    if ($dk_enabled) {
+        duplicateKiller_Diagnostics::log('elementor', 'config_resolved', [
+            'request_debug_id' => $request_debug_id,
+            'db_form_name'     => $db_form_name,
+            'has_config'       => !empty($cfg) ? 1 : 0,
+        ]);
+    }
+
     // build data map
     $fields = $record->get('fields');
     if (!is_array($fields)) $fields = [];
@@ -77,19 +104,32 @@ function duplicateKiller_elementor_guard_only($record, $ajax_handler) {
         $data[$fid] = sanitize_text_field((string)$val);
     }
 
+    if ($dk_enabled) {
+        duplicateKiller_Diagnostics::log('elementor', 'fields_parsed', [
+            'request_debug_id' => $request_debug_id,
+            'data'             => $data,
+        ]);
+    }
+
     // 1) IP check (map globals to what duplicateKiller_ip_limit_trigger expects)
     if (function_exists('duplicateKiller_ip_limit_trigger')) {
         $mapped_for_ip = [
-            // keep everything else if your function needs it
-            // but provide the keys it expects:
             'user_ip'      => $g_user_ip_enabled ? "1" : "0",
             'user_ip_days' => isset($opt['elementor_user_ip_days']) ? (string)$opt['elementor_user_ip_days'] : '',
         ];
 
         // if duplicateKiller_ip_limit_trigger expects full option array, you can merge:
         $opt_for_ip = $opt + $mapped_for_ip;
+        $ip_triggered = duplicateKiller_ip_limit_trigger("elementor", $opt_for_ip, $db_form_name);
 
-        if (duplicateKiller_ip_limit_trigger("elementor", $opt_for_ip, $db_form_name)) {
+        if ($dk_enabled) {
+            duplicateKiller_Diagnostics::log('elementor', 'ip_check', [
+                'request_debug_id' => $request_debug_id,
+                'triggered'        => $ip_triggered ? 1 : 0,
+            ]);
+        }
+
+        if ($ip_triggered) {
             $ajax_handler->add_error_message($g_msg_ip);
 
             // stop elementor: attach error to first field if possible
@@ -103,7 +143,15 @@ function duplicateKiller_elementor_guard_only($record, $ajax_handler) {
             if ($first_field_id && method_exists($ajax_handler, 'add_error')) {
                 $ajax_handler->add_error($first_field_id, $g_msg_ip);
             }
-			// Increment blocked duplicates counter
+
+            if ($dk_enabled) {
+                duplicateKiller_Diagnostics::log('elementor', 'ip_blocked', [
+                    'request_debug_id' => $request_debug_id,
+                    'message'          => $g_msg_ip,
+                    'first_field_id'   => $first_field_id,
+                ]);
+            }
+
 			duplicateKiller_increment_duplicates_blocked_count();
             return;
         }
@@ -121,6 +169,14 @@ function duplicateKiller_elementor_guard_only($record, $ajax_handler) {
         $submitted_value = $data[$field_key];
         if ($submitted_value === '') continue;
 
+        if ($dk_enabled) {
+            duplicateKiller_Diagnostics::log('elementor', 'field_check', [
+                'request_debug_id' => $request_debug_id,
+                'field_key'        => $field_key,
+                'value'            => $submitted_value,
+            ]);
+        }
+
         $result = duplicateKiller_check_duplicate_by_key_value(
             "elementor",
             $db_form_name,
@@ -134,9 +190,17 @@ function duplicateKiller_elementor_guard_only($record, $ajax_handler) {
             $ajax_handler->add_error_message($g_msg_dup);
             if (method_exists($ajax_handler, 'add_error')) {
                 $ajax_handler->add_error($field_key, $g_msg_dup);
-				// Increment blocked duplicates counter
-				duplicateKiller_increment_duplicates_blocked_count();
             }
+
+            if ($dk_enabled) {
+                duplicateKiller_Diagnostics::log('elementor', 'duplicate_blocked', [
+                    'request_debug_id' => $request_debug_id,
+                    'field_key'        => $field_key,
+                    'message'          => $g_msg_dup,
+                ]);
+            }
+
+			duplicateKiller_increment_duplicates_blocked_count();
             return;
         }
     }
@@ -148,6 +212,9 @@ add_action('elementor_pro/forms/new_record', 'duplicateKiller_elementor_save_onl
 function duplicateKiller_elementor_save_only($record, $handler) {
 
     global $wpdb;
+
+    $request_debug_id = uniqid('dk_elementor_save_', true);
+    $dk_enabled       = class_exists('duplicateKiller_Diagnostics');
 
     $opt = get_option('Elementor_page');
     if (!is_array($opt)) $opt = [];
@@ -169,6 +236,16 @@ function duplicateKiller_elementor_save_only($record, $handler) {
     if ($form_name === '' || $node_id === '') return;
 
     $db_form_name = $form_name . '.' . $node_id;
+
+    if ($dk_enabled) {
+        duplicateKiller_Diagnostics::log('elementor', 'save_start', [
+            'request_debug_id' => $request_debug_id,
+            'post_id'          => $post_id,
+            'form_name'        => $form_name,
+            'node_id'          => $node_id,
+            'db_form_name'     => $db_form_name,
+        ]);
+    }
 
     // ensure form exists in config (optional, but keeps behavior consistent)
     $cfg = [];
@@ -195,6 +272,13 @@ function duplicateKiller_elementor_save_only($record, $handler) {
 		);
 	}
 
+    if ($dk_enabled) {
+        duplicateKiller_Diagnostics::log('elementor', 'cookie_resolved', [
+            'request_debug_id' => $request_debug_id,
+            'form_cookie'      => $form_cookie,
+        ]);
+    }
+
     // data
     $fields = $record->get('fields');
     if (!is_array($fields)) $fields = [];
@@ -209,12 +293,19 @@ function duplicateKiller_elementor_save_only($record, $handler) {
         $data[$fid] = sanitize_text_field((string)$val);
     }
 
+    if ($dk_enabled) {
+        duplicateKiller_Diagnostics::log('elementor', 'fields_parsed', [
+            'request_debug_id' => $request_debug_id,
+            'data'             => $data,
+        ]);
+    }
+
     // IP store flag (global)
     $form_ip = $g_user_ip_enabled ? duplicateKiller_get_user_ip() : 'NULL';
-	
-	$table_name = $wpdb->prefix . 'dk_forms_duplicate';
+
+    $table_name = $wpdb->prefix . 'dk_forms_duplicate';
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- Inserting into plugin-owned custom table.
-    $wpdb->insert(
+    $insert_result = $wpdb->insert(
         $table_name,
         [
             'form_plugin' => 'elementor',
@@ -226,6 +317,15 @@ function duplicateKiller_elementor_save_only($record, $handler) {
         ],
         ['%s','%s','%s','%s','%s','%s']
     );
+
+    if ($dk_enabled) {
+        duplicateKiller_Diagnostics::log('elementor', 'save_after_insert', [
+            'request_debug_id' => $request_debug_id,
+            'insert_ok'        => empty($wpdb->last_error) && false !== $insert_result ? 1 : 0,
+            'wpdb_last_error'  => $wpdb->last_error,
+            'insert_id'        => $wpdb->insert_id,
+        ]);
+    }
 }
 
 /**
