@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: Duplicate Killer
- * Version: 1.5.5
+ * Version: 1.5.6
  * Description: Block duplicate form submissions by validating unique email, phone and text fields — without CAPTCHA.
  * Author: NIA
  * Author URI: https://profiles.wordpress.org/wpnia/
@@ -13,7 +13,7 @@
 	defined('ABSPATH') or die('You shall not pass!');
 	
 	define('DUPLICATEKILLER_PLUGIN_FILE',__FILE__);
-	define('DUPLICATEKILLER_VERSION','1.5.5');
+	define('DUPLICATEKILLER_VERSION','1.5.6');
 	define('DUPLICATEKILLER_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 	define('DUPLICATEKILLER_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 	
@@ -68,8 +68,104 @@ function duplicateKiller_create_table(){
  */
 function duplicateKiller_on_activate(){
 	duplicateKiller_create_table();
+	duplicateKiller_ensure_forms_duplicate_index();
 }
 register_activation_hook( __FILE__, 'duplicateKiller_on_activate' );
+
+function duplicateKiller_maybe_run_upgrade_tasks() {
+	if ( is_admin() ) {
+		$settings = get_option( 'DuplicateKillerSettings', array() );
+		if ( ! is_array( $settings ) ) {
+			$settings = array();
+		}
+
+		$stored_version = isset( $settings['plugin_version'] ) ? (string) $settings['plugin_version'] : '';
+
+		if ( $stored_version !== DUPLICATEKILLER_VERSION ) {
+			duplicateKiller_create_table();
+			duplicateKiller_ensure_forms_duplicate_index();
+
+			$settings['plugin_version'] = DUPLICATEKILLER_VERSION;
+			update_option( 'DuplicateKillerSettings', $settings, false );
+		}
+	}
+}
+add_action( 'admin_init', 'duplicateKiller_maybe_run_upgrade_tasks', 5 );
+
+/**
+ * Ensure the main duplicate lookup index exists and has the expected structure.
+ *
+ * Safe to call multiple times.
+ *
+ * @return void
+ */
+function duplicateKiller_ensure_forms_duplicate_index() {
+	global $wpdb;
+
+	$table_name = $wpdb->prefix . 'dk_forms_duplicate';
+	$index_name = 'dk_plugin_form_name_id';
+
+	// Check whether the plugin table exists before inspecting indexes.
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Schema inspection required for installation/upgrade routine.
+	$table_exists = $wpdb->get_var(
+		$wpdb->prepare(
+			'SHOW TABLES LIKE %s',
+			$table_name
+		)
+	);
+
+	if ( $table_exists !== $table_name ) {
+		return;
+	}
+
+	// Read the current index structure.
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Schema inspection required for installation/upgrade routine.
+	$indexes = $wpdb->get_results(
+		$wpdb->prepare(
+			"SELECT COLUMN_NAME
+			 FROM INFORMATION_SCHEMA.STATISTICS
+			 WHERE TABLE_SCHEMA = DATABASE()
+			   AND TABLE_NAME = %s
+			   AND INDEX_NAME = %s
+			 ORDER BY SEQ_IN_INDEX ASC",
+			$table_name,
+			$index_name
+		),
+		ARRAY_A
+	);
+
+	$expected_columns = array( 'form_plugin', 'form_name', 'form_id' );
+	$needs_rebuild    = false;
+
+	if ( empty( $indexes ) ) {
+		$needs_rebuild = true;
+	} else {
+		$current_columns = array_column( $indexes, 'COLUMN_NAME' );
+
+		if ( $current_columns !== $expected_columns ) {
+			$needs_rebuild = true;
+		}
+	}
+
+	if ( ! $needs_rebuild ) {
+		return;
+	}
+
+	// Drop the existing index if it exists but has the wrong structure.
+	if ( ! empty( $indexes ) ) {
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- DDL query required for installation/upgrade routine.
+		$wpdb->query(
+			"ALTER TABLE `{$table_name}` DROP INDEX `{$index_name}`"
+		);
+	}
+
+	// Create the expected composite index.
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- DDL query required for installation/upgrade routine.
+	$wpdb->query(
+		"ALTER TABLE `{$table_name}`
+		 ADD INDEX `{$index_name}` (`form_plugin`, `form_name`, `form_id`)"
+	);
+}
 
 //Fires when the upgrader process is complete
 function duplicateKiller_upgrade_function( $upgrader_object, $options ) {
@@ -183,60 +279,87 @@ function duplicateKiller_check_values($db_values, $form_name, $form_value){
 }
 
 function duplicateKiller_check_duplicate_by_key_value($form_plugin, $form_name, $key, $value, $form_cookie = 'NULL', $checked_cookie = false) {
-    global $wpdb;
+	global $wpdb;
 
-	// Make Plugin Check happy: sanitize inputs as plain strings (then prepare uses %s).
+	// Sanitize stable string inputs used in the SQL query.
 	$form_plugin = sanitize_key( (string) $form_plugin );
 	$form_name   = sanitize_text_field( (string) $form_name );
 
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Reading from plugin-owned custom table; request-scoped.
-	$results = $wpdb->get_results(
-		$wpdb->prepare(
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Plugin-owned table name using $wpdb->prefix.
-			"SELECT form_value, form_cookie FROM {$wpdb->prefix}dk_forms_duplicate WHERE form_plugin = %s AND form_name = %s ORDER BY form_id DESC",
-			$form_plugin,
-			$form_name
-		)
-	);
+	$table_name = $wpdb->prefix . 'dk_forms_duplicate';
 
-    foreach ($results as $row) {
-        $form_data = maybe_unserialize($row->form_value);
-		
-         // CF7: associative array (key => value)
-        if (is_array($form_data) && isset($form_data[$key])) {
-            if (duplicateKiller_check_values_with_lowercase_filter($form_data[$key], $value)) {
+	// Cache query results per request for the same plugin + form.
+	// This avoids running the exact same SELECT multiple times
+	// when several fields are checked during one submission.
+	static $dk_results_cache = array();
 
-				//3 checked cookie
-				if($checked_cookie == true){
-					if($row->form_cookie == $form_cookie){
+	$cache_key = $form_plugin . '|' . $form_name;
+
+	if ( ! isset( $dk_results_cache[ $cache_key ] ) ) {
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Reading from plugin-owned custom table; request-scoped cache used inside the current request.
+		$results = $wpdb->get_results(
+			$wpdb->prepare(
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Plugin-owned table name using $wpdb->prefix.
+				"SELECT form_value, form_cookie
+				 FROM {$table_name}
+				 WHERE form_plugin = %s
+				 AND form_name = %s
+				 ORDER BY form_id DESC",
+				$form_plugin,
+				$form_name
+			)
+		);
+
+		$dk_results_cache[ $cache_key ] = is_array( $results ) ? $results : array();
+	}
+
+	$results = $dk_results_cache[ $cache_key ];
+
+	foreach ( $results as $row ) {
+		$form_data = maybe_unserialize( $row->form_value );
+
+		// Associative array payloads: key => value
+		if ( is_array( $form_data ) && isset( $form_data[ $key ] ) ) {
+			if ( duplicateKiller_check_values_with_lowercase_filter( $form_data[ $key ], $value ) ) {
+
+				// When cookie protection is enabled, duplicate detection becomes user-specific.
+				// Multiple users can submit the same value, but the same user (same cookie)
+				// cannot submit the same value more than once.
+				if ( $checked_cookie == true ) {
+					if ( $row->form_cookie == $form_cookie ) {
 						return true;
-					}else{
+					} else {
 						return false;
 					}
 				}
-                return true;
-            }
 
-        // Forminator: arrays of array (with key "name" and "value")
-        }elseif (is_array($form_data) && isset($form_data[0]['name'])) {
-            foreach ($form_data as $input) {
-                if (isset($input['name']) && $input['name'] === $key) {
-                    if (duplicateKiller_check_values_with_lowercase_filter($input['value'], $value)) {
-                        //3 checked cookie
-						if($checked_cookie == true){
-							if($row->form_cookie == $form_cookie){
+				return true;
+			}
+
+		// Named value list payloads: array( array( 'name' => ..., 'value' => ... ) )
+		} elseif ( is_array( $form_data ) && isset( $form_data[0]['name'] ) ) {
+			foreach ( $form_data as $input ) {
+				if ( isset( $input['name'] ) && $input['name'] === $key ) {
+					if ( duplicateKiller_check_values_with_lowercase_filter( $input['value'], $value ) ) {
+
+						// When cookie protection is enabled, duplicate detection becomes user-specific.
+						// Multiple users can submit the same value, but the same user (same cookie)
+						// cannot submit the same value more than once.
+						if ( $checked_cookie == true ) {
+							if ( $row->form_cookie == $form_cookie ) {
 								return true;
-							}else{
+							} else {
 								return false;
 							}
 						}
+
 						return true;
-                    }
-                }
-            }
-        }
-    }
-    return false;
+					}
+				}
+			}
+		}
+	}
+
+	return false;
 }
 function duplicateKiller_check_values_with_lowercase_filter($var1, $var2){
 	if(is_array($var1) AND is_array($var2)){

@@ -1,5 +1,5 @@
 === Duplicate Killer – Prevent Duplicate Form Submissions ===
-Version: 1.5.5
+Version: 1.5.6
 Author: NIA
 Author URI: https://profiles.wordpress.org/wpnia/
 Contributors: wpnia
@@ -7,7 +7,7 @@ Tags: woocommerce, duplicate orders, duplicate submissions, elementor forms, con
 Donate link: https://www.paypal.com/paypalme/wpnia
 Requires at least: 5.2
 Tested up to: 6.9
-Stable tag: 1.5.5
+Stable tag: 1.5.6
 Requires PHP: 5.6.20
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -247,10 +247,16 @@ PRO adds enhanced idempotency handling and deeper gateway analytics.
 5. Works with popular WordPress form plugins
 
 == Upgrade Notice ==
-= 1.5.5 =
-Improved Diagnostics module integration and streamlined admin navigation for faster access to debugging tools.
+= 1.5.6 =
+Performance update: Optimized database queries and added smart indexing for faster duplicate detection on large sites. Recommended update.
 
 == Changelog ==
+
+= 1.5.6 =
+* Performance improvement: Added optimized database index for faster duplicate checks.
+* Improved query efficiency for duplicate validation (reduced database load).
+* Optimized duplicate detection logic for large datasets (50k+ submissions).
+* Minor internal performance and stability improvements.
 
 = 1.5.5 =
 * Improved integration of the Diagnostics module within the admin interface.
