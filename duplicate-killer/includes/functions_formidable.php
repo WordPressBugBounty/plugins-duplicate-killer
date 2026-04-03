@@ -415,12 +415,7 @@ function duplicateKiller_formidable_get_forms(): array {
             $out[$display_key]['fields'] = array_values($clean);
         }
     }
-	/*
-	echo '<pre>';
-	print_r($out);
-	echo '</pre>';
-	die();
-	*/
+
     return $out;
 }
 /*********************************

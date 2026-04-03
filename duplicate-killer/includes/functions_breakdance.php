@@ -259,12 +259,6 @@ function duplicateKiller_breakdance_guard_action($canExecute, $action, $extra, $
 
 function duplicateKiller_breakdance_get_forms() {
 
-	$cache_key = 'dk_breakdance_forms_v1';
-	$cached    = get_transient( $cache_key );
-	if ( false !== $cached && is_array( $cached ) ) {
-		return $cached;
-	}
-
 	$out = array();
 
 	// IMPORTANT: adjust post types to what you expect. Keeping 'any' can be heavy.
@@ -405,9 +399,6 @@ function duplicateKiller_breakdance_get_forms() {
 			$out[ $k ]['fields'] = array_values( $bundle['fields'] );
 		}
 	}
-
-	// Cache 30 minutes (adjust).
-	set_transient( $cache_key, $out, 30 * MINUTE_IN_SECONDS );
 
 	return $out;
 }

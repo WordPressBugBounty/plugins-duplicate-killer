@@ -1,5 +1,5 @@
 === Duplicate Killer – Prevent Duplicate Form Submissions ===
-Version: 1.5.6
+Version: 1.5.7
 Author: NIA
 Author URI: https://profiles.wordpress.org/wpnia/
 Contributors: wpnia
@@ -7,7 +7,7 @@ Tags: woocommerce, duplicate orders, duplicate submissions, elementor forms, con
 Donate link: https://www.paypal.com/paypalme/wpnia
 Requires at least: 5.2
 Tested up to: 6.9
-Stable tag: 1.5.6
+Stable tag: 1.5.7
 Requires PHP: 5.6.20
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -247,10 +247,14 @@ PRO adds enhanced idempotency handling and deeper gateway analytics.
 5. Works with popular WordPress form plugins
 
 == Upgrade Notice ==
-= 1.5.6 =
-Performance update: Optimized database queries and added smart indexing for faster duplicate detection on large sites. Recommended update.
+= 1.5.7 =
+Improved Breakdance form detection and fixed an issue where some forms were not displayed correctly in the admin.
 
 == Changelog ==
+
+= 1.5.7 =
+* Improved compatibility with Breakdance Page Builder forms
+* Enhanced form detection logic for more accurate results across all Breakdance layouts
 
 = 1.5.6 =
 * Performance improvement: Added optimized database index for faster duplicate checks.
