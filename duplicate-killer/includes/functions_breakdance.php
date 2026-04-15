@@ -110,7 +110,9 @@ function duplicateKiller_breakdance_guard_action($canExecute, $action, $extra, $
         }
     }
 
-    if (empty($perForm)) return $canExecute;
+    if ( empty( $perForm ) && ! $global_ip_enabled ) {
+		return $canExecute;
+	}
 
     $form_cookie = isset($_COOKIE['dk_form_cookie'])
         ? sanitize_text_field(wp_unslash($_COOKIE['dk_form_cookie']))
@@ -170,10 +172,15 @@ function duplicateKiller_breakdance_guard_action($canExecute, $action, $extra, $
 
     /* 2) duplicate check */
     $unique_ids = [];
-    foreach ($perForm as $k => $v) {
-        if ($k === 'form_id') continue;
-        if ($v === '1') $unique_ids[] = (string)$k;
-    }
+	foreach ( $perForm as $k => $v ) {
+		if ( 'form_id' === (string) $k || 'labels' === (string) $k ) {
+			continue;
+		}
+
+		if ( '1' === (string) $v ) {
+			$unique_ids[] = (string) $k;
+		}
+	}
 
     foreach ($unique_ids as $field_id) {
 

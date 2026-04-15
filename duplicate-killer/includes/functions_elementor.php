@@ -249,21 +249,50 @@ function duplicateKiller_elementor_save_only($record, $handler) {
 
     // ensure form exists in config (optional, but keeps behavior consistent)
     $cfg = [];
-    if (!empty($opt[$db_form_name]) && is_array($opt[$db_form_name])) {
-        $cfg = $opt[$db_form_name];
-    } else {
-        $suffix = '.' . $node_id;
-        foreach ($opt as $k => $v) {
-            if (!is_string($k) || !is_array($v)) continue;
-            if (substr($k, -strlen($suffix)) === $suffix) {
-                $cfg = $v;
-                $db_form_name = $k;
-                break;
-            }
-        }
-    }
-    if (empty($cfg)) return;
+	if (!empty($opt[$db_form_name]) && is_array($opt[$db_form_name])) {
+		$cfg = $opt[$db_form_name];
+	} else {
+		$suffix = '.' . $node_id;
+		foreach ($opt as $k => $v) {
+			if (!is_string($k) || !is_array($v)) continue;
+			if (substr($k, -strlen($suffix)) === $suffix) {
+				$cfg = $v;
+				$db_form_name = $k;
+				break;
+			}
+		}
+	}
 
+	if ( empty( $cfg ) || ! is_array( $cfg ) ) {
+		return;
+	}
+
+	$has_duplicate_field = false;
+
+	foreach ( $cfg as $field_key => $enabled ) {
+		if ( 'labels' === (string) $field_key || 'form_id' === (string) $field_key ) {
+			continue;
+		}
+
+		if ( '1' === (string) $enabled ) {
+			$has_duplicate_field = true;
+			break;
+		}
+	}
+
+	if ( ! $has_duplicate_field && ! $g_user_ip_enabled ) {
+		if ( $dk_enabled ) {
+			duplicateKiller_Diagnostics::log('elementor', 'save_skipped', [
+				'request_debug_id'    => $request_debug_id,
+				'db_form_name'        => $db_form_name,
+				'reason'              => 'no_duplicate_fields_and_ip_disabled',
+				'has_duplicate_field' => 0,
+				'ip_enabled'          => 0,
+			]);
+		}
+
+		return;
+	}
     // cookie
     $form_cookie = 'NULL';
 	if ( isset( $_COOKIE['dk_form_cookie'] ) ) {

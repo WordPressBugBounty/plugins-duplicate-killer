@@ -3,15 +3,50 @@ defined( 'ABSPATH' ) or die( 'You shall not pass!' );
 
 add_action( 'wpforms_process', 'duplicateKiller_wpforms_before_send_email', 10, 3 );
 function duplicateKiller_wpforms_before_send_email($fields, $entry, $form_data){
+	global $wpdb;
+	$table_name = $wpdb->prefix.'dk_forms_duplicate';
+	
 	$form_title = $form_data['settings']['form_title'];
-	$result = duplicateKiller_check_duplicate("WPForms",$form_title);
 
 	$request_debug_id = uniqid('dk_wpforms_validate_', true);
 	$dk_enabled       = class_exists('duplicateKiller_Diagnostics');
 
-	global $wpdb;
-	$table_name = $wpdb->prefix.'dk_forms_duplicate';
-	$wpforms_page = get_option("WPForms_page");
+	
+	
+	$wpforms_page = get_option( 'WPForms_page' );
+
+	$config_state = duplicateKiller_get_form_state( $wpforms_page, $form_title, 'wpforms_user_ip' );
+
+	// Form does not exist in settings → HARD STOP
+	if ( ! $config_state['form_exists'] ) {
+		if ( $dk_enabled ) {
+			duplicateKiller_Diagnostics::log('wpforms', 'process_skipped', [
+				'request_debug_id' => $request_debug_id,
+				'form_title'       => $form_title,
+				'reason'           => 'form_not_configured',
+				'state'            => $config_state,
+			]);
+		}
+
+		return;
+	}
+
+	// No duplicate fields AND no IP protection → STOP
+	if ( ! $config_state['has_duplicate_field'] && ! $config_state['ip_enabled'] ) {
+		if ( $dk_enabled ) {
+			duplicateKiller_Diagnostics::log('wpforms', 'process_skipped', [
+				'request_debug_id'     => $request_debug_id,
+				'form_title'           => $form_title,
+				'reason'               => 'no_duplicate_fields_and_ip_disabled',
+				'has_duplicate_field'  => 0,
+				'ip_enabled'           => 0,
+				'state'                => $config_state,
+			]);
+		}
+
+		return;
+	}
+	
 	$form_cookie = 'NULL';
 
 	if ( isset( $_COOKIE['dk_form_cookie'] ) ) {
@@ -28,8 +63,6 @@ function duplicateKiller_wpforms_before_send_email($fields, $entry, $form_data){
 			'fields_raw'         => is_array($fields) ? $fields : [],
 			'entry_raw'          => is_array($entry) ? $entry : [],
 			'form_data_raw'      => is_array($form_data) ? $form_data : [],
-			'has_duplicate_rows' => !empty($result) ? 1 : 0,
-			'duplicate_rows_count' => is_array($result) ? count($result) : 0,
 		]);
 	}
 
@@ -124,7 +157,7 @@ function duplicateKiller_wpforms_before_send_email($fields, $entry, $form_data){
 				'wpforms_page'     => is_array($wpforms_page) ? $wpforms_page : [],
 			]);
 		}
-
+		$result = duplicateKiller_check_duplicate("WPForms",$form_title);
 		foreach($fields as $data){
 			$storage_fields[] = [
 				"name" => $data['name'],
@@ -191,18 +224,8 @@ function duplicateKiller_wpforms_before_send_email($fields, $entry, $form_data){
 									duplicateKiller_increment_duplicates_blocked_count();
 									break; // stop search, already found
 								}
-								/* deprecated from 1.2.1else{
-									if(!empty($data['value']))
-									$data_for_insert[$data['name']] = $data['value'];
-								}
-								*/
 							}
-						}/* deprecated from 1.2.1
-						else{
-							if(!empty($data['value']))
-							$data_for_insert[$data['name']] = $data['value'];
 						}
-						*/
 					}
 				}
 			}

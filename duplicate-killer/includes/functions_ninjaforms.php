@@ -107,7 +107,34 @@ function duplicateKiller_ninjaforms_before_send_email( $form_data ) {
 		return $form_data;
 	}
 	$cfg = $ninja_page[ $form_name ];
+	$has_duplicate_field = false;
 
+	foreach ( $cfg as $key => $value ) {
+		if ( 'labels' === (string) $key || 'form_id' === (string) $key ) {
+			continue;
+		}
+
+		if ( '1' === (string) $value ) {
+			$has_duplicate_field = true;
+			break;
+		}
+	}
+
+	$ip_enabled = isset( $ninja_page['ninjaforms_user_ip'] ) && '1' === (string) $ninja_page['ninjaforms_user_ip'];
+
+	if ( ! $has_duplicate_field && ! $ip_enabled ) {
+		if ( $dk_enabled ) {
+			duplicateKiller_Diagnostics::log('ninjaforms', 'process_skipped', [
+				'request_debug_id'    => $request_debug_id,
+				'form_name'           => $form_name,
+				'reason'              => 'no_duplicate_fields_and_ip_disabled',
+				'has_duplicate_field' => 0,
+				'ip_enabled'          => 0,
+			]);
+		}
+
+		return $form_data;
+	}
 	// Ensure errors array exists
 	if ( ! isset( $form_data['errors'] ) || ! is_array( $form_data['errors'] ) ) {
 		$form_data['errors'] = array();

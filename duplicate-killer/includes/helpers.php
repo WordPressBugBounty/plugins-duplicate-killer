@@ -5,6 +5,50 @@ define( 'DK_NINJA_FORMS', 'NinjaForms' );
 define( 'DK_NINJA_FORMS_LABEL', 'Ninja Forms' );
 
 /**
+ * Return duplicate-related config state for a form.
+ *
+ * @param array  $settings
+ * @param string $form_name
+ * @param string $ip_key
+ * @return array
+ */
+function duplicateKiller_get_form_state( $settings, $form_name, $ip_key ) {
+	$state = array(
+		'form_exists'         => false,
+		'has_duplicate_field' => false,
+		'ip_enabled'          => false,
+	);
+
+	if ( ! is_array( $settings ) ) {
+		return $state;
+	}
+
+	if ( empty( $form_name ) ) {
+		return $state;
+	}
+
+	$state['ip_enabled'] = ! empty( $settings[ $ip_key ] ) && '1' === (string) $settings[ $ip_key ];
+
+	if ( ! isset( $settings[ $form_name ] ) || ! is_array( $settings[ $form_name ] ) ) {
+		return $state;
+	}
+
+	$state['form_exists'] = true;
+
+	foreach ( $settings[ $form_name ] as $key => $value ) {
+		if ( 'labels' === (string) $key ) {
+			continue;
+		}
+
+		if ( '1' === (string) $value ) {
+			$state['has_duplicate_field'] = true;
+			break;
+		}
+	}
+
+	return $state;
+}
+/**
  * Review milestone thresholds.
  *
  * @return int[]

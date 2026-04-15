@@ -174,8 +174,8 @@ function duplicateKiller_forminator_save_fields($entry, $id, $field_data) {
 
     $table_name  = $wpdb->prefix . 'dk_forms_duplicate';
     $form_title  = get_the_title($id);
-
-    $request_debug_id = uniqid('dk_forminator_save_', true);
+	
+	$request_debug_id = uniqid('dk_forminator_save_', true);
 	$dk_enabled       = class_exists('duplicateKiller_Diagnostics');
 
     if ($dk_enabled) {
@@ -186,6 +186,39 @@ function duplicateKiller_forminator_save_fields($entry, $id, $field_data) {
             'field_data_raw'   => is_array($field_data) ? $field_data : [],
         ]);
     }
+	$forminator_page = get_option( 'forminator_page' );
+
+	$config_state = duplicateKiller_get_form_state( $forminator_page, $form_title, 'forminator_user_ip' );
+
+	// Form not configured → STOP
+	if ( ! $config_state['form_exists'] ) {
+		if ( $dk_enabled ) {
+			duplicateKiller_Diagnostics::log('forminator', 'process_skipped', [
+				'request_debug_id' => $request_debug_id,
+				'form_title'       => $form_title,
+				'reason'           => 'form_not_configured',
+				'state'            => $config_state,
+			]);
+		}
+
+		return;
+	}
+
+	// No duplicate fields AND no IP → STOP
+	if ( ! $config_state['has_duplicate_field'] && ! $config_state['ip_enabled'] ) {
+		if ( $dk_enabled ) {
+			duplicateKiller_Diagnostics::log('forminator', 'process_skipped', [
+				'request_debug_id'     => $request_debug_id,
+				'form_title'           => $form_title,
+				'reason'               => 'no_duplicate_fields_and_ip_disabled',
+				'has_duplicate_field'  => 0,
+				'ip_enabled'           => 0,
+				'state'                => $config_state,
+			]);
+		}
+
+		return;
+	}
 
     $form_cookie = 'NULL';
 	if ( isset( $_COOKIE['dk_form_cookie'] ) ) {
@@ -201,7 +234,8 @@ function duplicateKiller_forminator_save_fields($entry, $id, $field_data) {
         ]);
     }
 
-    $duplicateKiller_check_ip_feature = duplicateKiller_get_setting("Forminator_page", "forminator_user_ip");
+    $duplicateKiller_check_ip_feature = ! empty( $forminator_page['forminator_user_ip'] ) && '1' === (string) $forminator_page['forminator_user_ip'];
+
     $form_ip = $duplicateKiller_check_ip_feature ? duplicateKiller_get_user_ip() : 'NULL';
 
     if ($dk_enabled) {
