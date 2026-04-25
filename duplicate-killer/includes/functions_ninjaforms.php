@@ -26,340 +26,335 @@ function duplicateKiller_nf_hotfix_payment_total_type(array $settings, int $acti
     return $settings;
 }
 
-add_filter( 'ninja_forms_submit_data', 'duplicateKiller_ninjaforms_before_send_email', 10, 1 );
+add_filter('ninja_forms_submit_data', 'duplicateKiller_ninjaforms_before_send_email', 10, 1);
 
-function duplicateKiller_ninjaforms_before_send_email( $form_data ) {
-	global $wpdb;
+function duplicateKiller_ninjaforms_before_send_email($form_data) {
+    global $wpdb;
 
-	$request_debug_id = uniqid('dk_ninjaforms_', true);
-	$dk_enabled       = class_exists('duplicateKiller_Diagnostics');
-	
-	$table_name = $wpdb->prefix . 'dk_forms_duplicate';
+    $table_name = $wpdb->prefix . 'dk_forms_duplicate';
 
-	// Option "NinjaForms_page" contains BOTH:
-	// - per-form configs keyed by "formkey.formid" (e.g. contactme.1)
-	// - global settings keys (ninjaforms_cookie_option, ninjaforms_user_ip, messages, etc.)
-	$ninja_page = get_option( 'NinjaForms_page' );
-	if ( ! is_array( $ninja_page ) ) {
-		return $form_data;
-	}
+    $ninja_page = get_option('NinjaForms_page');
+	$ninja_page = duplicateKiller_convert_option_architecture( $ninja_page, 'ninjaforms_' );
+    if (!is_array($ninja_page)) {
+        return $form_data;
+    }
 
-	if ( $dk_enabled ) {
-		duplicateKiller_Diagnostics::log('ninjaforms', 'validate_start', [
-			'request_debug_id' => $request_debug_id,
-			'form_data_raw'    => is_array($form_data) ? $form_data : [],
-		]);
-	}
+    $request_debug_id = uniqid('duplicateKiller_ninja_', true);
+    $dk_enabled       = class_exists('duplicateKiller_Diagnostics');
 
-	// Basic sanity checks
-	if ( empty( $form_data ) || ! is_array( $form_data ) ) {
-		return $form_data;
-	}
+    if ($dk_enabled) {
+        duplicateKiller_Diagnostics::log('ninja', 'process_start', [
+            'request_debug_id' => $request_debug_id,
+            'form_data'        => $form_data,
+        ]);
+    }
 
-	// Form ID
-	$form_id = 0;
-	if ( isset( $form_data['id'] ) ) {
-		$form_id = (int) $form_data['id'];
-	} elseif ( isset( $form_data['form_id'] ) ) {
-		$form_id = (int) $form_data['form_id'];
-	}
-	if ( $form_id <= 0 ) {
-		return $form_data;
-	}
+    if (empty($form_data) || !is_array($form_data)) {
+        return $form_data;
+    }
 
-	// Form settings (title/key)
-	$settings = ( isset( $form_data['settings'] ) && is_array( $form_data['settings'] ) ) ? $form_data['settings'] : array();
+    // Form ID
+    $form_id = 0;
+    if (isset($form_data['id'])) {
+        $form_id = (int)$form_data['id'];
+    } elseif (isset($form_data['form_id'])) {
+        $form_id = (int)$form_data['form_id'];
+    }
 
-	// Prefer "Form Key" if present
-	$form_key = '';
-	if ( ! empty( $settings['key'] ) ) {
-		$form_key = trim( (string) $settings['key'] );
-	}
+    if ($form_id <= 0) {
+        return $form_data;
+    }
 
-	// Fallback: build a stable key from title
-	$title = '';
-	if ( ! empty( $settings['title'] ) ) {
-		$title = trim( (string) $settings['title'] );
-	}
+    $settings = (isset($form_data['settings']) && is_array($form_data['settings'])) ? $form_data['settings'] : [];
 
-	if ( $form_key === '' ) {
-		$form_key = sanitize_key( $title !== '' ? $title : ( 'form-' . $form_id ) );
-	}
+    $form_key = '';
+    if (!empty($settings['key'])) {
+        $form_key = trim((string)$settings['key']);
+    }
 
-	if ( $form_key === '' ) {
-		return $form_data;
-	}
+    $title = '';
+    if (!empty($settings['title'])) {
+        $title = trim((string)$settings['title']);
+    }
 
-	// The per-form key inside NinjaForms_page is: "formkey.formid"
-	$form_name = $form_key . '.' . $form_id; // e.g. "contactme.1"
+    if ($form_key === '') {
+        $form_key = sanitize_key($title !== '' ? $title : ('form-' . $form_id));
+    }
 
-	if ( $dk_enabled ) {
-		duplicateKiller_Diagnostics::log('ninjaforms', 'context_resolved', [
-			'request_debug_id' => $request_debug_id,
-			'form_id'          => $form_id,
-			'form_key'         => $form_key,
-			'form_name'        => $form_name,
-		]);
-	}
+    if ($form_key === '') {
+        return $form_data;
+    }
 
-	// Per-form config must exist under that exact key
-	if ( empty( $ninja_page[ $form_name ] ) || ! is_array( $ninja_page[ $form_name ] ) ) {
-		return $form_data;
-	}
-	$cfg = $ninja_page[ $form_name ];
-	$has_duplicate_field = false;
+    $wanted_form_id = $form_key . '.' . $form_id;
 
-	foreach ( $cfg as $key => $value ) {
-		if ( 'labels' === (string) $key || 'form_id' === (string) $key ) {
-			continue;
-		}
+    if (empty($ninja_page[$wanted_form_id]) || !is_array($ninja_page[$wanted_form_id])) {
+        return $form_data;
+    }
 
-		if ( '1' === (string) $value ) {
-			$has_duplicate_field = true;
-			break;
-		}
-	}
+    $cfg = $ninja_page[$wanted_form_id];
 
-	$ip_enabled = isset( $ninja_page['ninjaforms_user_ip'] ) && '1' === (string) $ninja_page['ninjaforms_user_ip'];
+    if (empty($cfg['form_id'])) {
+        return $form_data;
+    }
 
-	if ( ! $has_duplicate_field && ! $ip_enabled ) {
-		if ( $dk_enabled ) {
-			duplicateKiller_Diagnostics::log('ninjaforms', 'process_skipped', [
-				'request_debug_id'    => $request_debug_id,
-				'form_name'           => $form_name,
-				'reason'              => 'no_duplicate_fields_and_ip_disabled',
-				'has_duplicate_field' => 0,
-				'ip_enabled'          => 0,
-			]);
-		}
+    $form_name = (string)$cfg['form_id'];
 
-		return $form_data;
-	}
-	// Ensure errors array exists
-	if ( ! isset( $form_data['errors'] ) || ! is_array( $form_data['errors'] ) ) {
-		$form_data['errors'] = array();
-	}
-	if ( ! isset( $form_data['errors']['fields'] ) || ! is_array( $form_data['errors']['fields'] ) ) {
-		$form_data['errors']['fields'] = array();
-	}
+    if ($dk_enabled) {
+        duplicateKiller_Diagnostics::log('ninja', 'config_resolved', [
+            'request_debug_id' => $request_debug_id,
+            'form_name'        => $form_name,
+            'config'           => $cfg,
+        ]);
+    }
 
-	$fields = ( ! empty( $form_data['fields'] ) && is_array( $form_data['fields'] ) ) ? $form_data['fields'] : array();
-	if ( empty( $fields ) ) {
-		return $form_data;
-	}
+    $cookie = duplicateKiller_get_form_cookie_simple(
+        $ninja_page,
+        $form_name,
+        'dk_form_cookie_ninja_forms_'
+    );
 
-	if ( $dk_enabled ) {
-		duplicateKiller_Diagnostics::log('ninjaforms', 'fields_loaded', [
-			'request_debug_id' => $request_debug_id,
-			'fields'           => $fields,
-			'cfg'              => $cfg,
-		]);
-	}
+    $form_cookie    = $cookie['form_cookie'];
+    $checked_cookie = $cookie['checked_cookie'];
 
-	// =========================
-	// 1) IP check
-	// =========================
-	$ip_triggered = duplicateKiller_ip_limit_trigger(DK_NINJA_FORMS, $ninja_page, $form_name);
+    if ($dk_enabled) {
+        duplicateKiller_Diagnostics::log('ninja', 'cookie_state_resolved', [
+            'request_debug_id' => $request_debug_id,
+            'form_cookie'      => $form_cookie,
+            'checked_cookie'   => $checked_cookie,
+        ]);
+    }
 
-	if ( $dk_enabled ) {
-		duplicateKiller_Diagnostics::log('ninjaforms', 'ip_check', [
-			'request_debug_id' => $request_debug_id,
-			'form_name'        => $form_name,
-			'ip_triggered'     => $ip_triggered ? 1 : 0,
-		]);
-	}
+    if (!isset($form_data['errors']) || !is_array($form_data['errors'])) {
+        $form_data['errors'] = [];
+    }
+    if (!isset($form_data['errors']['fields']) || !is_array($form_data['errors']['fields'])) {
+        $form_data['errors']['fields'] = [];
+    }
 
-	if ( $ip_triggered ) {
-		$message = ! empty( $ninja_page['ninjaforms_error_message_limit_ip'] )
-			? (string) $ninja_page['ninjaforms_error_message_limit_ip']
-			: 'This IP has been already submitted.';
+    $fields = (!empty($form_data['fields']) && is_array($form_data['fields'])) ? $form_data['fields'] : [];
+    if (empty($fields)) {
+        return $form_data;
+    }
 
-		// REQUIRED: field error to actually stop submission
-		$first_fid = duplicateKiller_nf_get_first_field_id( $fields );
-		if ( $first_fid > 0 ) {
-			$form_data['errors']['fields'][ $first_fid ] = $message;
-			duplicateKiller_increment_duplicates_blocked_count();
-		}
+    // =========================
+    // 1) IP check
+    // =========================
+    if (duplicateKiller_ip_limit_trigger(DK_NINJA_FORMS, $ninja_page, $form_name)) {
 
-		if ( $dk_enabled ) {
-			duplicateKiller_Diagnostics::log('ninjaforms', 'ip_blocked', [
-				'request_debug_id' => $request_debug_id,
-				'form_name'        => $form_name,
-				'message'          => $message,
-				'first_field_id'   => $first_fid,
-				'errors_after'     => $form_data['errors'],
-			]);
-		}
+        $message = !empty($cfg['error_message_limit_ip_option'])
+            ? (string)$cfg['error_message_limit_ip_option']
+            : 'This IP has been already submitted.';
 
-		return $form_data;
-	}
+        if ($dk_enabled) {
+            duplicateKiller_Diagnostics::log('ninja', 'ip_limit_blocked', [
+                'request_debug_id' => $request_debug_id,
+                'message'          => $message,
+            ]);
+        }
 
-	// =========================
-	// 2) Duplicate field check (by FIELD_ID toggles in config)
-	// =========================
-	$cookie = duplicateKiller_get_form_cookie_simple($ninja_page, $form_name);
+        $first_fid = duplicateKiller_nf_get_first_field_id($fields);
 
-	$form_cookie    = $cookie['form_cookie'];
-	$checked_cookie = $cookie['checked_cookie'];
+        if ($first_fid > 0) {
+            $form_data['errors']['fields'][$first_fid] = $message;
+        }
 
-	if ( $dk_enabled ) {
-		duplicateKiller_Diagnostics::log('ninjaforms', 'cookie_resolved', [
-			'request_debug_id' => $request_debug_id,
-			'form_name'        => $form_name,
-			'form_cookie'      => $form_cookie,
-			'checked_cookie'   => $checked_cookie,
-		]);
-	}
+        return $form_data;
+    }
 
-	// Storage for DB: field_id => value
-	$storage_fields = array();
+    // =========================
+    // 2) Duplicate check
+    // =========================
+    $storage_fields = [];
 
-	$duplicate_message = ! empty( $ninja_page['ninjaforms_error_message'] )
-		? (string) $ninja_page['ninjaforms_error_message']
-		: 'Please check all fields! These values have been submitted already!';
+    $duplicate_message = !empty($cfg['error_message'])
+        ? (string)$cfg['error_message']
+        : 'Please check all fields! These values have been submitted already!';
+	$has_active_duplicate_field = false;
+    foreach ($fields as $k => $field) {
 
-	foreach ( $fields as $k => $field ) {
+        $fid = 0;
+        if (is_numeric($k)) {
+            $fid = (int)$k;
+        } elseif (is_array($field) && isset($field['id']) && is_numeric($field['id'])) {
+            $fid = (int)$field['id'];
+        }
 
-		// Field ID is usually the array key, but also keep a fallback to $field['id']
-		$fid = 0;
-		if ( is_numeric( $k ) ) {
-			$fid = (int) $k;
-		} elseif ( is_array( $field ) && isset( $field['id'] ) && is_numeric( $field['id'] ) ) {
-			$fid = (int) $field['id'];
-		}
+        if ($fid <= 0) continue;
 
-		if ( $fid <= 0 ) {
-			continue;
-		}
+        $submitted_value = '';
+        if (is_array($field) && array_key_exists('value', $field)) {
+            $submitted_value = $field['value'];
+        }
 
-		// Extract submitted value
-		$submitted_value = '';
-		if ( is_array( $field ) && array_key_exists( 'value', $field ) ) {
-			$submitted_value = $field['value'];
-		}
+        if (is_array($submitted_value)) {
+            $submitted_value = reset($submitted_value);
+        }
 
-		// Normalize value (arrays -> first element)
-		if ( is_array( $submitted_value ) ) {
-			$submitted_value = reset( $submitted_value );
-		}
+        $submitted_value = is_string($submitted_value) ? wp_unslash($submitted_value) : $submitted_value;
+        $submitted_value = is_scalar($submitted_value) ? sanitize_text_field((string)$submitted_value) : '';
 
-		$submitted_value = is_string( $submitted_value ) ? wp_unslash( $submitted_value ) : $submitted_value;
-		$submitted_value = is_scalar( $submitted_value ) ? sanitize_text_field( (string) $submitted_value ) : '';
+        $storage_fields[$fid] = $submitted_value;
 
-		// Save for DB (always)
-		$storage_fields[ $fid ] = $submitted_value;
+        if ($dk_enabled) {
+            duplicateKiller_Diagnostics::log('ninja', 'field_inspected', [
+                'request_debug_id' => $request_debug_id,
+                'field_id'         => $fid,
+                'value'            => $submitted_value,
+                'enabled'          => !empty($cfg[$fid]) ? 1 : 0,
+            ]);
+        }
 
-		if ( $dk_enabled ) {
-			duplicateKiller_Diagnostics::log('ninjaforms', 'field_inspected', [
-				'request_debug_id' => $request_debug_id,
-				'form_name'        => $form_name,
-				'field_id'         => $fid,
-				'field_value'      => $submitted_value,
-				'is_enabled'       => ( isset( $cfg[ $fid ] ) && (int) $cfg[ $fid ] === 1 ) ? 1 : 0,
-			]);
-		}
+        if (empty($cfg[$fid]) || (int)$cfg[$fid] !== 1) {
+            continue;
+        }
+		$has_active_duplicate_field = true;
 
-		// Only check duplicates if this FIELD_ID is enabled in per-form config (e.g. 2 => "1")
-		// NOTE: $cfg also contains 'labels' array; ignore that.
-		if ( ! isset( $cfg[ $fid ] ) || (int) $cfg[ $fid ] !== 1 ) {
-			continue;
-		}
+        $is_dup = duplicateKiller_check_duplicate_by_key_value(
+            DK_NINJA_FORMS,
+            $form_name,
+            $fid,
+            $submitted_value,
+            $form_cookie,
+            $checked_cookie
+        );
 
-		$is_dup = duplicateKiller_check_duplicate_by_key_value(
-			DK_NINJA_FORMS,
-			$form_name, // e.g. "contactme.1"
-			$fid,
-			$submitted_value,
-			$form_cookie,
-			$checked_cookie
-		);
+        if ($dk_enabled) {
+            duplicateKiller_Diagnostics::log('ninja', 'field_duplicate_check_result', [
+                'request_debug_id' => $request_debug_id,
+                'field_id'         => $fid,
+                'duplicate'        => $is_dup ? 1 : 0,
+            ]);
+        }
 
-		if ( $dk_enabled ) {
-			duplicateKiller_Diagnostics::log('ninjaforms', 'field_duplicate_result', [
-				'request_debug_id' => $request_debug_id,
-				'form_name'        => $form_name,
-				'field_id'         => $fid,
-				'field_value'      => $submitted_value,
-				'is_duplicate'     => $is_dup ? 1 : 0,
-			]);
-		}
-			
-		if ( $is_dup ) {
-			// Block submission: form-level + field-level errors
-			$form_data['errors']['form']           = $duplicate_message;
-			$form_data['errors']['fields'][ $fid ] = $duplicate_message;
-			duplicateKiller_increment_duplicates_blocked_count();
+        if ($is_dup) {
 
-			if ( $dk_enabled ) {
-				duplicateKiller_Diagnostics::log('ninjaforms', 'duplicate_blocked', [
-					'request_debug_id' => $request_debug_id,
-					'form_name'        => $form_name,
-					'field_id'         => $fid,
-					'message'          => $duplicate_message,
-					'errors_after'     => $form_data['errors'],
-				]);
-			}
+            if ($dk_enabled) {
+                duplicateKiller_Diagnostics::log('ninja', 'duplicate_found', [
+                    'request_debug_id' => $request_debug_id,
+                    'field_id'         => $fid,
+                ]);
+            }
 
-			return $form_data;
-		}
-	}
+            $form_data['errors']['form'] = $duplicate_message;
+            $form_data['errors']['fields'][$fid] = $duplicate_message;
 
-	// =========================
-	// 3) Save to DB
-	// =========================
-	$ip_enabled = ( isset( $ninja_page['ninjaforms_user_ip'] ) && (string) $ninja_page['ninjaforms_user_ip'] === '1' );
-	$form_ip    = $ip_enabled ? duplicateKiller_get_user_ip() : 'NULL';
+            return $form_data;
+        }
+    }
 
-	$form_value = serialize( $storage_fields );
-	$form_date  = current_time( 'Y-m-d H:i:s' );
+    // =========================
+    // 3) Pro feature Cross-form
+    // =========================
 
-	if ( $dk_enabled ) {
-		duplicateKiller_Diagnostics::log('ninjaforms', 'save_start', [
-			'request_debug_id' => $request_debug_id,
-			'form_name'        => $form_name,
-			'storage_fields'   => $storage_fields,
-			'form_ip'          => $form_ip,
-		]);
-	}
-
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- Inserting into plugin-owned custom table.
-	$insert_result = $wpdb->insert(
-		$table_name,
-		array(
-			'form_plugin' => DK_NINJA_FORMS,
-			'form_name'   => $form_name,
-			'form_value'  => $form_value,
-			'form_cookie' => $form_cookie,
-			'form_date'   => $form_date,
-			'form_ip'     => $form_ip,
-		)
+    // =========================
+    // 4) Save
+    // =========================
+	$should_save_submission = (
+		$has_active_duplicate_field ||
+		(!empty($cfg['user_ip']) && (int)$cfg['user_ip'] > 0)
 	);
 
-	if ( $dk_enabled ) {
-		duplicateKiller_Diagnostics::log('ninjaforms', 'save_after_insert', [
-			'request_debug_id' => $request_debug_id,
-			'form_name'        => $form_name,
-			'insert_ok'        => empty($wpdb->last_error) && false !== $insert_result ? 1 : 0,
-			'wpdb_last_error'  => $wpdb->last_error,
-			'insert_id'        => $wpdb->insert_id,
-		]);
-	}
+	if (!$should_save_submission) {
+		if ($dk_enabled) {
+			duplicateKiller_Diagnostics::log('ninja', 'save_skipped_no_active_rules', [
+				'request_debug_id'            => $request_debug_id,
+				'form_name'                   => $form_name,
+				'has_active_duplicate_field'  => $has_active_duplicate_field ? 1 : 0,
+				'user_ip_enabled'             => (!empty($cfg['user_ip']) && (int)$cfg['user_ip'] > 0) ? 1 : 0,
+			]);
+		}
 
-	return $form_data;
+		return $form_data;
+	}
+    $form_ip = (!empty($cfg['user_ip']) && (int)$cfg['user_ip'] > 0)
+        ? duplicateKiller_get_user_ip()
+        : 'NULL';
+
+    $form_value = serialize($storage_fields);
+    $form_date  = current_time('Y-m-d H:i:s');
+
+    // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+    $insert_result = $wpdb->insert(
+        $table_name,
+        [
+            'form_plugin' => DK_NINJA_FORMS,
+            'form_name'   => $form_name,
+            'form_value'  => $form_value,
+            'form_cookie' => $form_cookie,
+            'form_date'   => $form_date,
+            'form_ip'     => $form_ip,
+        ]
+    );
+
+    if ($dk_enabled) {
+        duplicateKiller_Diagnostics::log('ninja', 'save_after_insert', [
+            'request_debug_id' => $request_debug_id,
+            'insert_ok'        => empty($wpdb->last_error) && false !== $insert_result ? 1 : 0,
+            'wpdb_last_error'  => $wpdb->last_error,
+        ]);
+    }
+
+    return $form_data;
 }
 
-function duplicateKiller_nf_get_first_field_id( array $fields ): int {
-	foreach ( $fields as $k => $field ) {
-		if ( is_numeric( $k ) ) {
-			return (int) $k;
-		}
-		if ( is_array( $field ) && isset( $field['id'] ) && is_numeric( $field['id'] ) ) {
-			return (int) $field['id'];
-		}
-	}
-	return 0;
+function duplicateKiller_nf_get_first_field_id(array $fields): int {
+    foreach ($fields as $k => $field) {
+        if (is_numeric($k)) return (int)$k;
+        if (is_array($field) && isset($field['id']) && is_numeric($field['id'])) {
+            return (int)$field['id'];
+        }
+    }
+    return 0;
 }
 
+/**
+ * Helper: is Ninja Forms present & ready for this request?
+ *
+ * - Detects Ninja Forms core (Ninja_Forms() function or main class)
+ * - Ensures we're past the plugin bootstrap stage (plugins_loaded)
+ * - Uses a soft readiness check (Ninja Forms doesn't expose a single universal "loaded" action like some plugins)
+ */
+function duplicateKiller_ninjaforms_is_ready(): bool {
+
+    // 1) Is Ninja Forms available (core)?
+    // Prefer the public function Ninja_Forms(), but also allow class-based detection.
+    if (
+        ! function_exists('Ninja_Forms') &&
+        ! class_exists('Ninja_Forms')
+    ) {
+        return false;
+    }
+
+    // 2) Are we past the plugin bootstrap?
+    // If we're running too early, Ninja Forms might not be initialized yet.
+    if ( did_action('plugins_loaded') <= 0 ) {
+        return false;
+    }
+
+    // 3) If the function exists, ensure it returns a usable object.
+    // This is a practical readiness gate used in many integrations.
+    if ( function_exists('Ninja_Forms') ) {
+        $nf = Ninja_Forms();
+        if ( ! is_object($nf) ) {
+            return false;
+        }
+
+        // Optional: check that the form API is available (guards against partial loads).
+        // Avoid being overly strict; if a method changes, we don't want to hard-fail.
+        if ( ! method_exists($nf, 'form') ) {
+            return true;
+        }
+
+        $form_api = $nf->form();
+        if ( ! is_object($form_api) || ! method_exists($form_api, 'get_forms') ) {
+            // Soft-pass: NF is present, but the form API isn't accessible right now.
+            // In most contexts this is still fine, so return true.
+            return true;
+        }
+    }
+
+    return true;
+}
 function duplicateKiller_ninjaforms_get_forms(): array {
     $out = [];
 
@@ -509,133 +504,6 @@ function duplicateKiller_ninjaforms_get_forms(): array {
     return $out;
 }
 
-/*********************************
- * Callbacks
-**********************************/
-function duplicateKiller_ninjaforms_validate_input( $input ) {
-	global $wpdb;
-
-	$output = array();
-
-	// Create our array for storing the validated options (keep numeric field keys, add labels)
-	foreach ( $input as $form_key => $value ) {
-
-		// Only per-form arrays (skip global settings like ninjaforms_cookie_option)
-		if ( ! is_array( $value ) ) {
-			continue;
-		}
-
-		if ( ! isset( $output[ $form_key ] ) || ! is_array( $output[ $form_key ] ) ) {
-			$output[ $form_key ] = array();
-		}
-
-		foreach ( $value as $field_id => $field_value ) {
-
-			// Special: keep labels array for this form
-			if ( (string) $field_id === 'labels' && is_array( $field_value ) ) {
-				$output[ $form_key ]['labels'] = array();
-
-				foreach ( $field_value as $fid => $label ) {
-					// Keep numeric keys as-is (Ninja Forms field IDs are often numeric)
-					if ( $fid === '' || $fid === null ) {
-						continue;
-					}
-					$output[ $form_key ]['labels'][ $fid ] = sanitize_text_field( (string) $label );
-				}
-
-				continue;
-			}
-
-			// Normal checkbox fields: keep only "1"
-			// (unchecked fields usually won't be present in $input anyway)
-			if ( (string) $field_value === '1' ) {
-				$output[ $form_key ][ $field_id ] = '1';
-			}
-		}
-	}
-
-	// Validate cookies feature
-	if ( ! isset( $input['ninjaforms_cookie_option'] ) || (string) $input['ninjaforms_cookie_option'] !== '1' ) {
-		$output['ninjaforms_cookie_option'] = '0';
-	} else {
-		$output['ninjaforms_cookie_option'] = '1';
-	}
-
-	// Validate cookie days (default 365)
-	if ( ! isset( $input['ninjaforms_cookie_option_days'] ) || filter_var( $input['ninjaforms_cookie_option_days'], FILTER_VALIDATE_INT ) === false ) {
-		$output['ninjaforms_cookie_option_days'] = 365;
-	} else {
-		// Store as integer-ish string to keep existing storage style
-		$output['ninjaforms_cookie_option_days'] = (string) absint( $input['ninjaforms_cookie_option_days'] );
-	}
-
-	// Validate IP limit feature
-	if ( ! isset( $input['ninjaforms_user_ip'] ) || (string) $input['ninjaforms_user_ip'] !== '1' ) {
-		$output['ninjaforms_user_ip'] = '0';
-	} else {
-		$output['ninjaforms_user_ip'] = '1';
-	}
-
-	// Validate IP limit error message
-	if ( empty( $input['ninjaforms_error_message_limit_ip'] ) ) {
-		$output['ninjaforms_error_message_limit_ip'] = 'You already submitted this form!';
-	} else {
-		$output['ninjaforms_error_message_limit_ip'] = sanitize_text_field( $input['ninjaforms_error_message_limit_ip'] );
-	}
-
-	// Validate standard error message
-	if ( empty( $input['ninjaforms_error_message'] ) ) {
-		$output['ninjaforms_error_message'] = 'Please check all fields! These values has been submitted already!';
-	} else {
-		$output['ninjaforms_error_message'] = sanitize_text_field( $input['ninjaforms_error_message'] );
-	}
-
-	// Return the array processing any additional functions filtered by this action
-	return apply_filters( 'duplicateKiller_ninjaforms_error_message', $output, $input );
-}
-
-function duplicateKiller_ninjaforms_is_ready(): bool {
-
-    // 1) Is Ninja Forms available (core)?
-    // Prefer the public function Ninja_Forms(), but also allow class-based detection.
-    if (
-        ! function_exists('Ninja_Forms') &&
-        ! class_exists('Ninja_Forms')
-    ) {
-        return false;
-    }
-
-    // 2) Are we past the plugin bootstrap?
-    // If we're running too early, Ninja Forms might not be initialized yet.
-    if ( did_action('plugins_loaded') <= 0 ) {
-        return false;
-    }
-
-    // 3) If the function exists, ensure it returns a usable object.
-    // This is a practical readiness gate used in many integrations.
-    if ( function_exists('Ninja_Forms') ) {
-        $nf = Ninja_Forms();
-        if ( ! is_object($nf) ) {
-            return false;
-        }
-
-        // Optional: check that the form API is available (guards against partial loads).
-        // Avoid being overly strict; if a method changes, we don't want to hard-fail.
-        if ( ! method_exists($nf, 'form') ) {
-            return true;
-        }
-
-        $form_api = $nf->form();
-        if ( ! is_object($form_api) || ! method_exists($form_api, 'get_forms') ) {
-            // Soft-pass: NF is present, but the form API isn't accessible right now.
-            // In most contexts this is still fine, so return true.
-            return true;
-        }
-    }
-
-    return true;
-}
-
 function duplicateKiller_ninjaforms_description() {
 
     // Check if Ninja Forms is present and ready
@@ -662,93 +530,23 @@ function duplicateKiller_ninjaforms_description() {
     }
 }
 
+/*********************************
+ * Callbacks
+**********************************/
+function duplicateKiller_ninjaforms_validate_input($input) {
+    return duplicateKiller_sanitize_forms_option($input, 'NinjaForms_page', 'NinjaForms_page', [], 'Ninja Forms');
+}
+
 function duplicateKiller_ninjaforms_settings_callback($args){
 	$options = get_option($args[0]);
-	$checked_cookie = isset($options['ninjaforms_cookie_option']) AND ($options['ninjaforms_cookie_option'] == "1")?: $checked_cookie='';
-	$stored_cookie_days = isset($options['ninjaforms_cookie_option_days'])? $options['ninjaforms_cookie_option_days']:"365";
-	
-	$checkbox_ip = isset($options['ninjaforms_user_ip']) AND ($options['ninjaforms_user_ip'] == "1")?: $checkbox_ip='';
-	$stored_error_message_limit_ip = isset($options['ninjaforms_error_message_limit_ip'])? $options['ninjaforms_error_message_limit_ip']:"You already submitted this form!";
-	
-	$stored_error_message = isset($options['ninjaforms_error_message'])? $options['ninjaforms_error_message']:"Please check all fields! These values has been submitted already!";
-	?>
-	<h4 class="dk-form-header">Duplicate Killer settings</h4>
-	<div class="dk-set-error-message">
-		<fieldset class="dk-fieldset">
-		<legend>
-			<strong>Set error message:</strong>
-			<small style="font-weight:normal; margin-left:8px;">
-				<a href="https://verselabwp.com/what-is-the-set-error-message-field-in-duplicate-killer/" target="_blank" rel="noopener">
-					What is this?
-				</a>
-			</small>
-		</legend>
-		<span>Warn the user that the value inserted has been already submitted!</span>
-		</br>
-		<input type="text" size="70" name="<?php echo esc_attr($args[0].'[ninjaforms_error_message]');?>" value="<?php echo esc_attr($stored_error_message);?>"></input>
-		</fieldset>
-	</div>
-	</br>
-	<div class="dk-set-unique-entries-per-user">
-		<fieldset class="dk-fieldset">
-		<legend>
-			<strong>Unique entries per user:</strong>
-			<small style="font-weight:normal; margin-left:8px;">
-				<a href="https://verselabwp.com/unique-entries-per-user-in-wordpress-how-to-use-it/" target="_blank" rel="noopener">
-					How to use it?
-				</a>
-			</small>
-		</legend>
-		<strong>This feature use cookies.</strong><span> Please note that multiple users <strong>can submit the same entry</strong>, but a single user cannot submit an entry they have already submitted before.</span>
-		</br>
-		</br>
-		<div class="dk-input-checkbox-callback">
-			<input type="checkbox" id="cookie" name="<?php echo esc_attr($args[0].'[ninjaforms_cookie_option]');?>" value="1" <?php echo esc_attr($checked_cookie ? 'checked' : '');?>></input>
-			<label for="cookie">Activate this function</label>
-		</div>
-		</br>
-		<div id="dk-unique-entries-cookie" style="display:none">
-		<span>Cookie persistence - Number of days </span><input type="text" name="<?php echo esc_attr($args[0].'[ninjaforms_cookie_option_days]');?>" size="5" value="<?php echo esc_attr($stored_cookie_days);?>"></input>
-		</br>
-		</div>
-		</fieldset>
-	</div>
-	<div class="dk-limit_submission_by_ip">
-		<fieldset class="dk-fieldset">
-		<legend>
-			<strong>Limit submissions by IP address</strong>
-			<small style="font-weight:normal; margin-left:8px;">
-				<a href="https://verselabwp.com/limit-submissions-by-ip-address-in-wordpress-free-pro/" target="_blank" rel="noopener">
-					How it works
-				</a>
-			</small>
-		</legend>
-		<strong>This feature </strong><span> restrict form entries based on IP address for 7 days</span>
-		</br>
-		</br>
-		<div class="dk-input-checkbox-callback">
-			<input type="checkbox" id="user_ip" name="<?php echo esc_attr($args[0].'[ninjaforms_user_ip]');?>" value="1" <?php echo esc_attr($checkbox_ip ? 'checked' : '');?>></input>
-			<label for="user_ip">Activate this function</label>
-		</div>
-		</br>
-		<div id="dk-limit-ip" style="display:none">
-		<span>Ser error message:</span><input type="text" size="70" name="<?php echo esc_attr($args[0].'[ninjaforms_error_message_limit_ip]');?>" value="<?php echo esc_attr($stored_error_message_limit_ip);?>"></input>
-		</br>
-		</div>
-		</fieldset>
-	</div>
-<?php
+
 }
 function duplicateKiller_ninjaforms_select_form_tag_callback($args){
-	$forms     = duplicateKiller_ninjaforms_get_forms();      // [ 'Form name' => [ 'field1', 'field2' ] ]
-
-	$forms_ids = ""; // [ 'Form name' => 123 ]
-
-	duplicateKiller_render_forms_ui(
-		DK_NINJA_FORMS,
-		DK_NINJA_FORMS_LABEL,
-		$args,
-		$forms,
-		$forms_ids
-	);
+    duplicateKiller_render_forms_overview([
+        'option_name'   => (string)$args[0],   // Formidable_page
+        'db_plugin_key' => DK_NINJA_FORMS,
+        'plugin_label'  => DK_NINJA_FORMS_LABEL,
+        'forms'         => duplicateKiller_ninjaforms_get_forms(),
+        'forms_id_map'  => [], // optional
+    ]);
 }

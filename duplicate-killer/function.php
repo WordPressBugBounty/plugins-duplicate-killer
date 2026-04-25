@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: Duplicate Killer
- * Version: 1.5.8
+ * Version: 1.5.9
  * Description: Block duplicate form submissions by validating unique email, phone and text fields — without CAPTCHA.
  * Author: NIA
  * Author URI: https://profiles.wordpress.org/wpnia/
@@ -12,13 +12,16 @@
 
 	defined('ABSPATH') or die('You shall not pass!');
 	
-	define('DUPLICATEKILLER_PLUGIN_FILE',__FILE__);
-	define('DUPLICATEKILLER_VERSION','1.5.8');
+	define('DUPLICATEKILLER_PLUGIN',__FILE__);
+	define('DUPLICATEKILLER_VERSION','1.5.9');
 	define('DUPLICATEKILLER_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 	define('DUPLICATEKILLER_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 	
 	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/helpers.php';
 	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/dk-cookie-loader.php';
+	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/render.php';
+	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/sanitize.php';
+	
 	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/functions_cf7.php';
 	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/functions_forminator.php';
 	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/functions_wpforms.php';
@@ -26,20 +29,23 @@
 	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/functions_elementor.php';
 	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/functions_formidable.php';
 	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/functions_ninjaforms.php';
+	
 	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/database.php';
 	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/pro.php';
 	
 	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/class-duplicateKiller-woocommerce.php';
 	duplicateKiller_WooCommerce::init();
 	
+	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/class-duplicateKiller-cross-form.php';
+	
 	//debug/diagnostics
 	require_once DUPLICATEKILLER_PLUGIN_DIR . '/includes/class-duplicateKiller-diagnostics.php';
 	duplicateKiller_Diagnostics::init();
 	
-//location helpers.php
-add_action('admin_init', 'duplicateKiller_handle_delete_records_request');
-add_action('admin_init', 'duplicateKiller_handle_dismiss_milestone_notice');
-add_action('admin_notices', 'duplicateKiller_admin_review_milestone_notice');
+	//location helpers.php
+	add_action('admin_init', 'duplicateKiller_handle_delete_records_request');
+	add_action('admin_init', 'duplicateKiller_handle_dismiss_milestone_notice');
+	add_action('admin_notices', 'duplicateKiller_admin_review_milestone_notice');
 /**
  * Create a new table in db
  */
@@ -277,104 +283,6 @@ function duplicateKiller_check_values($db_values, $form_name, $form_value){
 	}
 	return false;
 }
-
-function duplicateKiller_check_duplicate_by_key_value($form_plugin, $form_name, $key, $value, $form_cookie = 'NULL', $checked_cookie = false) {
-	global $wpdb;
-
-	// Sanitize stable string inputs used in the SQL query.
-	$form_plugin = sanitize_key( (string) $form_plugin );
-	$form_name   = sanitize_text_field( (string) $form_name );
-
-	$table_name = $wpdb->prefix . 'dk_forms_duplicate';
-
-	// Cache query results per request for the same plugin + form.
-	// This avoids running the exact same SELECT multiple times
-	// when several fields are checked during one submission.
-	static $dk_results_cache = array();
-
-	$cache_key = $form_plugin . '|' . $form_name;
-
-	if ( ! isset( $dk_results_cache[ $cache_key ] ) ) {
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Reading from plugin-owned custom table; request-scoped cache used inside the current request.
-		$results = $wpdb->get_results(
-			$wpdb->prepare(
-				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Plugin-owned table name using $wpdb->prefix.
-				"SELECT form_value, form_cookie
-				 FROM {$table_name}
-				 WHERE form_plugin = %s
-				 AND form_name = %s
-				 ORDER BY form_id DESC",
-				$form_plugin,
-				$form_name
-			)
-		);
-
-		$dk_results_cache[ $cache_key ] = is_array( $results ) ? $results : array();
-	}
-
-	$results = $dk_results_cache[ $cache_key ];
-
-	foreach ( $results as $row ) {
-		$form_data = maybe_unserialize( $row->form_value );
-
-		// Associative array payloads: key => value
-		if ( is_array( $form_data ) && isset( $form_data[ $key ] ) ) {
-			if ( duplicateKiller_check_values_with_lowercase_filter( $form_data[ $key ], $value ) ) {
-
-				// When cookie protection is enabled, duplicate detection becomes user-specific.
-				// Multiple users can submit the same value, but the same user (same cookie)
-				// cannot submit the same value more than once.
-				if ( $checked_cookie == true ) {
-					if ( $row->form_cookie == $form_cookie ) {
-						return true;
-					} else {
-						return false;
-					}
-				}
-
-				return true;
-			}
-
-		// Named value list payloads: array( array( 'name' => ..., 'value' => ... ) )
-		} elseif ( is_array( $form_data ) && isset( $form_data[0]['name'] ) ) {
-			foreach ( $form_data as $input ) {
-				if ( isset( $input['name'] ) && $input['name'] === $key ) {
-					if ( duplicateKiller_check_values_with_lowercase_filter( $input['value'], $value ) ) {
-
-						// When cookie protection is enabled, duplicate detection becomes user-specific.
-						// Multiple users can submit the same value, but the same user (same cookie)
-						// cannot submit the same value more than once.
-						if ( $checked_cookie == true ) {
-							if ( $row->form_cookie == $form_cookie ) {
-								return true;
-							} else {
-								return false;
-							}
-						}
-
-						return true;
-					}
-				}
-			}
-		}
-	}
-
-	return false;
-}
-function duplicateKiller_check_values_with_lowercase_filter($var1, $var2){
-	if(is_array($var1) AND is_array($var2)){
-		$var1 = array_map('strtolower', $var1);
-		$var2 = array_map('strtolower', $var2);
-		if($var1 == $var2){
-			return true;
-		}
-	}elseif(!is_array($var1) AND !is_array($var2)){
-		if(strtolower($var1) == strtolower($var2)){
-			return true;
-		}
-	}
-	return false;
-}
 /**
  * Include plugin style
  */
@@ -395,7 +303,7 @@ function duplicateKiller_callback_for_setting_up_scripts( $hook ) {
 
 	wp_register_style(
 		'duplicateKillerStyle',
-		plugins_url( 'assets/style.css', DUPLICATEKILLER_PLUGIN_FILE ),
+		plugins_url( 'assets/style.css', DUPLICATEKILLER_PLUGIN ),
 		array(),
 		DUPLICATEKILLER_VERSION
 	);
@@ -404,7 +312,7 @@ function duplicateKiller_callback_for_setting_up_scripts( $hook ) {
 
 	wp_enqueue_script(
 		'duplicateKiller-admin',
-		plugins_url( 'assets/admin-settings.js', DUPLICATEKILLER_PLUGIN_FILE ),
+		plugins_url( 'assets/admin-settings.js', DUPLICATEKILLER_PLUGIN ),
 		array(),
 		DUPLICATEKILLER_VERSION,
 		true
@@ -420,7 +328,7 @@ function duplicateKiller_callback_for_setting_up_scripts( $hook ) {
 
 	wp_enqueue_script(
 		'duplicateKiller-admin-support',
-		plugins_url( 'assets/admin-support.js', DUPLICATEKILLER_PLUGIN_FILE ),
+		plugins_url( 'assets/admin-support.js', DUPLICATEKILLER_PLUGIN ),
 		array(),
 		DUPLICATEKILLER_VERSION,
 		true

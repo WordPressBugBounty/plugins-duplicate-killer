@@ -1,291 +1,219 @@
 <?php
 defined( 'ABSPATH' ) or die( 'You shall not pass!' );
 
-add_action( 'wpforms_process', 'duplicateKiller_wpforms_before_send_email', 10, 3 );
+add_action('wpforms_process', 'duplicateKiller_wpforms_before_send_email', 10, 3);
 function duplicateKiller_wpforms_before_send_email($fields, $entry, $form_data){
 	global $wpdb;
-	$table_name = $wpdb->prefix.'dk_forms_duplicate';
-	
-	$form_title = $form_data['settings']['form_title'];
 
-	$request_debug_id = uniqid('dk_wpforms_validate_', true);
-	$dk_enabled       = class_exists('duplicateKiller_Diagnostics');
+	$form_title = isset($form_data['settings']['form_title'])
+		? (string) $form_data['settings']['form_title']
+		: '';
 
-	
-	
-	$wpforms_page = get_option( 'WPForms_page' );
+	$request_debug_id = uniqid('duplicateKiller_wpforms_', true);
+	$form_id_numeric  = isset($form_data['id']) ? (int) $form_data['id'] : 0;
 
-	$config_state = duplicateKiller_get_form_state( $wpforms_page, $form_title, 'wpforms_user_ip' );
-
-	// Form does not exist in settings → HARD STOP
-	if ( ! $config_state['form_exists'] ) {
-		if ( $dk_enabled ) {
-			duplicateKiller_Diagnostics::log('wpforms', 'process_skipped', [
-				'request_debug_id' => $request_debug_id,
-				'form_title'       => $form_title,
-				'reason'           => 'form_not_configured',
-				'state'            => $config_state,
-			]);
-		}
-
-		return;
+	$table_name   = $wpdb->prefix . 'dk_forms_duplicate';
+	$wpforms_page = get_option("WPForms_page");
+	$wpforms_page = duplicateKiller_convert_option_architecture( $wpforms_page, 'wpforms_' );
+	if (!is_array($wpforms_page)) {
+		$wpforms_page = [];
 	}
 
-	// No duplicate fields AND no IP protection → STOP
-	if ( ! $config_state['has_duplicate_field'] && ! $config_state['ip_enabled'] ) {
-		if ( $dk_enabled ) {
-			duplicateKiller_Diagnostics::log('wpforms', 'process_skipped', [
-				'request_debug_id'     => $request_debug_id,
-				'form_title'           => $form_title,
-				'reason'               => 'no_duplicate_fields_and_ip_disabled',
-				'has_duplicate_field'  => 0,
-				'ip_enabled'           => 0,
-				'state'                => $config_state,
-			]);
-		}
+	// === Diagnostics flags
+	$dk_enabled = class_exists('duplicateKiller_Diagnostics');
+	$dk_has_errors = $dk_enabled && method_exists('duplicateKiller_Diagnostics', 'duplicateKiller_get_wpforms_errors_snapshot');
+	$dk_has_normalize = $dk_enabled && method_exists('duplicateKiller_Diagnostics', 'duplicateKiller_normalize_debug_value');
 
-		return;
-	}
-	
-	$form_cookie = 'NULL';
+	// === Logger wrapper
+	$dk_log = static function(string $stage, array $payload = []) use ($dk_enabled) {
+		if (!$dk_enabled) return;
+		duplicateKiller_Diagnostics::log('wpforms', $stage, $payload);
+	};
 
-	if ( isset( $_COOKIE['dk_form_cookie'] ) ) {
-		$form_cookie = sanitize_text_field(
-			wp_unslash( $_COOKIE['dk_form_cookie'] )
-		);
-	}
+	$dk_log('process_start', [
+		'request_debug_id' => $request_debug_id,
+		'form_title'       => $form_title,
+		'form_id'          => $form_id_numeric,
+		'form_settings'    => isset($form_data['settings']) && is_array($form_data['settings']) ? $form_data['settings'] : [],
+		'wpforms_page_has_form_config' => !empty($wpforms_page[$form_title]) ? 1 : 0,
+		'wpforms_page_form_config'     => !empty($wpforms_page[$form_title]) ? $wpforms_page[$form_title] : [],
+		'posted_fields_raw'            => is_array($fields) ? $fields : [],
+		'entry_raw'                    => is_array($entry) ? $entry : [],
+		'errors_before_processing'     => $dk_has_errors
+			? duplicateKiller_Diagnostics::duplicateKiller_get_wpforms_errors_snapshot($form_id_numeric)
+			: [],
+	]);
 
-	if ($dk_enabled) {
-		duplicateKiller_Diagnostics::log('wpforms', 'process_start', [
-			'request_debug_id'   => $request_debug_id,
-			'form_title'         => $form_title,
-			'form_id'            => isset($form_data['id']) ? (int) $form_data['id'] : 0,
-			'fields_raw'         => is_array($fields) ? $fields : [],
-			'entry_raw'          => is_array($entry) ? $entry : [],
-			'form_data_raw'      => is_array($form_data) ? $form_data : [],
-		]);
-	}
+	$cookie = duplicateKiller_get_form_cookie_simple(
+		$wpforms_page,
+		$form_title,
+		'dk_form_cookie_wpforms_'
+	);
 
-	if ($dk_enabled) {
-		duplicateKiller_Diagnostics::log('wpforms', 'cookie_resolved', [
+	$form_cookie    = $cookie['form_cookie'];
+	$checked_cookie = $cookie['checked_cookie'];
+
+	$dk_log('cookie_state_resolved', [
+		'request_debug_id' => $request_debug_id,
+		'form_title'       => $form_title,
+		'form_cookie'      => $form_cookie,
+		'checked_cookie'   => $checked_cookie,
+	]);
+
+	$abort             = false;
+	$storage_fields    = [];
+	$current_values    = [];
+	$has_enabled_field = false;
+
+	$form_ip = isset($wpforms_page[$form_title]['user_ip']) && $wpforms_page[$form_title]['user_ip'] === "1"
+		? true
+		: 'NULL';
+
+	// =========================
+	// 1. IP CHECK
+	// =========================
+	$dk_log('ip_check_start', [
+		'request_debug_id' => $request_debug_id,
+		'form_title'       => $form_title,
+	]);
+
+	if (duplicateKiller_ip_limit_trigger("WPForms", $wpforms_page, $form_title)) {
+
+		$message  = $wpforms_page[$form_title]['error_message_limit_ip_option'];
+		$form_id  = (int) $form_data['id'];
+		$field_id = 1;
+
+		add_filter('wpforms_custom_form_invalid_form_message', function($invalid_form_message) use ($message) {
+			return $message;
+		}, 15);
+
+		wpforms()->process->errors[$form_id][$field_id] = $message;
+		wpforms()->process->errors[$form_id]['wpforms_global'] = $message;
+
+		$dk_log('ip_limit_blocked', [
 			'request_debug_id' => $request_debug_id,
-			'form_title'       => $form_title,
-			'form_cookie'      => $form_cookie,
+			'message'          => $message,
 		]);
+
+		return;
 	}
 
-	$abort = false;
-	$storage_fields = array();
-	$form_ip="";
-	$no_form = true;
+	// =========================
+	// 2. DUPLICATE CHECK
+	// =========================
+	$dk_log('duplicate_check_start', [
+		'request_debug_id' => $request_debug_id,
+	]);
 
-	//check if IP limit feature is active
-	if($wpforms_page['wpforms_user_ip'] == "1"){
-		$form_ip = duplicateKiller_get_user_ip();
+	if (!empty($wpforms_page[$form_title]) && is_array($fields)) {
+		$enabled_fields = $wpforms_page[$form_title];
 
-		if ($dk_enabled) {
-			duplicateKiller_Diagnostics::log('wpforms', 'ip_check_start', [
-				'request_debug_id' => $request_debug_id,
-				'form_title'       => $form_title,
-				'form_ip'          => $form_ip,
-				'ip_limit_enabled' => 1,
-			]);
-		}
+		foreach ($fields as $data) {
 
-		$duplicateKiller_check_ip_feature = duplicateKiller_check_ip_feature("WPForms",$form_title,$form_ip);
-
-		if ($dk_enabled) {
-			duplicateKiller_Diagnostics::log('wpforms', 'ip_check_result', [
-				'request_debug_id' => $request_debug_id,
-				'form_title'       => $form_title,
-				'form_ip'          => $form_ip,
-				'duplicate_ip'     => $duplicateKiller_check_ip_feature ? 1 : 0,
-			]);
-		}
-
-		if($duplicateKiller_check_ip_feature){
-			$message = $wpforms_page['wpforms_error_message_limit_ip'];
-
-			//change the general error message with the dk_custom_error_message
-			add_filter('wpforms_custom_form_invalid_form_message',function($invalid_form_message, $form_data) use($message){
-				$invalid_form_message = $message;
-				return $invalid_form_message = $message;
-			},15,2);
-
-			//stop form for submission if IP limit is triggered
-			wpforms()->process->errors[ $form_data[ 'id' ]][1] = $message;
-
-			if ($dk_enabled) {
-				duplicateKiller_Diagnostics::log('wpforms', 'ip_limit_blocked', [
-					'request_debug_id' => $request_debug_id,
-					'form_title'       => $form_title,
-					'message'          => $message,
-					'errors_snapshot'  => method_exists('duplicateKiller_Diagnostics', 'duplicateKiller_get_wpforms_errors_snapshot')
-						? duplicateKiller_Diagnostics::duplicateKiller_get_wpforms_errors_snapshot((int) $form_data['id'])
-						: [],
-				]);
+			if (!is_array($data) || !isset($data['name'])) {
+				continue;
 			}
 
-			// Increment blocked duplicates counter
-			duplicateKiller_increment_duplicates_blocked_count();
+			$field_name  = (string) $data['name'];
+			$field_value = $data['value'] ?? '';
 
-			$abort = true;
-		}else{
-			//store fields in custom table dk
-			foreach($fields as $data){
-				$storage_fields[] = [
-					"name" => $data['name'],
-					"value" => $data['value']
-				];
+			$current_values[$field_name] = $field_value;
 
-				if ($dk_enabled) {
-					duplicateKiller_Diagnostics::log('wpforms', 'field_stored_ip_mode', [
-						'request_debug_id' => $request_debug_id,
-						'form_title'       => $form_title,
-						'field_id'         => isset($data['id']) ? $data['id'] : '',
-						'field_name'       => isset($data['name']) ? $data['name'] : '',
-						'field_value'      => isset($data['value']) ? $data['value'] : '',
-					]);
-				}
-			}
-		}
-	}else{
-		if ($dk_enabled) {
-			duplicateKiller_Diagnostics::log('wpforms', 'duplicate_check_start', [
-				'request_debug_id' => $request_debug_id,
-				'form_title'       => $form_title,
-				'wpforms_page'     => is_array($wpforms_page) ? $wpforms_page : [],
-			]);
-		}
-		$result = duplicateKiller_check_duplicate("WPForms",$form_title);
-		foreach($fields as $data){
 			$storage_fields[] = [
-				"name" => $data['name'],
-				"value" => $data['value']
+				'name'  => $field_name,
+				'value' => $field_value
 			];
 
-			if ($dk_enabled) {
-				duplicateKiller_Diagnostics::log('wpforms', 'field_inspected', [
-					'request_debug_id' => $request_debug_id,
-					'form_title'       => $form_title,
-					'field_id'         => isset($data['id']) ? $data['id'] : '',
-					'field_name'       => isset($data['name']) ? $data['name'] : '',
-					'field_value'      => isset($data['value']) ? $data['value'] : '',
-				]);
+			if (empty($enabled_fields[$field_name])) {
+				continue;
 			}
 
-			foreach($wpforms_page as $form => $value){
-				if($form_title == $form){
-					if(isset($value[$data['name']]) and $value[$data['name']] == 1){
-						if ($dk_enabled) {
-							duplicateKiller_Diagnostics::log('wpforms', 'field_enabled_in_config', [
-								'request_debug_id' => $request_debug_id,
-								'form_title'       => $form_title,
-								'field_name'       => $data['name'],
-							]);
-						}
+			$has_enabled_field = true;
 
-						if($result){
-							foreach($result as $row){
-								$form_value = unserialize($row->form_value);
-								//inserted from v1.2.1
-								$res = duplicateKiller_check_values($form_value,$data['name'],$data['value']);
+			$result = duplicateKiller_check_duplicate_by_key_value(
+				"WPForms",
+				$form_title,
+				$field_name,
+				$field_value,
+				$form_cookie,
+				$checked_cookie
+			);
 
-								if ($dk_enabled) {
-									duplicateKiller_Diagnostics::log('wpforms', 'field_duplicate_compare', [
-										'request_debug_id' => $request_debug_id,
-										'form_title'       => $form_title,
-										'field_name'       => $data['name'],
-										'field_value'      => $data['value'],
-										'db_form_cookie'   => isset($row->form_cookie) ? $row->form_cookie : '',
-										'cookie_match'     => ($form_cookie === $row->form_cookie) ? 1 : 0,
-										'value_match'      => $res ? 1 : 0,
-									]);
-								}
+			$dk_log('field_duplicate_check_result', [
+				'request_debug_id' => $request_debug_id,
+				'field_name'       => $field_name,
+				'duplicate_result' => $result ? 1 : 0,
+			]);
 
-								if($res && $form_cookie === $row->form_cookie){
-									wpforms()->process->errors[$form_data['id']][$data['id']] = $wpforms_page['wpforms_error_message'];
+			if ($result) {
+				$message = $wpforms_page[$form_title]['error_message'];
 
-									if ($dk_enabled) {
-										duplicateKiller_Diagnostics::log('wpforms', 'duplicate_blocked', [
-											'request_debug_id' => $request_debug_id,
-											'form_title'       => $form_title,
-											'field_id'         => isset($data['id']) ? $data['id'] : '',
-											'field_name'       => $data['name'],
-											'message'          => $wpforms_page['wpforms_error_message'],
-											'errors_snapshot'  => method_exists('duplicateKiller_Diagnostics', 'duplicateKiller_get_wpforms_errors_snapshot')
-												? duplicateKiller_Diagnostics::duplicateKiller_get_wpforms_errors_snapshot((int) $form_data['id'])
-												: [],
-										]);
-									}
-
-									$abort = true;
-									// Increment blocked duplicates counter
-									duplicateKiller_increment_duplicates_blocked_count();
-									break; // stop search, already found
-								}
-							}
-						}
+				if (is_array($field_value)) {
+					foreach (['first-name', 'middle-name', 'last-name'] as $suffix) {
+						wpforms()->process->errors[$form_data['id']][$field_name . '-' . $suffix] = $message;
 					}
+				} else {
+					wpforms()->process->errors[$form_data['id']][$data['id']] = $message;
 				}
+
+				$dk_log('duplicate_found', [
+					'request_debug_id' => $request_debug_id,
+					'field_name'       => $field_name,
+				]);
+
+				$abort = true;
+				break; // ✅ IMPORTANT FIX
 			}
 		}
 	}
 
-	if ($dk_enabled) {
-		duplicateKiller_Diagnostics::log('wpforms', $abort ? 'save_skipped_abort' : 'save_start', [
-			'request_debug_id' => $request_debug_id,
-			'form_title'       => $form_title,
-			'abort'            => $abort ? 1 : 0,
-			'no_form'          => $no_form ? 1 : 0,
-			'form_ip'          => $form_ip,
-			'form_cookie'      => $form_cookie,
-			'storage_fields'   => $storage_fields,
-		]);
-	}
+	// =========================
+	// 3. SAVE
+	// =========================
+	if (!$abort && ($has_enabled_field || $form_ip === true)) {
 
-	if(!$abort AND $no_form){
-		//check if IP limit feature is active and store it
-		if(!$form_ip){
-			$duplicateKiller_check_ip_feature = duplicateKiller_get_setting("WPForms","wpforms_user_ip");
-			$form_ip = ($duplicateKiller_check_ip_feature)? $form_ip=duplicateKiller_get_user_ip(): $form_ip='NULL';
-
-			if ($dk_enabled) {
-				duplicateKiller_Diagnostics::log('wpforms', 'save_ip_resolved', [
-					'request_debug_id' => $request_debug_id,
-					'form_title'       => $form_title,
-					'resolved_form_ip' => $form_ip,
-				]);
-			}
+		if ($form_ip === true) {
+			$form_ip = duplicateKiller_get_user_ip();
 		}
 
 		$form_value = serialize($storage_fields);
-		$form_date = current_time('Y-m-d H:i:s');
+		$form_date  = current_time('Y-m-d H:i:s');
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- Inserting into plugin-owned custom table.
 		$insert_result = $wpdb->insert(
 			$table_name,
 			array(
 				'form_plugin' => "WPForms",
-				'form_name' => $form_title,
-				'form_value'   => $form_value,
+				'form_name'   => $form_title,
+				'form_value'  => $form_value,
 				'form_cookie' => $form_cookie,
-				'form_date' => $form_date,
-				'form_ip' => $form_ip
+				'form_date'   => $form_date,
+				'form_ip'     => $form_ip
 			)
 		);
 
-		if ($dk_enabled) {
-			duplicateKiller_Diagnostics::log('wpforms', 'save_after_insert', [
-				'request_debug_id' => $request_debug_id,
-				'form_title'       => $form_title,
-				'insert_ok'        => empty($wpdb->last_error) && false !== $insert_result ? 1 : 0,
-				'wpdb_last_error'  => $wpdb->last_error,
-				'insert_id'        => $wpdb->insert_id,
-				'table_name'       => $table_name,
-			]);
+		$dk_log('save_after_insert', [
+			'request_debug_id' => $request_debug_id,
+			'insert_ok'        => empty($wpdb->last_error) && false !== $insert_result ? 1 : 0,
+			'wpdb_last_error'  => $wpdb->last_error,
+		]);
+	}
+}
+function duplicateKiller_wpforms_get_forms_ids() {
+	$wpforms_posts = get_posts([
+		'post_type' => 'wpforms',
+		'order'     => 'DESC',
+		'nopaging'  => true
+	]);
+
+	$forms = [];
+
+	foreach ($wpforms_posts as $post) {
+		if (!empty($post->post_title) && isset($post->ID)) {
+			$forms[$post->post_title] = $post->ID;
 		}
 	}
+
+	return $forms;
 }
 function duplicateKiller_wpforms_get_forms(){
 	$wpforms_posts = get_posts([
@@ -293,77 +221,45 @@ function duplicateKiller_wpforms_get_forms(){
 		'order' => 'DESC',
 		'nopaging' => true
 	]);
+
 	$output = array();
 
 	foreach($wpforms_posts as $form){
 		$form_data = json_decode($form->post_content, true);
-		if (!empty( $form_data['fields'])){
-			foreach((array) $form_data['fields'] as $key => $field){
-				if($field['type'] == "name" OR
-					$field['type'] == "text" OR
-					$field['type'] == "email"){
-					$output[$form->post_title][] = $field['label'];
+
+		$output[$form->post_title] = [
+			'form_id'   => (int) $form->ID,
+			'form_name' => (string) $form->post_title,
+			'fields'    => [],
+		];
+
+		if (!empty($form_data['fields'])) {
+			foreach ((array) $form_data['fields'] as $key => $field) {
+				if (
+					$field['type'] == "name" ||
+					$field['type'] == "text" ||
+					$field['type'] == "email" ||
+					$field['type'] == "phone" ||
+					$field['type'] == "number" ||
+					$field['type'] == "textarea"
+				) {
+					$output[$form->post_title]['fields'][] = [
+						'id'    => (string) $field['label'],
+						'label' => (string) $field['label'],
+						'type'  => (string) $field['type'],
+					];
 				}
 			}
 		}
 	}
-	
+
 	return $output;
 }
 /*********************************
  * Callbacks
 **********************************/
-function duplicateKiller_wpforms_validate_input($input){
-	global $wpdb;
-	$output = array();
-	
-	// Create our array for storing the validated options
-       foreach($input as $key =>$value){
-		if(is_array($value)){
-			foreach($value as $arr => $asc){
-				//check if someone putting in ‘dog’ when the only valid values are numbers
-				if($asc !== "1"){
-					$value[$arr] = "1";
-					$output[$key] = $value;
-				}else{
-					$output[$key] = $value;
-				}
-			}
-		}
-	}
-	//validate cookies
-	if(!isset($input['wpforms_cookie_option']) || $input['wpforms_cookie_option'] !== "1"){
-		$output['wpforms_cookie_option'] = "0";
-	}else{
-		$output['wpforms_cookie_option'] = "1";
-	}
-	if(filter_var($input['wpforms_cookie_option_days'], FILTER_VALIDATE_INT) === false){
-		$output['wpforms_cookie_option_days'] = 365;
-	}else{
-		$output['wpforms_cookie_option_days'] = sanitize_text_field($input['wpforms_cookie_option_days']);
-	}
-	
-	//validate ip limit feature
-	if(!isset($input['wpforms_user_ip']) || $input['wpforms_user_ip'] !== "1"){
-		$output['wpforms_user_ip'] = "0";
-	}else{
-		$output['wpforms_user_ip'] = "1";
-	}
-	if(empty($input['wpforms_error_message_limit_ip'])){
-		$output['wpforms_error_message_limit_ip'] = "You already submitted this form!";
-	}else{
-		$output['wpforms_error_message_limit_ip'] = sanitize_text_field($input['wpforms_error_message_limit_ip']);
-	}
-	
-	
-    if(empty($input['wpforms_error_message'])){
-		$output['wpforms_error_message'] = "Please check all fields! These values has been submitted already!";
-	}else{
-		$output['wpforms_error_message'] = sanitize_text_field($input['wpforms_error_message']);
-	}
-     
-    // Return the array processing any additional functions filtered by this action
-    return apply_filters('duplicateKiller_wpforms_error_message', $output, $input);
+function duplicateKiller_wpforms_validate_input($input) {
+    return duplicateKiller_sanitize_forms_option($input, 'WPForms_page', 'WPForms_page', [], 'WPForms');
 }
 
 function duplicateKiller_WPForms_description() {
@@ -384,108 +280,13 @@ function duplicateKiller_WPForms_description() {
 
 function duplicateKiller_wpforms_settings_callback($args){
 	$options = get_option($args[0]);
-	$checked_cookie = isset($options['wpforms_cookie_option']) AND ($options['wpforms_cookie_option'] == "1")?: $checked_cookie='';
-	$stored_cookie_days = isset($options['wpforms_cookie_option_days'])? $options['wpforms_cookie_option_days']:"365";
-	$stored_error_message = isset($options['wpforms_error_message'])? $options['wpforms_error_message']:"Please check all fields! These values has been submitted already!"; 
-	
-	$checkbox_ip = isset($options['wpforms_user_ip']) AND ($options['wpforms_user_ip'] == "1")?: $checkbox_ip='';
-	$stored_error_message_limit_ip = isset($options['wpforms_error_message_limit_ip'])? $options['wpforms_error_message_limit_ip']:"You already submitted this form!";
-	
-	?>
-	<h4 class="dk-form-header">Duplicate Killer settings</h4>
-	<div class="dk-set-error-message">
-		<fieldset class="dk-fieldset">
-		<legend>
-			<strong>Set error message:</strong>
-			<small style="font-weight:normal; margin-left:8px;">
-				<a href="https://verselabwp.com/what-is-the-set-error-message-field-in-duplicate-killer/" target="_blank" rel="noopener">
-					What is this?
-				</a>
-			</small>
-		</legend>
-		<span>Warn the user that the value inserted has been already submitted!</span>
-		</br>
-		<input type="text" size="70" name="<?php echo esc_attr($args[0].'[wpforms_error_message]');?>" value="<?php echo esc_attr($stored_error_message);?>"></input>
-		</fieldset>
-	</div>
-	</br>
-	<div class="dk-set-unique-entries-per-user">
-		<fieldset class="dk-fieldset">
-		<legend>
-			<strong>Unique entries per user:</strong>
-			<small style="font-weight:normal; margin-left:8px;">
-				<a href="https://verselabwp.com/unique-entries-per-user-in-wordpress-how-to-use-it/" target="_blank" rel="noopener">
-					How to use it?
-				</a>
-			</small>
-		</legend>
-		<strong>This feature use cookies.</strong><span> Please note that multiple users <strong>can submit the same entry</strong>, but a single user cannot submit an entry they have already submitted before.</span>
-		</br>
-		</br>
-		<div class="dk-input-checkbox-callback">
-			<input type="checkbox" id="cookie" name="<?php echo esc_attr($args[0].'[wpforms_cookie_option]');?>" value="1" <?php echo esc_attr($checked_cookie ? 'checked' : '');?>></input>
-			<label for="cookie">Activate this function</label>
-		</div>
-		</br>
-		<div id="dk-unique-entries-cookie" style="display:none">
-		<span>Cookie persistence - Number of days </span><input type="text" name="<?php echo esc_attr($args[0].'[wpforms_cookie_option_days]');?>" size="5" value="<?php echo esc_attr($stored_cookie_days);?>"></input>
-		</br>
-		</div>
-		</fieldset>
-	</div>
-	<div class="dk-limit_submission_by_ip">
-		<fieldset class="dk-fieldset">
-		<legend>
-			<strong>Limit submissions by IP address</strong>
-			<small style="font-weight:normal; margin-left:8px;">
-				<a href="https://verselabwp.com/limit-submissions-by-ip-address-in-wordpress-free-pro/" target="_blank" rel="noopener">
-					How it works
-				</a>
-			</small>
-		</legend>
-		<strong>This feature </strong><span> restrict form entries based on IP address for 7 days</span>
-		</br>
-		</br>
-		<div class="dk-input-checkbox-callback">
-			<input type="checkbox" id="user_ip" name="<?php echo esc_attr($args[0].'[wpforms_user_ip]');?>" value="1" <?php echo esc_attr($checkbox_ip ? 'checked' : '');?>></input>
-			<label for="user_ip">Activate this function</label>
-		</div>
-		</br>
-		<div id="dk-limit-ip" style="display:none">
-		<span>Ser error message:</span><input type="text" size="70" name="<?php echo esc_attr($args[0].'[wpforms_error_message_limit_ip]');?>" value="<?php echo esc_attr($stored_error_message_limit_ip);?>"></input>
-		</br>
-		</div>
-		</fieldset>
-	</div>
-<?php
-}
-function duplicateKiller_wpforms_get_forms_ids() {
-	$wpforms_posts = get_posts([
-		'post_type' => 'wpforms',
-		'order'     => 'DESC',
-		'nopaging'  => true
-	]);
-
-	$forms = [];
-
-	foreach ($wpforms_posts as $post) {
-		if (!empty($post->post_title) && isset($post->ID)) {
-			$forms[$post->post_title] = $post->ID;
-		}
-	}
-
-	return $forms;
 }
 function duplicateKiller_wpforms_select_form_tag_callback($args){
-	$forms     = duplicateKiller_wpforms_get_forms();      // [ 'Form name' => [ 'field1', 'field2' ] ]
-
-	$forms_ids = duplicateKiller_wpforms_get_forms_ids(); // [ 'Form name' => 123 ]
-
-	duplicateKiller_render_forms_ui(
-		'WPForms',
-		'WPForms',
-		$args,
-		$forms,
-		$forms_ids
-	);
+    duplicateKiller_render_forms_overview([
+        'option_name'   => (string)$args[0],   // WPForms_page
+        'db_plugin_key' => 'WPForms',
+        'plugin_label'  => 'WPForms',
+        'forms'         => duplicateKiller_wpforms_get_forms(),
+        'forms_id_map'  => duplicateKiller_wpforms_get_forms_ids(),
+    ]);
 }

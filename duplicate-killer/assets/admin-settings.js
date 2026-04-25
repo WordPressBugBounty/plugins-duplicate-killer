@@ -11,24 +11,44 @@ function toggleSectionOnCheckbox(checkboxId, targetId) {
 
 	target.style.display = checkbox.checked ? 'block' : 'none';
 }
-function initProRulesToggles() {
-	document.querySelectorAll('.dk-pro-toggle').forEach((btn) => {
-		btn.addEventListener('click', () => {
-			const wrapper = btn.closest('.dk-pro-rules-wrapper');
-			if (!wrapper) return;
+// New function for dynamic toggle per form
+function initDuplicateKillerToggles() {
+	const switches = document.querySelectorAll('.ios-switch-input[data-target]');
 
-			const isOpen = wrapper.classList.toggle('is-open');
+	switches.forEach(toggle => {
+		const targetSelector = toggle.getAttribute('data-target');
+		const target = document.querySelector(targetSelector);
 
-			// a11y
-			btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+		if (!target) return;
+
+		if (toggle.checked) {
+			target.classList.add('is-active');
+		} else {
+			target.classList.remove('is-active');
+		}
+
+		toggle.addEventListener('change', () => {
+			target.classList.toggle('is-active', toggle.checked);
 		});
 	});
 }
-
 document.addEventListener('DOMContentLoaded', function () {
-	toggleSectionOnCheckbox('cookie', 'dk-unique-entries-cookie');
 	toggleSectionOnCheckbox('user_ip', 'dk-limit-ip');
 	toggleSectionOnCheckbox('save_image', 'dk-save-image-path');
-	
-	initProRulesToggles();
+		
+	initDuplicateKillerToggles();
+
 });
+function copyDKShortcode(inputId) {
+  var input = document.getElementById(inputId);
+  input.select();
+  input.setSelectionRange(0, 99999); // For mobile devices
+  document.execCommand("copy");
+
+  var toast = document.getElementById("dk-toast");
+  toast.style.display = "block";
+
+  setTimeout(function() {
+    toast.style.display = "none";
+  }, 2500);
+}

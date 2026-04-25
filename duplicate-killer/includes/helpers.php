@@ -4,6 +4,261 @@ defined( 'ABSPATH' ) or die( 'You shall not pass!' );
 define( 'DK_NINJA_FORMS', 'NinjaForms' );
 define( 'DK_NINJA_FORMS_LABEL', 'Ninja Forms' );
 
+function duplicateKiller_shortcode_duplicatekiller_count($atts) {
+    $atts = shortcode_atts([
+        'plugin' => '',
+        'form'   => '',
+        'prefix' => '',
+        'suffix'  => '',
+		'amount'  => 0,
+    ], $atts, 'duplicatekiller');
+
+    $plugin = sanitize_text_field($atts['plugin']);
+    $form   = sanitize_text_field($atts['form']);
+    $prefix = sanitize_text_field($atts['prefix']);
+    $suffix  = sanitize_text_field($atts['suffix']);
+	$amount  = intval($atts['amount']);
+
+    if (empty($plugin) || empty($form)) {
+        return '<span style="color:red;">Invalid shortcode attributes.</span>';
+    }
+
+    global $wpdb;
+    $table = $wpdb->prefix . 'dk_forms_duplicate';
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Querying Formidable custom table (admin-only, no WP API).
+	if ( $wpdb->get_var(
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Querying Formidable custom table (admin-only, no WP API).
+		$wpdb->prepare(
+			"SHOW TABLES LIKE %s",
+			$table
+		)
+	) !== $table ) {
+		return '<span style="color:orange;">No data available.</span>';
+	}
+
+    // Generate a unique transient key based on plugin & form
+    $transient_key = 'dk_count_' . md5($plugin . '|' . $form);
+
+    // Try to get cached count
+    $count = get_transient($transient_key);
+
+	if ( $count === false ) {
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Querying Formidable custom table (admin-only, no WP API).
+		$count = $wpdb->get_var(
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Querying Formidable custom table (admin-only, no WP API).
+			$wpdb->prepare(
+				"SELECT COUNT(*) FROM " . esc_sql( $table ) . " WHERE form_plugin = %s AND form_name = %s",
+				$plugin,
+				$form
+			)
+		);
+
+		// Cache the result for 30 seconds
+		set_transient( $transient_key, $count, 30 );
+	}
+
+    return '<span class="dk-submission-count">' . esc_html($prefix . ' ' . intval($count) + intval($amount) . ' ' . $suffix) . '</span>';
+}
+add_shortcode('duplicateKiller', 'duplicateKiller_shortcode_duplicatekiller_count');
+function duplicateKiller_convert_option_architecture( $data, $prefix ) {
+
+	$prefix = is_string( $prefix ) ? trim( $prefix ) : '';
+
+	if ( '' === $prefix ) {
+		return array();
+	}
+
+	// Accept serialized input.
+	if ( is_string( $data ) ) {
+		$data = maybe_unserialize( $data );
+	}
+
+	if ( ! is_array( $data ) ) {
+		return array();
+	}
+
+	$result       = array();
+	$global_map   = array();
+	$form_entries = array();
+
+	// Map FREE global keys to PRO keys.
+	$global_key_map = array(
+		$prefix . 'cookie_option'          => 'cookie_option',
+		$prefix . 'error_message_limit_ip' => 'error_message_limit_ip_option',
+		$prefix . 'error_message'          => 'error_message',
+		$prefix . 'user_ip'                => 'user_ip',
+		$prefix . 'user_ip_days'           => 'user_ip_days',
+		$prefix . 'cookie_option_days'     => 'cookie_option_days',
+	);
+
+	// Separate globals vs forms.
+	foreach ( $data as $key => $value ) {
+
+		if ( ! is_string( $key ) ) {
+			continue;
+		}
+
+		// Special case: CF7 save_image stays top-level only.
+		if ( 'cf7_' === $prefix && 'cf7_save_image' === $key ) {
+			$result[ $key ] = (string) $value;
+			continue;
+		}
+
+		// Global setting.
+		if ( array_key_exists( $key, $global_key_map ) ) {
+			$mapped = $global_key_map[ $key ];
+			$global_map[ $mapped ] = (string) $value;
+			continue;
+		}
+
+		// Form candidate.
+		if ( is_array( $value ) ) {
+			$form_entries[ $key ] = $value;
+		}
+	}
+
+	// Ensure CF7 save_image exists and is normalized.
+	if ( 'cf7_' === $prefix ) {
+		if ( ! array_key_exists( 'cf7_save_image', $result ) ) {
+			$result['cf7_save_image'] = '1';
+		} else {
+			$result['cf7_save_image'] = ( '0' === (string) $result['cf7_save_image'] ) ? '0' : '1';
+		}
+	}
+
+	// Safe defaults for PRO architecture.
+	$defaults = array(
+		'form_id'                       => '',
+		'error_message'                 => '',
+		'error_message_limit_ip_option' => '',
+		'user_ip_days'                  => '7',
+		'cookie_option_days'            => '1',
+		'cookie_option'                 => '0',
+		'user_ip'                       => '0',
+		'cross_form_option'             => '0',
+	);
+
+	$base_form = array_merge( $defaults, $global_map );
+
+	$form_ids_map = array();
+
+	if ( 'cf7_' === $prefix && function_exists( 'duplicateKiller_get_cf7_forms_info' ) ) {
+		$form_ids_map = duplicateKiller_get_cf7_forms_info();
+	} elseif ( 'forminator_' === $prefix && function_exists( 'duplicateKiller_forminator_get_forms_ids' ) ) {
+		$form_ids_map = duplicateKiller_forminator_get_forms_ids();
+	} elseif ( 'wpforms_' === $prefix && function_exists( 'duplicateKiller_wpforms_get_forms_ids' ) ) {
+		$form_ids_map = duplicateKiller_wpforms_get_forms_ids();
+	} elseif ( 'breakdance_' === $prefix && function_exists( 'duplicateKiller_breakdance_get_forms' ) ) {
+		$form_ids_map = duplicateKiller_breakdance_get_forms();
+	} elseif ( 'elementor_' === $prefix && function_exists( 'duplicateKiller_elementor_get_form_map' ) ) {
+		$form_ids_map = duplicateKiller_elementor_get_form_map();
+	} elseif ( 'formidable_' === $prefix && function_exists( 'duplicateKiller_formidable_get_forms' ) ) {
+		$form_ids_map = duplicateKiller_formidable_get_forms();
+	} elseif ( 'ninjaforms_' === $prefix && function_exists( 'duplicateKiller_ninjaforms_get_forms' ) ) {
+		$form_ids_map = duplicateKiller_ninjaforms_get_forms();
+	}
+
+	foreach ( $form_entries as $form_name => $form_config ) {
+
+		if ( ! is_string( $form_name ) || ! is_array( $form_config ) ) {
+			continue;
+		}
+
+		// Detect existing PRO structure.
+		$is_pro = (
+			isset( $form_config['error_message'] ) ||
+			isset( $form_config['cookie_option'] ) ||
+			isset( $form_config['user_ip'] ) ||
+			isset( $form_config['cross_form_option'] )
+		);
+
+		$normalized = $is_pro ? $form_config : $base_form;
+
+		foreach ( $form_config as $k => $v ) {
+
+			// Preserve numeric field IDs (Formidable / Ninja Forms).
+			if ( is_int( $k ) || ctype_digit( (string) $k ) ) {
+				if ( is_scalar( $v ) ) {
+					$normalized[ $k ] = (string) $v;
+				}
+				continue;
+			}
+
+			if ( ! is_string( $k ) ) {
+				continue;
+			}
+
+			// Preserve labels map for Formidable / Ninja Forms.
+			if ( 'labels' === $k && is_array( $v ) ) {
+				$normalized[ $k ] = $v;
+				continue;
+			}
+
+			// Keep PRO mapping keys untouched.
+			if ( '_ck' === substr( $k, -3 ) ) {
+				$normalized[ $k ] = $v;
+				continue;
+			}
+
+			// Normalize scalar values safely.
+			if ( is_scalar( $v ) ) {
+				$normalized[ $k ] = (string) $v;
+			}
+		}
+
+		$form_id_candidate = '';
+
+		if ( empty( $normalized['form_id'] ) ) {
+
+			if ( isset( $form_ids_map[ $form_name ] ) ) {
+				if ( is_array( $form_ids_map[ $form_name ] ) && ! empty( $form_ids_map[ $form_name ]['form_id'] ) ) {
+					$form_id_candidate = $form_ids_map[ $form_name ]['form_id'];
+				} elseif ( ! is_array( $form_ids_map[ $form_name ] ) ) {
+					$form_id_candidate = $form_ids_map[ $form_name ];
+				}
+			} elseif ( 'breakdance_' === $prefix ) {
+				foreach ( $form_ids_map as $bundle ) {
+					if (
+						is_array( $bundle ) &&
+						isset( $bundle['form_name'], $bundle['form_id'] ) &&
+						(string) $bundle['form_name'] === $form_name &&
+						! empty( $bundle['form_id'] )
+					) {
+						$form_id_candidate = $bundle['form_id'];
+						break;
+					}
+				}
+			} elseif ( 'elementor_' === $prefix ) {
+				$last_dot_pos = strrpos( $form_name, '.' );
+
+				if ( false !== $last_dot_pos ) {
+					$elementor_base_name = substr( $form_name, 0, $last_dot_pos );
+
+					if (
+						'' !== $elementor_base_name &&
+						isset( $form_ids_map[ $elementor_base_name ] ) &&
+						! empty( $form_ids_map[ $elementor_base_name ] )
+					) {
+						$form_id_candidate = $form_ids_map[ $elementor_base_name ];
+					}
+				}
+			}
+
+			if ( '' !== $form_id_candidate ) {
+				if ( in_array( $prefix, array( 'elementor_', 'formidable_', 'ninjaforms_' ), true ) ) {
+					$normalized['form_id'] = (string) $form_id_candidate;
+				} else {
+					$normalized['form_id'] = (string) absint( $form_id_candidate );
+				}
+			}
+		}
+
+		$result[ $form_name ] = $normalized;
+	}
+
+	return $result;
+}
+
 /**
  * Return duplicate-related config state for a form.
  *
@@ -774,51 +1029,195 @@ function duplicateKiller_render_forms_ui( $plugin_key, $plugin_label, $args, $fo
 	<?php
 }
 
-/**
- * Resolve cookie for a form (FREE global + PRO per-form).
- *
- * @param array  $options   get_option(...) array
- * @param string $form_name internal form key (ex: contactme.1)
- *
- * @return array {
- *   form_cookie    string  Cookie value or 'NULL'
- *   checked_cookie bool    True only if cookie exists AND is enabled for this form
- * }
- */
-function duplicateKiller_get_form_cookie_simple( array $options, string $form_name ): array {
+function duplicateKiller_get_form_cookie_simple(
+	array $options,
+	string $form_name,
+	string $cookie_prefix
+): array {
 
 	$form_cookie    = 'NULL';
 	$checked_cookie = false;
 
-	// -------------------------
-	// 1) PRO: per-form cookie
-	// -------------------------
-	if (
-		isset( $options[ $form_name ]['cookie_option_days'] )
-		&& is_numeric( $options[ $form_name ]['cookie_option_days'] )
-		&& (int) $options[ $form_name ]['cookie_option_days'] > 0
-	) {
-		if ( ! empty( $_COOKIE['dk_form_cookie'] ) ) {
-			$form_cookie    = sanitize_text_field( wp_unslash( $_COOKIE['dk_form_cookie'] ) );
-			$checked_cookie = true;
-		}
+	// Form must exist in options
+	if ( ! isset( $options[ $form_name ] ) || ! is_array( $options[ $form_name ] ) ) {
 		return compact( 'form_cookie', 'checked_cookie' );
 	}
 
-	// -------------------------
-	// 2) FREE: global cookie
-	// -------------------------
-	if (
-		isset( $options['ninjaforms_cookie_option'] )
-		&& (string) $options['ninjaforms_cookie_option'] === '1'
-	) {
-		if ( ! empty( $_COOKIE['dk_form_cookie'] ) ) {
-			$form_cookie    = sanitize_text_field( wp_unslash( $_COOKIE['dk_form_cookie'] ) );
-			$checked_cookie = true;
+	$form = $options[ $form_name ];
+
+	// PRO only: cookie must be explicitly enabled for this form
+	if ( empty( $form['cookie_option'] ) || (int) $form['cookie_option'] !== 1 ) {
+		return compact( 'form_cookie', 'checked_cookie' );
+	}
+
+	// =========================
+	// GROUP MODE support: FormName.__group__
+	// Cookie is named using "group_<safe_form_name>" suffix (set by JS)
+	// Example: dk_form_cookie_elementor_forms_group_mainquote_form
+	// =========================
+	if ( str_ends_with( $form_name, '.__group__' ) ) {
+
+		$raw_name = (string) $form_name;
+		$raw_name = preg_replace( '/\.__group__$/', '', $raw_name );
+		$raw_name = trim( $raw_name );
+
+		// Normalize form name into cookie-safe suffix (must match JS safeId())
+		$group_key = strtolower( $raw_name );
+		$group_key = preg_replace( '/\s+/', ' ', $group_key );
+		$group_key = preg_replace( '/[^a-z0-9_-]+/', '_', $group_key );
+		$group_key = trim( $group_key, '_' );
+
+		if ( $group_key !== '' ) {
+
+			$group_cookie_name = $cookie_prefix . 'group_' . $group_key;
+
+			if ( isset( $_COOKIE[ $group_cookie_name ] ) && $_COOKIE[ $group_cookie_name ] !== '' ) {
+				$form_cookie    = sanitize_text_field( wp_unslash( $_COOKIE[ $group_cookie_name ] ) );
+				$checked_cookie = true;
+
+				return compact( 'form_cookie', 'checked_cookie' );
+			}
+		}
+	}
+	// Form must have a form_id (can be numeric OR string/hash, e.g. Elementor)
+	if ( empty( $form['form_id'] ) ) {
+		return compact( 'form_cookie', 'checked_cookie' );
+	}
+
+	// Normalize form_id into a cookie-safe suffix
+	$form_id = strtolower( (string) $form['form_id'] );
+	$form_id = preg_replace( '/[^a-z0-9_-]+/', '_', $form_id );
+	$form_id = trim( $form_id, '_' );
+
+	if ( $form_id === '' ) {
+		return compact( 'form_cookie', 'checked_cookie' );
+	}
+
+	// Build cookie name using provided prefix (unchanged behavior)
+	$cookie_name = $cookie_prefix . $form_id;
+
+	// Check only this form's cookie
+	if ( isset( $_COOKIE[ $cookie_name ] ) && $_COOKIE[ $cookie_name ] !== '' ) {
+		$form_cookie    = sanitize_text_field( wp_unslash( $_COOKIE[ $cookie_name ] ) );
+		$checked_cookie = true;
+	}
+	
+	//trigger only for Formidable
+	if ( ! $checked_cookie ) {
+
+		// Fallback for IDs like "contact-us.2" when JS sets numeric cookie suffix "2"
+		$raw_id = (string) $form['form_id'];
+		if ( preg_match( '/\.(\d+)$/', $raw_id, $m ) ) {
+			$fallback_name = $cookie_prefix . (string) absint( $m[1] );
+
+			if ( isset( $_COOKIE[ $fallback_name ] ) && $_COOKIE[ $fallback_name ] !== '' ) {
+				$form_cookie    = sanitize_text_field( wp_unslash( $_COOKIE[ $fallback_name ] ) );
+				$checked_cookie = true;
+			}
 		}
 	}
 
 	return compact( 'form_cookie', 'checked_cookie' );
+}
+function duplicateKiller_check_duplicate_by_key_value($form_plugin, $form_name, $key, $value, $form_cookie = 'NULL', $checked_cookie = false) {
+	global $wpdb;
+
+	$table_name = $wpdb->prefix . 'dk_forms_duplicate';
+
+	// Cache query results per request for the same plugin + form.
+	// This avoids running the exact same SELECT multiple times
+	// when several fields are checked during one submission.
+	static $dk_results_cache = array();
+
+	$cache_key = $form_plugin . '|' . $form_name;
+
+	if ( ! isset( $dk_results_cache[ $cache_key ] ) ) {
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Required duplicate check query on plugin-owned table.
+		$results = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT form_value, form_cookie
+				 FROM " . esc_sql( $table_name ) . "
+				 WHERE form_plugin = %s
+				 AND form_name = %s
+				 ORDER BY form_id DESC",
+				$form_plugin,
+				$form_name
+			)
+		);
+
+		$dk_results_cache[ $cache_key ] = is_array( $results ) ? $results : array();
+	}
+
+	$results = $dk_results_cache[ $cache_key ];
+
+	foreach ( $results as $row ) {
+		$form_data = maybe_unserialize( $row->form_value );
+
+		// Associative array payloads: field_id => value
+		if ( is_array( $form_data ) && isset( $form_data[ $key ] ) ) {
+			if ( duplicateKiller_check_values_with_lowercase_filter( $form_data[ $key ], $value ) ) {
+
+				// When cookie protection is enabled, duplicate detection becomes user-specific.
+				// Multiple users can submit the same value, but the same user (same cookie)
+				// cannot submit the same value more than once.
+				if ( $checked_cookie == true ) {
+
+					// If the cookie matches, it means the same user already submitted this value.
+					if ( $row->form_cookie == $form_cookie ) {
+						return true;
+					} else {
+						// Same value exists but belongs to another user (different cookie),
+						// therefore it is allowed for the current user.
+						return false;
+					}
+				}
+
+				return true;
+			}
+
+		// Named value list payloads: array( array( 'name' => ..., 'value' => ... ) )
+		} elseif ( is_array( $form_data ) && isset( $form_data[0]['name'] ) ) {
+			foreach ( $form_data as $input ) {
+				if ( isset( $input['name'] ) && $input['name'] === $key ) {
+					if ( duplicateKiller_check_values_with_lowercase_filter( $input['value'], $value ) ) {
+
+						// When cookie protection is enabled, duplicate detection becomes user-specific.
+						// Multiple users can submit the same value, but the same user (same cookie)
+						// cannot submit the same value more than once.
+						if ( $checked_cookie == true ) {
+
+							// If the cookie matches, it means the same user already submitted this value.
+							if ( $row->form_cookie == $form_cookie ) {
+								return true;
+							} else {
+								// Same value exists but belongs to another user (different cookie),
+								// therefore it is allowed for the current user.
+								return false;
+							}
+						}
+
+						return true;
+					}
+				}
+			}
+		}
+	}
+
+	return false;
+}
+function duplicateKiller_check_values_with_lowercase_filter($var1, $var2){
+	if(is_array($var1) AND is_array($var2)){
+		$var1 = array_map('strtolower', $var1);
+		$var2 = array_map('strtolower', $var2);
+		if($var1 == $var2){
+			return true;
+		}
+	}elseif(!is_array($var1) AND !is_array($var2)){
+		if(strtolower($var1) == strtolower($var2)){
+			return true;
+		}
+	}
+	return false;
 }
 /**
  * Return the DK cookie value only if the Formidable cookie feature is enabled.
@@ -840,43 +1239,34 @@ function duplicateKiller_get_formidable_cookie_if_enabled( array $formidable_pag
 		wp_unslash( $_COOKIE['dk_form_cookie'] )
 	);
 }
-function duplicateKiller_ip_limit_trigger($plugin, $plugin_options, $form_name) {
-
-    // Normalize plugin key (avoid casing bugs)
-    $plugin = strtolower((string) $plugin);
-
-    // Map plugin => global option key that enables IP limit
-    $ip_option_key = array(
-        'breakdance'  => 'breakdance_user_ip',
-        'elementor'   => 'elementor_user_ip',
-        'formidable'  => 'formidable_user_ip',
-		'ninjaforms'  => 'ninjaforms_user_ip',
-    );
-
-    if (empty($ip_option_key[$plugin])) {
-        return false;
-    }
-
-    $flag_key = $ip_option_key[$plugin];
-
-    if (isset($plugin_options[$flag_key]) && (string) $plugin_options[$flag_key] === '1') {
-        $form_ip = duplicateKiller_get_user_ip();
-        if (duplicateKiller_check_ip_feature($plugin, $form_name, $form_ip)) {
-            return true;
-        }
-    }
-
-    return false;
+function duplicateKiller_ip_limit_trigger($plugin, $plugin_options, $form_name){
+	//get option values -- ex: CF7_page[Form_Name][Option_saved]
+	if (isset($plugin_options[$form_name]['user_ip']) && $plugin_options[$form_name]['user_ip'] == "1") {
+		$form_ip = duplicateKiller_get_user_ip();
+		$user_ip_days = (int)$plugin_options[$form_name]['user_ip_days'];
+		if(duplicateKiller_check_ip_feature($plugin,$form_name,$form_ip,$user_ip_days)){
+			//ip is already in db
+			return true;
+			
+		}
+	}
+	return false;
 }
-function duplicateKiller_check_ip_feature($form_plugin,$form_name,$form_ip){
+function duplicateKiller_check_ip_feature($form_plugin,$form_name,$form_ip,$user_ip_days = 7){
 	$flag = false;
 	global $wpdb;
-	$table_name = esc_sql( $wpdb->prefix . 'dk_forms_duplicate' );
+	$table_name = $wpdb->prefix . 'dk_forms_duplicate';
 	
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Reading from plugin-owned custom table (admin-only, request-scoped).
-	$result = $wpdb->get_row( $wpdb->prepare(	
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is fixed and plugin-controlled.
-			"SELECT form_ip, form_date FROM {$table_name} WHERE form_plugin = %s AND form_name = %s AND form_ip = %s ORDER BY form_id DESC",
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Querying Formidable custom table (admin-only, no WP API).
+	$result = $wpdb->get_row(
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Querying Formidable custom table (admin-only, no WP API).
+		$wpdb->prepare(
+			"SELECT form_ip, form_date
+			 FROM " . esc_sql( $table_name ) . "
+			 WHERE form_plugin = %s
+			 AND form_name = %s
+			 AND form_ip = %s
+			 ORDER BY form_id DESC",
 			$form_plugin,
 			$form_name,
 			$form_ip
@@ -887,11 +1277,11 @@ function duplicateKiller_check_ip_feature($form_plugin,$form_name,$form_ip){
     if($result){
 		$created_at = new DateTime($result->form_date, new DateTimeZone('UTC'));
 
-        // Current date minus 7 days
-        $seven_days_ago = new DateTime('-7 days', new DateTimeZone('UTC'));
+        // Current date minus 7 days (default)
+        $threshold  = new DateTime("-{$user_ip_days} days", new DateTimeZone('UTC'));
 
-        if ($created_at > $seven_days_ago) {
-			//The row is newer than 7 days.
+        if ($created_at > $threshold ) {
+			//The row is newer than 7 days.(default)
             $flag = true;
         }
 		
@@ -1018,4 +1408,41 @@ function duplicateKiller_isCloudflare(){
     $ipCheck = duplicateKiller_cloudflare_CheckIP($remote_ip);
     $requestCheck = duplicateKiller_cloudflare_Requests_Check();
     return ($ipCheck && $requestCheck);
+}
+
+function duplicateKiller_sanitize_id($string) {
+	return preg_replace('/[^a-zA-Z0-9_-]/', '_', $string);
+}
+function duplicateKiller_get_form_defaults(): array {
+    return [
+        'error_message' => 'Please check all fields! These values have been submitted already!',
+        'error_message_limit_ip_option' => 'This IP has been already submitted.',
+        'user_ip_days' => '7',
+        'cookie_option_days' => '7',
+    ];
+}
+function duplicateKiller_delete_saved_entries(string $plugin_key, string $form_name): void {
+	global $wpdb;
+
+	$table = $wpdb->prefix . 'dk_forms_duplicate';
+
+	$plugin_keys = array($plugin_key);
+
+	if ($plugin_key === 'NinjaForms' || $plugin_key === 'Ninja Forms') {
+		$plugin_keys = array('NinjaForms', 'Ninja Forms');
+	}
+
+	$placeholders = implode(',', array_fill(0, count($plugin_keys), '%s'));
+
+	$params = array_merge($plugin_keys, array($form_name));
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- Required for deleting entries from the plugin custom table.
+	$wpdb->query(
+		$wpdb->prepare(
+			"DELETE FROM " . esc_sql($table) . "
+			 WHERE form_plugin IN ($placeholders)
+			 AND form_name = %s",
+			$params
+		)
+	);
 }

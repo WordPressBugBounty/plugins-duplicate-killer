@@ -403,7 +403,7 @@ class duplicateKiller_DatabaseMainListTable extends WP_List_Table{
 			} elseif ( 'Formidable' === $data_value['form_plugin'] ) {
 				$store = $this->organize_array_formidable( $form_value, $data_value['form_name'], $formidable_page );
 
-			} elseif ( 'NinjaForms' === $data_value['form_plugin'] ) {
+			} elseif ( 'NinjaForms' === $data_value['form_plugin'] ||  'Ninja Forms' === $data_value['form_plugin'] ) {
 				$store = $this->organize_array_ninjaforms( $form_value, $data_value['form_name'], $ninjaforms_page );
 
 			} elseif ( 'elementor' === $data_value['form_plugin'] ) {
