@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: Duplicate Killer
- * Version: 1.5.9
+ * Version: 1.6.0
  * Description: Block duplicate form submissions by validating unique email, phone and text fields — without CAPTCHA.
  * Author: NIA
  * Author URI: https://profiles.wordpress.org/wpnia/
@@ -13,7 +13,7 @@
 	defined('ABSPATH') or die('You shall not pass!');
 	
 	define('DUPLICATEKILLER_PLUGIN',__FILE__);
-	define('DUPLICATEKILLER_VERSION','1.5.9');
+	define('DUPLICATEKILLER_VERSION','1.6.0');
 	define('DUPLICATEKILLER_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 	define('DUPLICATEKILLER_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 	
@@ -41,6 +41,10 @@
 	//debug/diagnostics
 	require_once DUPLICATEKILLER_PLUGIN_DIR . '/includes/class-duplicateKiller-diagnostics.php';
 	duplicateKiller_Diagnostics::init();
+	
+	//uninstall/feedback
+	require_once DUPLICATEKILLER_PLUGIN_DIR . '/uninstall/class-duplicatekiller-deactivation-feedback.php';
+	duplicateKiller_Deactivation_Feedback::init();
 	
 	//location helpers.php
 	add_action('admin_init', 'duplicateKiller_handle_delete_records_request');
@@ -179,35 +183,14 @@ function duplicateKiller_upgrade_function( $upgrader_object, $options ) {
 }
 add_action( 'upgrader_process_complete', 'duplicateKiller_upgrade_function',10, 2);
 
+
 /**
  * Delete custom tables
  */
-function duplicateKiller_drop_table_uninstall() {
-	global $wpdb;
-
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Plugin uninstall: dropping plugin-owned table.
-	$wpdb->query( "DROP TABLE IF EXISTS `{$wpdb->prefix}dk_forms_duplicate`" );
-
-	// Plugin settings/options
-	delete_option( 'CF7_page' );
-	delete_option( 'Forminator_page' );
-	delete_option( 'WPForms_page' );
-	delete_option( 'Breakdance_page' );
-	delete_option( 'Elementor_page' );
-	delete_option( 'Formidable_page' );
-	delete_option( 'NinjaForms_page' );
-	delete_option( 'DuplicateKillerSettings' );
-
-	// New: review milestones + blocked duplicates counter
-	delete_option( 'duplicateKiller_duplicates_blocked_count' );
-	delete_option( 'duplicateKiller_review_milestones_dismissed' );
-	
-	delete_option( 'duplicateKillerWooCommerceSettings' );
-	
-	delete_option( 'duplicateKiller_diagnostics_settings' );
-	delete_option( 'duplicateKiller_diagnostics_logs' );
-}
-register_uninstall_hook(__FILE__, 'duplicateKiller_drop_table_uninstall');
+register_uninstall_hook(
+	DUPLICATEKILLER_PLUGIN,
+	array('duplicateKiller_Deactivation_Feedback', 'uninstall')
+);
 
 
 /**

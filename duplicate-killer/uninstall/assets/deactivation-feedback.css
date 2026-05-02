@@ -1,0 +1,135 @@
+.duplicatekiller-feedback-modal {
+	position: fixed;
+	z-index: 100000;
+	inset: 0;
+}
+
+.duplicatekiller-feedback-backdrop {
+	position: absolute;
+	inset: 0;
+	background: rgba(0, 0, 0, 0.48);
+}
+
+.duplicatekiller-feedback-box {
+	position: relative;
+	background: #fff;
+	width: 560px;
+	max-width: calc(100% - 32px);
+	margin: 7vh auto 0;
+	padding: 26px;
+	border-radius: 8px;
+	box-shadow: 0 18px 45px rgba(0, 0, 0, 0.28);
+	border: 1px solid #dcdcde;
+}
+
+.duplicatekiller-feedback-box h2 {
+	margin: 0 0 8px;
+	font-size: 21px;
+	line-height: 1.3;
+	color: #1d2327;
+}
+
+.duplicatekiller-feedback-subtitle {
+	margin: 0 0 18px;
+	color: #646970;
+	font-size: 14px;
+	line-height: 1.5;
+}
+
+.duplicatekiller-feedback-close {
+	position: absolute;
+	top: 12px;
+	right: 14px;
+	border: 0;
+	background: transparent;
+	font-size: 26px;
+	line-height: 1;
+	cursor: pointer;
+	color: #646970;
+}
+
+.duplicatekiller-feedback-close:hover {
+	color: #1d2327;
+}
+
+.duplicatekiller-feedback-options {
+	display: grid;
+	gap: 8px;
+	margin-top: 12px;
+}
+
+.duplicatekiller-feedback-option {
+	display: flex;
+	gap: 10px;
+	align-items: flex-start;
+	padding: 12px;
+	border: 1px solid #dcdcde;
+	border-radius: 6px;
+	background: #fff;
+	cursor: pointer;
+	transition: border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
+}
+
+.duplicatekiller-feedback-option:hover {
+	border-color: #8c8f94;
+	background: #f6f7f7;
+}
+
+.duplicatekiller-feedback-option.is-selected {
+	border-color: #2271b1;
+	background: #f0f6fc;
+	box-shadow: 0 0 0 1px #2271b1;
+}
+
+.duplicatekiller-feedback-radio {
+	padding-top: 2px;
+}
+
+.duplicatekiller-feedback-option-content {
+	display: block;
+	width: 100%;
+}
+
+.duplicatekiller-feedback-option-title {
+	display: block;
+	font-weight: 500;
+	color: #1d2327;
+	line-height: 1.4;
+}
+
+.duplicatekiller-feedback-followup {
+	display: none;
+	width: 100%;
+	margin-top: 10px;
+	min-height: 36px;
+	border-radius: 4px;
+}
+
+#duplicatekiller-feedback-details {
+	width: 100%;
+	margin-top: 14px;
+	resize: vertical;
+	border-radius: 4px;
+}
+
+.duplicatekiller-feedback-privacy {
+	font-size: 12px;
+	color: #646970;
+	margin: 12px 0 0;
+	line-height: 1.45;
+}
+
+.duplicatekiller-feedback-actions {
+	display: flex;
+	gap: 8px;
+	justify-content: flex-end;
+	align-items: center;
+	margin-top: 20px;
+	padding-top: 16px;
+	border-top: 1px solid #dcdcde;
+}
+
+.duplicatekiller-feedback-actions .button[disabled] {
+	cursor: not-allowed;
+	opacity: 0.65;
+}
