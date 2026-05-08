@@ -1446,3 +1446,65 @@ function duplicateKiller_delete_saved_entries(string $plugin_key, string $form_n
 		)
 	);
 }
+function duplicateKiller_get_field_icon_svg( string $type, string $label = '', string $fid = '' ): string {
+	$type_key  = strtolower( trim( $type ) );
+	$field_key = strtolower( $label . ' ' . $fid );
+
+	$icons = [
+		'email' => '<svg class="dk-field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true" focusable="false"><path d="M4 6h16v12H4z" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 7l8 6 8-6" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+
+		'text' => '<svg class="dk-field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+			<path d="M6.5 7.5c0-.8.6-1.5 1.5-1.5h8c.8 0 1.5.6 1.5 1.5" stroke-width="1.5" stroke-linecap="round"/>
+			<path d="M12 6v12" stroke-width="1.6" stroke-linecap="round"/>
+			<path d="M9.5 18h5" stroke-width="1.6" stroke-linecap="round"/>
+		</svg>',
+
+		'phone' => '<svg class="dk-field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true" focusable="false"><path d="M7 4l2.2 4.5-1.4 1.4c1.1 2.2 2.9 4 5.1 5.1l1.4-1.4L19 16v3c0 1.1-.9 2-2 2C9.3 21 3 14.7 3 7c0-1.1.9-2 2-2h2z" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+
+		'number' => '<svg class="dk-field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true" focusable="false"><path d="M5 9h14" stroke-width="1.6" stroke-linecap="round"/><path d="M5 15h14" stroke-width="1.6" stroke-linecap="round"/><path d="M10 4L8 20" stroke-width="1.6" stroke-linecap="round"/><path d="M16 4l-2 16" stroke-width="1.6" stroke-linecap="round"/></svg>',
+
+		'textarea' => '<svg class="dk-field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true" focusable="false"><rect x="4" y="5" width="16" height="14" rx="2" stroke-width="1.6"/><path d="M8 9h8M8 12h8M8 15h5" stroke-width="1.6" stroke-linecap="round"/></svg>',
+
+		'url' => '<svg class="dk-field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true" focusable="false"><path d="M10 13a5 5 0 0 0 7.1 0l1.4-1.4a5 5 0 0 0-7.1-7.1L10.5 5.4" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 11a5 5 0 0 0-7.1 0l-1.4 1.4a5 5 0 0 0 7.1 7.1l.9-.9" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+
+		'date' => '<svg class="dk-field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true" focusable="false"><rect x="4" y="5" width="16" height="15" rx="2" stroke-width="1.6"/><path d="M8 3v4M16 3v4M4 10h16" stroke-width="1.6" stroke-linecap="round"/></svg>',
+
+		'choice' => '<svg class="dk-field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true" focusable="false"><path d="M8 7h12M8 12h12M8 17h12" stroke-width="1.6" stroke-linecap="round"/><circle cx="4.5" cy="7" r="1" fill="currentColor"/><circle cx="4.5" cy="12" r="1" fill="currentColor"/><circle cx="4.5" cy="17" r="1" fill="currentColor"/></svg>',
+
+		'default' => '<svg class="dk-field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="8" stroke-width="1.6"/><path d="M9 12h6" stroke-width="1.6" stroke-linecap="round"/></svg>',
+	];
+
+	if ( $type_key === 'email' ) {
+		return $icons['email'];
+	}
+
+	if ( $type_key === 'tel' || str_contains( $field_key, 'phone' ) || str_contains( $field_key, 'tel' ) ) {
+		return $icons['phone'];
+	}
+
+	if ( $type_key === 'text' ) {
+		return $icons['text'];
+	}
+
+	if ( $type_key === 'textarea' ) {
+		return $icons['textarea'];
+	}
+
+	if ( $type_key === 'number' ) {
+		return $icons['number'];
+	}
+
+	if ( $type_key === 'url' ) {
+		return $icons['url'];
+	}
+
+	if ( $type_key === 'date' ) {
+		return $icons['date'];
+	}
+
+	if ( in_array( $type_key, [ 'select', 'radio', 'checkbox' ], true ) ) {
+		return $icons['choice'];
+	}
+
+	return $icons['default'];
+}

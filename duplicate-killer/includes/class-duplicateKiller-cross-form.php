@@ -14,45 +14,42 @@ class DuplicateKiller_CrossForm {
     public static function render_per_form($optionName, $formKey, $formOpts)
     {
         $formSafe = duplicateKiller_sanitize_id($formKey);
+        $enabled  = !empty($formOpts['cross_form_option']) && (string) $formOpts['cross_form_option'] === '1';
         ?>
-        <div class="dk-cross-form-option">
-            <fieldset class="dk-fieldset">
-                <legend class="dk-legend-title">
-					<?php esc_html_e('Cross-Form Duplicate Protection', 'duplicate-killer'); ?>
-					<small style="font-weight:normal; margin-left:8px;">
-						<a href="https://verselabwp.com/cross-form-duplicate-protection-in-wordpress-forms/" target="_blank" rel="noopener">
-							<?php esc_html_e('How it works', 'duplicate-killer'); ?>
-						</a>
-					</small>
-				</legend>
+        <div class="dk-feature-row">
+			<div class="dk-feature-info">
+				<h4><?php esc_html_e('3. Cross-form protection - Pro feature', 'duplicate-killer'); ?></h4>
 
-                <p>
-                    <?php esc_html_e(
-                        'Allow this form to participate in cross-form duplicate detection.',
-                        'duplicate-killer'
-                    ); ?>
-                </p>
+				<p>
+					<?php esc_html_e(
+						'Check for duplicates across all forms where cross-form protection is enabled.',
+						'duplicate-killer'
+					); ?>
 
-                <div class="dk-input-switch-ios">
-                    <input
-                        type="checkbox"
-                        class="ios-switch-input"
-                        id="<?php echo esc_attr('cross_form_' . $formSafe); ?>"
-                        name=""
-                        value="1"
-                    />
+					<a class="dk-feature-inline-link"
+					   href="https://verselabwp.com/cross-form-duplicate-protection-in-wordpress-forms/"
+					   target="_blank"
+					   rel="noopener">
+						<?php esc_html_e('How it works', 'duplicate-killer'); ?>
+					</a>
+				</p>
+			</div>
 
-                    <label
-                        class="ios-switch-label"
-                        for="<?php echo esc_attr('cross_form_' . $formSafe); ?>"
-                    ></label>
+			<div class="dk-feature-control">
+				<div class="dk-input-switch-ios">
+					<input
+						type="checkbox"
+						class="ios-switch-input"
+						disabled
+					/>
 
-                    <span class="ios-switch-text">
-                        <?php esc_html_e('Enable Cross-Form Duplicate Protection for this form', 'duplicate-killer'); ?>
-                    </span>
-                </div>
-            </fieldset>
-        </div>
+					<label
+						class="ios-switch-label"
+						for="<?php echo esc_attr('cross_form_' . $formSafe); ?>"
+					></label>
+				</div>
+			</div>
+		</div>
         <?php
     }
 }

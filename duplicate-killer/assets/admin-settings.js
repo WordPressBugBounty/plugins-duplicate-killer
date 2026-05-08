@@ -52,3 +52,27 @@ function copyDKShortcode(inputId) {
     toast.style.display = "none";
   }, 2500);
 }
+document.addEventListener('click', function (event) {
+	const button = event.target.closest('.dk-advanced-toggle');
+
+	if (!button) {
+		return;
+	}
+
+	const targetId = button.getAttribute('aria-controls');
+	const target = document.getElementById(targetId);
+
+	if (!target) {
+		return;
+	}
+
+	const isOpen = target.classList.toggle('is-active');
+
+	button.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+
+	const icon = button.querySelector('.dk-advanced-toggle-icon');
+
+	if (icon) {
+		icon.textContent = isOpen ? '−' : '+';
+	}
+});

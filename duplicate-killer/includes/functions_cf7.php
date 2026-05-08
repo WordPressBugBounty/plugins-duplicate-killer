@@ -435,24 +435,62 @@ function duplicateKiller_cf7_settings_callback($args){
 	
 	?>
 	<h4 class="dk-form-header">General settings</h4>
-		
-	<div class="dk-save-image-to-server">
-	<fieldset class="dk-fieldset">
-		<legend><strong>Store files on your server</strong></legend>
-		<strong>Stores files submitted through the form.</strong>
-		<span> Warning: This will use your server storage space.</span>
-		<br><br>
+	<div class="dk-settings-card dk-card-width-1">
+		<div class="dk-card-section">
 
-		<div class="dk-input-checkbox-callback">
-			<input type="checkbox" id="save_image" name="<?php echo esc_attr($args[0] . '[cf7_save_image]'); ?>" value="1" <?php echo esc_attr($checkbox_save_image ? 'checked' : ''); ?>>
-			<label for="save_image">Enable files saving</label>
-		</div>
+			<div class="dk-feature-row">
+				<div class="dk-feature-info">
+					<h4><?php esc_html_e('Store uploaded files for Contact Form 7', 'duplicate-killer'); ?></h4>
 
-		<div id="dk-save-image-path" style="display:none">
-			<p><strong>Images will be saved in the default folder:</strong> <code>/wp-content/uploads/duplicate-killer</code></p>
-			<p><em>This location will be used automatically. No additional configuration is needed.</em></p>
+					<p>
+						<?php esc_html_e(
+							'Save files submitted through the form directly on your server. This feature uses your server storage space.',
+							'duplicate-killer'
+						); ?>
+					</p>
+				</div>
+
+				<div class="dk-feature-control">
+					<div class="dk-input-switch-ios">
+						<input
+							type="checkbox"
+							class="ios-switch-input"
+							id="save_image"
+							name="<?php echo esc_attr($args[0] . '[cf7_save_image]'); ?>"
+							value="1"
+							<?php checked($checkbox_save_image, 1); ?>
+						/>
+
+						<label class="ios-switch-label" for="save_image"></label>
+					</div>
+				</div>
+			</div>
+
+			<div id="dk-save-image-path"
+				class="dk-feature-fields is-active"
+				style="<?php echo $checkbox_save_image ? '' : 'display:none;'; ?>">
+
+				<div class="dk-feature-field dk-feature-field--full">
+					<label>
+						<?php esc_html_e('Storage location', 'duplicate-killer'); ?>
+					</label>
+
+					<p>
+						<?php esc_html_e(
+							'Uploaded files will be stored automatically in the following WordPress uploads directory.',
+							'duplicate-killer'
+						); ?>
+					</p>
+
+					<input
+						type="text"
+						class="dk-error-input"
+						readonly
+						value="/wp-content/uploads/duplicate-killer">
+				</div>
+
+			</div>
 		</div>
-	</fieldset>
 	</div>
 <?php
 }

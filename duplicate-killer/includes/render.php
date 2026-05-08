@@ -127,7 +127,7 @@ function duplicateKiller_render_forms_overview(array $config) {
     $counts = duplicateKiller_get_submission_counts($db_plugin_key);
     $forms  = duplicateKiller_normalize_forms($forms_raw, $forms_id_map);
 
-    echo '<h2 class="dk-form-header">' . esc_html($plugin_label) . '</h2>';
+    //echo '<h2 class="dk-form-header">' . esc_html($plugin_label) . '</h2>';
     if (!$licensed) {
         echo '<div class="notice notice-warning"><p>' .
             esc_html__('Some features are available in Duplicate Killer PRO.', 'duplicate-killer') .
@@ -136,25 +136,59 @@ function duplicateKiller_render_forms_overview(array $config) {
 	
 	// Elementor Group Mode (only for Elementor)
 	if ($db_plugin_key === 'elementor') {
+		?>
 
-		$group_mode = (int) get_option('duplicateKiller_elementor_group_mode', 0);
+		<div class="dk-settings-card dk-card-width-1">
+			<div class="dk-card-section">
+				<div class="dk-feature-row">
+					<div class="dk-feature-info">
+						<h4>
+							<?php esc_html_e('Elementor group mode - Pro feature', 'duplicate-killer'); ?>
+						</h4>
 
-		echo '<div class="dk-elementor-group-mode" style="margin:15px 0;padding:12px 15px;background:#f8f9fa;border-left:4px solid #0073aa;">';
+						<p>
+							<?php esc_html_e(
+								'Treat Elementor forms with the same Form Name as a single form across multiple pages.',
+								'duplicate-killer'
+							); ?>
+						</p>
+					</div>
 
-		echo '<label style="display:flex;align-items:center;gap:8px;font-weight:600;">';
-		echo '<input type="checkbox" name="duplicateKiller_elementor_group_mode" value="1" ' . checked($group_mode, 1, false) . ' />';
-		echo ' Enable Group Mode (Treat forms with the same Form Name as one form)';
-		echo '</label>';
+					<div class="dk-feature-control">
+						<div class="dk-input-switch-ios">
+							<input
+								type="checkbox"
+								class="ios-switch-input"
+								value="1"
+								disabled
+							/>
+							<label
+								class="ios-switch-label"
+								for="duplicateKiller_elementor_group_mode">
+							</label>
+						</div>
+					</div>
+				</div>
 
-		echo '<p style="margin:6px 0 0 24px;font-size:13px;color:#555;">';
-		echo 'When enabled, all Elementor forms that share the same Form Name will be treated as a single form. Recommended if you duplicated forms across multiple pages.';
-		echo '</p>';
+				<div class="dk-settings-warning">
+					<span class="dashicons dashicons-info-outline"></span>
 
-		echo '</div>';
+					<span>
+						<?php esc_html_e(
+							'Recommended if you duplicated the same Elementor form across multiple pages.',
+							'duplicate-killer'
+						); ?>
+					</span>
+				</div>
+			</div>
+		</div>
+		<?php
 	}
 
 	$form_index = 0;
-
+	?>
+	<div class="dk-forms-wrapper">
+	<?php
     foreach ($forms as $form_key => $form) {
         $form_key   = (string)$form_key;
         $form_safe  = duplicateKiller_sanitize_id($form_key);
@@ -188,11 +222,52 @@ function duplicateKiller_render_forms_overview(array $config) {
 
         $cookie_enabled = !empty($form_opts['cookie_option']) && (string)$form_opts['cookie_option'] === '1';
         $ip_enabled = !empty($form_opts['user_ip']) && (string)$form_opts['user_ip'] === '1';
+		$cross_form_enabled = !empty($form_opts['cross_form_option']) && (string) $form_opts['cross_form_option'] === '1';
 
+		$advanced_open = $ip_enabled || $cookie_enabled || $cross_form_enabled;
+		$advanced_id   = 'dk_advanced_settings_' . $form_safe;
+
+		$selected_duplicate_fields = 0;
+
+		foreach ( $fields as $f ) {
+			$fid = (string) ( $f['id'] ?? '' );
+
+			if ( $fid !== '' && ! empty( $form_opts[$fid] ) ) {
+				$selected_duplicate_fields++;
+			}
+		}
+
+		$duplicate_protection_enabled = $selected_duplicate_fields > 0;
         $count = $counts[$form_key] ?? $counts[$form_name] ?? 0;
+		if ( 'breakdance' === $db_plugin_key ) {
 
+		$legacy_form_key = $form_name . '.' . $form_id;
+
+		if ( $legacy_form_key !== $form_key && isset( $counts[$legacy_form_key] ) ) {
+			$count += (int) $counts[$legacy_form_key];
+		}
+	}
         ?>
-        <div class="dk-single-form<?php echo $is_locked_form ? ' dk-form-locked' : ''; ?>">
+        <div class="dk-single-form dk-form-card<?php echo $is_locked_form ? ' dk-form-locked' : ''; ?>">
+		<!-- Card header -->
+		<div class="dk-card-header">
+			<div>
+				<h3 class="dk-card-title"><?php echo esc_html($form_key); ?></h3>
+				<p class="dk-card-description">
+					<?php esc_html_e('Protect this form from duplicate submissions.', 'duplicate-killer'); ?>
+				</p>
+			</div>
+
+			<?php if ($duplicate_protection_enabled) : ?>
+				<span class="dk-status-pill dk-status-pill-active">
+					<?php esc_html_e('Protection active', 'duplicate-killer'); ?>
+				</span>
+			<?php else : ?>
+				<span class="dk-status-pill dk-status-pill-inactive">
+					<?php esc_html_e('No protected fields', 'duplicate-killer'); ?>
+				</span>
+			<?php endif; ?>
+		</div>
 			<?php if ($is_locked_form): ?>
 				<div class="dk-pro-ribbon">PRO</div>
 				<div class="dk-form-lock-overlay">
@@ -210,14 +285,18 @@ function duplicateKiller_render_forms_overview(array $config) {
 				</div>
 			<?php endif; ?>
 
-            <h4 class="dk-form-header"><?php echo esc_html($form_key); ?></h4>
-
             <input type="hidden"
                 name="<?php echo esc_attr($option_name . '[' . $form_key . '][form_id]'); ?>"
                 value="<?php echo esc_attr((string)$form_id); ?>" />
 
-            <h4><?php esc_html_e('Choose the unique fields', 'duplicate-killer'); ?></h4>
-
+			<!-- Protected fields -->
+			<div class="dk-card-section">
+				<div class="dk-section-header">
+					<h4><?php esc_html_e('Protected fields', 'duplicate-killer'); ?></h4>
+					<p>
+						<?php esc_html_e('Choose which fields from this form should be checked for duplicates.', 'duplicate-killer'); ?>
+					</p>
+				</div>
             <?php foreach ($fields as $field_index => $f):
 
                     $fid   = (string)($f['id'] ?? '');
@@ -226,209 +305,430 @@ function duplicateKiller_render_forms_overview(array $config) {
                     $type  = (string)($f['type'] ?? '');
                     $is_checked = !empty($form_opts[$fid]);
                     $input_id = 'dk_' . $form_safe . '__' . sanitize_html_class($fid);
-?>
+					$field_type_key = strtolower(trim($type));
+					$field_label_key = strtolower($label . ' ' . $fid);
 
-                <div class="dk-input-checkbox-callback">
-                    <input type="checkbox"
-                        id="<?php echo esc_attr($input_id); ?>"
-                        name="<?php echo esc_attr($option_name . '[' . $form_key . '][' . $fid . ']'); ?>"
-                        value="1"
-                        <?php checked($is_checked); ?>
-						<?php echo $disabled_attr; ?>>
+					$field_desc = __('Check this field for duplicate values.', 'duplicate-killer');
 
-                    <label for="<?php echo esc_attr($input_id); ?>">
-                        <?php echo esc_html($label); ?>
-                        <?php if ($type !== ''): ?>
-                            <small style="opacity:.7;">(<?php echo esc_html($type); ?>)</small>
-                        <?php endif; ?>
-                    </label>
-					<?php
-					 // Store labels for Formidable + Ninja Forms
-					$store_labels = (
-						$db_plugin_key === 'Formidable' ||
-						$db_plugin_key === 'NinjaForms' ||
-						$option_name === 'Formidable_page' ||
-						$option_name === 'NinjaForms_page'
-					);
+					$field_icon_svg = duplicateKiller_get_field_icon_svg( $type, $label, $fid );
 
-					// Formidable uses numeric field IDs; normalize when possible
-					$fid_for_label = is_numeric($fid) ? (int) $fid : $fid;
-					if ($store_labels): ?>
+					if ($field_type_key === 'email') {
+
+						$field_desc = __('Ensure email address is unique.', 'duplicate-killer');
+
+					} elseif (
+						$field_type_key === 'tel' ||
+						strpos($field_label_key, 'phone') !== false ||
+						strpos($field_label_key, 'tel') !== false
+					) {
+
+						$field_desc = __('Ensure phone number is unique.', 'duplicate-killer');
+
+					} elseif ($field_type_key === 'text') {
+
+						$field_desc = __('Check for duplicate text values.', 'duplicate-killer');
+
+					} elseif ($field_type_key === 'textarea') {
+
+						$field_desc = __('Check for duplicate message values.', 'duplicate-killer');
+
+					} elseif ($field_type_key === 'number') {
+
+						$field_desc = __('Ensure number value is unique.', 'duplicate-killer');
+
+					} elseif ($field_type_key === 'url') {
+
+						$field_desc = __('Ensure URL value is unique.', 'duplicate-killer');
+
+					} elseif ($field_type_key === 'date') {
+
+						$field_desc = __('Ensure date value is unique.', 'duplicate-killer');
+
+					} elseif (
+						in_array(
+							$field_type_key,
+							array('select', 'radio', 'checkbox'),
+							true
+						)
+					) {
+
+						$field_desc = __('Check selected option values for duplicates.', 'duplicate-killer');
+
+					}
+					?>
+					<div class="dk-protected-field-row<?php echo $is_checked ? ' is-active' : ''; ?>">
+						<label class="dk-protected-field-label" for="<?php echo esc_attr($input_id); ?>">
+							<input type="checkbox"
+								id="<?php echo esc_attr($input_id); ?>"
+								name="<?php echo esc_attr($option_name . '[' . $form_key . '][' . $fid . ']'); ?>"
+								value="1"
+								class="dk-protected-field-checkbox"
+								<?php checked($is_checked); ?>
+								<?php echo $disabled_attr; ?>>
+
+							<span class="dk-checkbox-ui" aria-hidden="true"></span>
+							<?php echo $field_icon_svg; ?>
+							<span class="dk-protected-field-main">
+								<span class="dk-protected-field-name">
+									<?php echo esc_html($label); ?>
+
+									<?php if ($type !== '') : ?>
+										<small class="dk-field-type">(<?php echo esc_html($type); ?>)</small>
+									<?php endif; ?>
+								</span>
+							</span>
+							<span class="dk-protected-field-desc">
+								<?php echo esc_html($field_desc); ?>
+							</span>
+						</label>
+
+						<?php
+						$store_labels = (
+							$db_plugin_key === 'Formidable' ||
+							$db_plugin_key === 'NinjaForms' ||
+							$option_name === 'Formidable_page' ||
+							$option_name === 'NinjaForms_page'
+						);
+
+						$fid_for_label = is_numeric($fid) ? (int) $fid : $fid;
+
+						if ($store_labels): ?>
+							<input type="hidden"
+								name="<?php echo esc_attr($option_name . '[' . $form_key . '][labels][' . $fid_for_label . ']'); ?>"
+								value="<?php echo esc_attr($label); ?>" />
+						<?php endif; ?>
+
 						<input type="hidden"
-							name="<?php echo esc_attr($option_name . '[' . $form_key . '][labels][' . $fid_for_label . ']'); ?>"
-							value="<?php echo esc_attr($label); ?>" />
-					<?php endif; ?>
-					<input type="hidden"
-						name="<?php echo esc_attr($option_name . '[' . $form_key . '][__dk_field_type][' . $fid . ']'); ?>"
-						value="<?php echo esc_attr($type); ?>" />
+							name="<?php echo esc_attr($option_name . '[' . $form_key . '][__dk_field_type][' . $fid . ']'); ?>"
+							value="<?php echo esc_attr($type); ?>" />
 
-					<input type="hidden"
-						name="<?php echo esc_attr($option_name . '[' . $form_key . '][__dk_field_order][' . $fid . ']'); ?>"
-						value="<?php echo esc_attr((string)$field_index); ?>" />
-                </div>
+						<input type="hidden"
+							name="<?php echo esc_attr($option_name . '[' . $form_key . '][__dk_field_order][' . $fid . ']'); ?>"
+							value="<?php echo esc_attr((string)$field_index); ?>" />
+					</div>
             <?php endforeach; ?>
-
+			</div>
             <div class="<?php echo esc_attr(trim('dk-pro-wrap' . $pro_class)); ?>">
 
                 <!-- Error message -->
-                <div class="dk-set-error-message">
-                    <fieldset class="dk-fieldset dk-error-fieldset">
-                        <legend class="dk-legend-title">
-							<?php esc_html_e('Error message when duplicate is found', 'duplicate-killer'); ?>
-							<small style="font-weight:normal; margin-left:8px;">
-								<a href="https://verselabwp.com/what-is-the-set-error-message-field-in-duplicate-killer/" target="_blank" rel="noopener">
-									<?php esc_html_e('What is this?', 'duplicate-killer'); ?>
-								</a>
-							</small>
-						</legend>
-						<p class="dk-error-instruction">This message will be shown when the user submits a form with duplicate values.</p>
-                        <input type="text"
-                            class="dk-error-input"
-                            name="<?php echo esc_attr($option_name . '[' . $form_key . '][error_message]'); ?>"
-                            value="<?php echo esc_attr($err_msg); ?>"
+                <div class="dk-card-section">
+					<div class="dk-section-header">
+						<h4 class="dk-section-title-with-link">
+							<span>
+								<?php esc_html_e('Duplicate message', 'duplicate-killer'); ?>
+							</span>
+
+							<a class="dk-section-title-link"
+								href="https://verselabwp.com/what-is-the-set-error-message-field-in-duplicate-killer/"
+								target="_blank"
+								rel="noopener">
+								<?php esc_html_e('What is this?', 'duplicate-killer'); ?>
+							</a>
+						</h4>
+
+						<p>
+							<?php esc_html_e('This message appears when Duplicate Killer blocks a repeated submission.', 'duplicate-killer'); ?>
+						</p>
+					</div>
+
+					<div class="dk-card-section-inner">
+						<input type="text"
+							class="dk-error-input"
+							name="<?php echo esc_attr($option_name . '[' . $form_key . '][error_message]'); ?>"
+							value="<?php echo esc_attr($err_msg); ?>"
 							<?php echo $disabled_attr; ?> />
-                    </fieldset>
-                </div>
+					</div>
+				</div>
+				<!-- Advanced settings -->
+				<div class="dk-card-section dk-card-section-advanced">
+					<button type="button"
+						class="dk-advanced-toggle"
+						aria-expanded="<?php echo $advanced_open ? 'true' : 'false'; ?>"
+						aria-controls="<?php echo esc_attr($advanced_id); ?>">
+						<span>
+							<?php esc_html_e('Advanced Features', 'duplicate-killer'); ?>
+						</span>
+						<span class="dk-advanced-toggle-icon" aria-hidden="true">
+							<?php echo $advanced_open ? '−' : '+'; ?>
+						</span>
+					</button>
 
-                <!-- IP limit -->
-                <div class="dk-limit_submission_by_ip">
-                    <fieldset class="dk-fieldset">
-                        <legend class="dk-legend-title">
-							<?php esc_html_e('Limit submissions by IP address', 'duplicate-killer'); ?>
-							<small style="font-weight:normal; margin-left:8px;">
-								<a href="https://verselabwp.com/limit-submissions-by-ip-address-in-wordpress-free-pro/" target="_blank" rel="noopener">
-									<?php esc_html_e('How it works', 'duplicate-killer'); ?>
-								</a>
-							</small>
-						</legend>
-						<p><strong>This feature</strong> restrict form entries based on IP address for x days.</p>
-                        <div class="dk-input-switch-ios">
-                            <input type="checkbox"
-                                class="ios-switch-input"
-                                id="<?php echo esc_attr('user_ip_' . $form_safe); ?>"
-                                name="<?php echo esc_attr($option_name . '[' . $form_key . '][user_ip]'); ?>"
-                                value="1"
-                                data-target="<?php echo esc_attr('#dk-limit-ip_' . $form_safe); ?>"
-                                <?php checked($ip_enabled); ?>
-								<?php echo $disabled_attr; ?>
-                            />
-                            <label class="ios-switch-label" for="<?php echo esc_attr('user_ip_' . $form_safe); ?>"></label>
-                            <span class="ios-switch-text"><?php esc_html_e('Activate this function', 'duplicate-killer'); ?></span>
-                        </div>
+					<div id="<?php echo esc_attr($advanced_id); ?>"
+						class="dk-advanced-content<?php echo $advanced_open ? ' is-active' : ''; ?>">
 
-                        <div id="<?php echo esc_attr('dk-limit-ip_' . $form_safe); ?>"
-                            class="dk-toggle-section<?php echo $ip_enabled ? ' is-active' : ''; ?>">
-                            <label><?php esc_html_e('Set error message for this option:', 'duplicate-killer'); ?></label>
-                            <input type="text"
-                                class="dk-error-input"
-                                name="<?php echo esc_attr($option_name . '[' . $form_key . '][error_message_limit_ip_option]'); ?>"
-                                value="<?php echo esc_attr($ip_err_msg); ?>"
-								<?php echo $disabled_attr; ?> />
+						<div class="dk-advanced-content-inner">
+							<!-- IP limit -->
+							<div class="dk-feature-row dk-feature-row-has-fields">
+								<div class="dk-feature-info">
+									<h4><?php esc_html_e('1. IP limit', 'duplicate-killer'); ?></h4>
 
-                            <label><?php esc_html_e('IP block duration (in days):', 'duplicate-killer'); ?></label>
-                            <input type="text"
-                                class="dk-error-input"
-                                name="<?php echo esc_attr($option_name . '[' . $form_key . '][user_ip_days]'); ?>"
-                                value="<?php echo esc_attr($ip_days); ?>"
-								<?php echo $disabled_attr; ?> />
-                        </div>
-                    </fieldset>
-                </div>
+									<p>
+										<?php esc_html_e('Block repeated submissions from the same IP address.', 'duplicate-killer'); ?>
 
-                <!-- Cookie -->
-                <div class="dk-set-unique-entries-per-user">
-                    <fieldset class="dk-fieldset">
-                       <legend class="dk-legend-title">
-							<?php esc_html_e('Unique entries per user', 'duplicate-killer'); ?>
-							<small style="font-weight:normal; margin-left:8px;">
-								<a href="https://verselabwp.com/unique-entries-per-user-in-wordpress-how-to-use-it/" target="_blank" rel="noopener">
-									<?php esc_html_e('How to use it?', 'duplicate-killer'); ?>
-								</a>
-							</small>
-						</legend>
-						<p><strong>This feature uses cookies.</strong> Multiple users can submit the same entry, but a single user cannot submit the same one twice.</p><p>Note: Cookies are set only for forms where this feature is enabled.</p>
-                        <div class="dk-input-switch-ios">
-                            <input type="checkbox"
-                                class="ios-switch-input"
-                                id="<?php echo esc_attr('cookie_' . $form_safe); ?>"
-                                name="<?php echo esc_attr($option_name . '[' . $form_key . '][cookie_option]'); ?>"
-                                value="1"
-                                data-target="<?php echo esc_attr('#cookie_section_' . $form_safe); ?>"
-                                <?php checked($cookie_enabled); ?>
-								<?php echo $disabled_attr; ?>
-                            />
-                            <label class="ios-switch-label" for="<?php echo esc_attr('cookie_' . $form_safe); ?>"></label>
-                            <span class="ios-switch-text"><?php esc_html_e('Activate this function', 'duplicate-killer'); ?></span>
-                        </div>
+										<a class="dk-feature-inline-link"
+										   href="https://verselabwp.com/limit-submissions-by-ip-address-in-wordpress-free-pro/"
+										   target="_blank"
+										   rel="noopener">
+											<?php esc_html_e('How it works?', 'duplicate-killer'); ?>
+										</a>
+									</p>
+								</div>
 
-                        <div id="<?php echo esc_attr('cookie_section_' . $form_safe); ?>"
-                            class="dk-toggle-section<?php echo $cookie_enabled ? ' is-active' : ''; ?>">
-                            <label><?php esc_html_e('Cookie persistence (days - max 365):', 'duplicate-killer'); ?></label>
-                            <input type="text"
-                                class="dk-error-input"
-                                name="<?php echo esc_attr($option_name . '[' . $form_key . '][cookie_option_days]'); ?>"
-                                value="<?php echo esc_attr($cookie_days); ?>"
-								<?php echo $disabled_attr; ?> />
-                        </div>
-                    </fieldset>
-                </div>
+								<div class="dk-feature-control">
+									<div class="dk-input-switch-ios">
+										<input type="checkbox"
+											class="ios-switch-input"
+											id="<?php echo esc_attr('user_ip_' . $form_safe); ?>"
+											name="<?php echo esc_attr($option_name . '[' . $form_key . '][user_ip]'); ?>"
+											value="1"
+											data-target="<?php echo esc_attr('#dk-limit-ip_' . $form_safe); ?>"
+											<?php checked($ip_enabled); ?>
+											<?php echo $disabled_attr; ?> />
 
-                <!-- Shortcode -->
-                <div class="dk-shortcode-count-submission">
-                    <fieldset class="dk-fieldset">
-						<legend class="dk-legend-title">
-							<?php esc_html_e('Display submission count', 'duplicate-killer'); ?>
-							<small style="font-weight:normal; margin-left:8px;">
-								<a href="https://verselabwp.com/what-is-duplicate-killer/#display-submission-count" target="_blank" rel="noopener">
-									<?php esc_html_e('What is this?', 'duplicate-killer'); ?>
-								</a>
-							</small>
-						</legend>
-                        <?php
-                            $shortcode = '[duplicateKiller plugin="' . esc_attr($db_plugin_key) . '" form="' . esc_attr($form_key) . '"]';
-                            $short_id = 'dk_shortcode_' . $form_safe;
-                        ?>
-                        <div style="display:flex;gap:10px;align-items:center;">
-                            <input type="text" id="<?php echo esc_attr($short_id); ?>" value="<?php echo esc_attr($shortcode); ?>" readonly style="flex: 1; padding: 8px 12px; font-size: 16px; border: 1px solid #ccc; border-radius: 5px; background: #fff; cursor: default;">
-                            <button type="button" onclick="copyDKShortcode('<?php echo esc_js($short_id); ?>')" style="padding: 8px 16px; font-size: 14px; background-color: #0073aa; color: white; border: none; border-radius: 5px; cursor: pointer;"<?php echo $disabled_attr; ?>><?php esc_html_e('Copy', 'duplicate-killer'); ?></button>
-                        </div>
-                    </fieldset>
-                </div>
+										<label class="ios-switch-label" for="<?php echo esc_attr('user_ip_' . $form_safe); ?>"></label>
+									</div>
+								</div>
+
+								<div id="<?php echo esc_attr('dk-limit-ip_' . $form_safe); ?>"
+									class="dk-feature-fields dk-feature-fields--align-descriptions dk-toggle-section<?php echo $ip_enabled ? ' is-active' : ''; ?>">
+
+									<div class="dk-feature-field dk-feature-field--wide">
+										<label><?php esc_html_e('IP warning message', 'duplicate-killer'); ?></label>
+										<p><?php esc_html_e('This message appears when a visitor is blocked by the IP limit.', 'duplicate-killer'); ?></p>
+
+										<input type="text"
+											class="dk-error-input"
+											name="<?php echo esc_attr($option_name . '[' . $form_key . '][error_message_limit_ip_option]'); ?>"
+											value="<?php echo esc_attr($ip_err_msg); ?>"
+											<?php echo $disabled_attr; ?> />
+									</div>
+
+									<div class="dk-feature-field dk-feature-field--small">
+										<label><?php esc_html_e('Block duration', 'duplicate-killer'); ?></label>
+										<p><?php esc_html_e('Number of days this IP address should be blocked.', 'duplicate-killer'); ?></p>
+
+										<div class="dk-input-prefix-group">
+											<span class="dk-input-prefix-label">
+												<?php esc_html_e('Days', 'duplicate-killer'); ?>
+											</span>
+
+											<input type="text"
+												class="dk-input-prefix-field"
+												name="<?php echo esc_attr($option_name . '[' . $form_key . '][user_ip_days]'); ?>"
+												value="<?php echo esc_attr($ip_days); ?>"
+												<?php echo $disabled_attr; ?> />
+										</div>
+									</div>
+								</div>
+							</div>
+
+							<!-- Cookie -->
+							<div class="dk-feature-row dk-feature-row-has-fields">
+								<div class="dk-feature-info">
+									<h4><?php esc_html_e('2. Browser protection', 'duplicate-killer'); ?></h4>
+
+									<p>
+										<?php esc_html_e('Use cookies to prevent the same visitor from submitting the same values again.', 'duplicate-killer'); ?>
+
+										<a class="dk-feature-inline-link"
+										   href="https://verselabwp.com/unique-entries-per-user-in-wordpress-how-to-use-it/"
+										   target="_blank"
+										   rel="noopener">
+											<?php esc_html_e('How to use it?', 'duplicate-killer'); ?>
+										</a>
+									</p>
+								</div>
+
+								<div class="dk-feature-control">
+									<div class="dk-input-switch-ios">
+										<input type="checkbox"
+											class="ios-switch-input"
+											id="<?php echo esc_attr('cookie_' . $form_safe); ?>"
+											name="<?php echo esc_attr($option_name . '[' . $form_key . '][cookie_option]'); ?>"
+											value="1"
+											data-target="<?php echo esc_attr('#cookie_section_' . $form_safe); ?>"
+											<?php checked($cookie_enabled); ?>
+											<?php echo $disabled_attr; ?> />
+
+										<label class="ios-switch-label" for="<?php echo esc_attr('cookie_' . $form_safe); ?>"></label>
+									</div>
+								</div>
+
+								<div id="<?php echo esc_attr('cookie_section_' . $form_safe); ?>"
+									class="dk-feature-fields dk-toggle-section<?php echo $cookie_enabled ? ' is-active' : ''; ?>">
+
+									<div class="dk-feature-field dk-feature-field--full">
+										<label><?php esc_html_e('Cookie duration', 'duplicate-killer'); ?></label>
+										<p><?php esc_html_e('Number of days this browser should be remembered.', 'duplicate-killer'); ?></p>
+
+										<div class="dk-input-prefix-group">
+											<span class="dk-input-prefix-label">
+												<?php esc_html_e('Days', 'duplicate-killer'); ?>
+											</span>
+
+											<input type="text"
+												class="dk-input-prefix-field"
+												name="<?php echo esc_attr($option_name . '[' . $form_key . '][cookie_option_days]'); ?>"
+												value="<?php echo esc_attr($cookie_days); ?>"
+												<?php echo $disabled_attr; ?> />
+										</div>
+									</div>
+								</div>
+							</div>
+							<?php
+							if (!$is_locked_form) {
+								DuplicateKiller_CrossForm::render_per_form(
+									$option_name,
+									$form_key,
+									$form_opts
+								);
+							}
+							?>
+							
+							<!-- Shortcode -->
+							<div class="dk-feature-row dk-feature-row-has-fields">
+								<div class="dk-feature-info">
+									<h4><?php esc_html_e('4. Submission count display', 'duplicate-killer'); ?></h4>
+
+									<p>
+										<?php esc_html_e('Use this shortcode to display the number of saved submissions for this form.', 'duplicate-killer'); ?>
+
+										<a class="dk-feature-inline-link"
+										   href="https://verselabwp.com/what-is-duplicate-killer/#display-submission-count"
+										   target="_blank"
+										   rel="noopener">
+											<?php esc_html_e('What is this?', 'duplicate-killer'); ?>
+										</a>
+									</p>
+								</div>
+
+								<div class="dk-feature-control"></div>
+
+								<div class="dk-feature-fields is-active">
+									<div class="dk-feature-field dk-feature-field--full">
+										<label><?php esc_html_e('Shortcode', 'duplicate-killer'); ?></label>
+										<p><?php esc_html_e('Copy and paste this shortcode into a page, post, or widget.', 'duplicate-killer'); ?></p>
+
+										<?php
+										$shortcode = '[duplicateKiller plugin="' . esc_attr($db_plugin_key) . '" form="' . esc_attr($form_key) . '"]';
+										$short_id = 'dk_shortcode_' . $form_safe;
+										?>
+
+										<div class="dk-shortcode-control">
+											<input type="text"
+												id="<?php echo esc_attr($short_id); ?>"
+												value="<?php echo esc_attr($shortcode); ?>"
+												readonly
+												class="dk-error-input">
+
+											<button type="button"
+												onclick="copyDKShortcode('<?php echo esc_js($short_id); ?>')"
+												class="button button-primary"
+												<?php echo $disabled_attr; ?>>
+												<?php esc_html_e('Copy', 'duplicate-killer'); ?>
+											</button>
+										</div>
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
             </div>
 			
-			<!-- Cross-posting -->
-			<?php
-			if (!$is_locked_form) {
-				DuplicateKiller_CrossForm::render_per_form(
-					$option_name,
-					$form_key,
-					$form_opts
-				);
-			}
-			?>
-			
-            <!-- Delete records -->
-            <div class="dk-box dk-delete-records">
-                <p class="dk-record-count">
-                    📦 <span class="dk-count-number"><?php echo esc_html((string)$count); ?></span>
-                    <?php esc_html_e('saved submissions found for this form', 'duplicate-killer'); ?>
-                </p>
-                <?php if ($count > 0) : ?>
-                    <label for="<?php echo esc_attr('delete_records_' . $form_safe); ?>" class="dk-delete-label">
-                        <input type="checkbox"
-                            id="<?php echo esc_attr('delete_records_' . $form_safe); ?>"
-                            name="<?php echo esc_attr($option_name . '[' . $form_key . '][delete_records]'); ?>"
-                            value="1"
-                            class="dk-delete-checkbox"
-							<?php echo $disabled_attr; ?>>
-                        🗑️ <span><?php esc_html_e('Delete all saved entries for this form', 'duplicate-killer'); ?>
-                            <small>(<?php esc_html_e('this action cannot be undone', 'duplicate-killer'); ?>)</small></span>
-                    </label>
-                <?php endif; ?>
-            </div>
+            <!-- Stored submissions -->
+			<div class="dk-card-section dk-stored-submissions<?php echo $count > 0 ? ' has-records' : ' is-empty'; ?>">
+
+				<div class="dk-stored-submissions-card">
+
+					<div class="dk-stored-submissions-icon" aria-hidden="true">
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+							<ellipse cx="12" cy="5" rx="7" ry="3" stroke-width="1.7"/>
+							<path d="M5 5v5c0 1.7 3.1 3 7 3s7-1.3 7-3V5" stroke-width="1.7"/>
+							<path d="M5 10v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5" stroke-width="1.7"/>
+							<path d="M5 15v4c0 1.7 3.1 3 7 3s7-1.3 7-3v-4" stroke-width="1.7"/>
+						</svg>
+					</div>
+
+					<div class="dk-stored-submissions-content">
+
+						<?php if ( $count > 0 ) : ?>
+
+							<label for="<?php echo esc_attr( 'delete_records_' . $form_safe ); ?>" class="dk-stored-submissions-label">
+								<input type="checkbox"
+									id="<?php echo esc_attr( 'delete_records_' . $form_safe ); ?>"
+									name="<?php echo esc_attr( $option_name . '[' . $form_key . '][delete_records]' ); ?>"
+									value="1"
+									class="dk-delete-checkbox"
+									<?php echo $disabled_attr; ?>>
+
+								<span>
+									<strong>
+										<?php
+										printf(
+											esc_html(
+												_n(
+													'%s saved submission for this form.',
+													'%s saved submissions for this form.',
+													(int) $count,
+													'duplicate-killer'
+												)
+											),
+											esc_html( (string) $count )
+										);
+										?>
+									</strong>
+
+									<small>
+										<?php esc_html_e( 'Check to delete all saved submissions.', 'duplicate-killer' ); ?>
+									</small>
+								</span>
+							</label>
+
+						<?php else : ?>
+
+							<strong>
+								<?php esc_html_e( 'No submissions stored yet.', 'duplicate-killer' ); ?>
+							</strong>
+
+							<small>
+								<?php esc_html_e( 'Saved submissions for this form can be deleted from here when available.', 'duplicate-killer' ); ?>
+							</small>
+
+						<?php endif; ?>
+
+					</div>
+
+					<div class="dk-stored-submissions-action">
+						<?php if ( $count > 0 ) : ?>
+							<a class="dk-stored-submissions-button"
+							   href="<?php echo esc_url(
+									admin_url(
+										'admin.php?page=duplicateKiller_database&dk_view=forms&s=' . rawurlencode( $form_key )
+									)
+							   ); ?>">
+								<?php esc_html_e( 'View submissions', 'duplicate-killer' ); ?>
+							</a>
+						<?php else : ?>
+							<a class="dk-stored-submissions-button"
+							   href="https://verselabwp.com/what-is-duplicate-killer"
+							   target="_blank"
+							   rel="noopener">
+								<?php esc_html_e( 'Learn more', 'duplicate-killer' ); ?>
+								<span aria-hidden="true">›</span>
+							</a>
+						<?php endif; ?>
+					</div>
+
+				</div>
+
+			</div>
 			
         </div>
         <?php
 		$form_index++;
     }
+	?>
+	</div>
+	<?php
 }
