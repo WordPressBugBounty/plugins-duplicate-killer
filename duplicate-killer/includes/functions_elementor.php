@@ -2,276 +2,203 @@
 defined( 'ABSPATH' ) or die( 'You shall not pass!' );
 
 add_action('elementor_pro/forms/validation', 'duplicateKiller_elementor_guard_only', 1, 2);
-function duplicateKiller_elementor_guard_only($record, $ajax_handler) {
+add_action('elementor_pro/forms/new_record', 'duplicateKiller_elementor_save_only', 10, 2);
 
-	$elementor_page = get_option('Elementor_page');
+function duplicateKiller_elementor_guard_only( $record, $ajax_handler ) {
+	$elementor_page = get_option( 'Elementor_page' );
 	$elementor_page = duplicateKiller_convert_option_architecture( $elementor_page, 'elementor_' );
-	if (!is_array($elementor_page)) {
-		$elementor_page = [];
+	if ( ! is_array( $elementor_page ) ) {
+		$elementor_page = array();
 	}
 
-	$request_debug_id = uniqid('duplicateKiller_elementor_guard_', true);
-	$dk_enabled       = class_exists('duplicateKiller_Diagnostics');
+	$request_debug_id = uniqid( 'duplicateKiller_elementor_guard_', true );
+	$dk_enabled       = class_exists( 'duplicateKiller_Diagnostics' );
 
-	// context
-	$post_id   = (int)($record->get_form_settings('post_id') ?? 0);
-	$form_name = trim((string)($record->get_form_settings('form_name') ?? ''));
+	$current_form = DuplicateKiller_Form_Normalizer::elementor( $record );
 
-	$node_id = (string)($record->get_form_settings('id') ?? '');
-	if ($node_id === '') {
-		$node_id = (string)($record->get_form_settings('form_id') ?? '');
-	}
-
-	if ($form_name === '' && $post_id) {
-		$post = get_post($post_id);
-		$form_name = $post ? $post->post_title : 'Elementor Form';
-	}
-
-	if ($dk_enabled) {
-		duplicateKiller_Diagnostics::log('elementor', 'guard_start', [
-			'request_debug_id' => $request_debug_id,
-			'post_id'          => $post_id,
-			'form_name'        => $form_name,
-			'node_id'          => $node_id,
-			'form_settings'    => method_exists($record, 'get_form_settings') ? [
-				'post_id'   => $record->get_form_settings('post_id'),
-				'form_name' => $record->get_form_settings('form_name'),
-				'id'        => $record->get_form_settings('id'),
-				'form_id'   => $record->get_form_settings('form_id'),
-			] : [],
-		]);
-	}
-
-	if ($form_name === '' || $node_id === '') {
-		if ($dk_enabled) {
-			duplicateKiller_Diagnostics::log('elementor', 'guard_exit_missing_context', [
-				'request_debug_id' => $request_debug_id,
-				'post_id'          => $post_id,
-				'form_name'        => $form_name,
-				'node_id'          => $node_id,
-			]);
-		}
-		return;
-	}
-
-	$db_form_name = $form_name . '.' . $node_id;
-
-	// ---------------------------------------------------------------------
-	// Elementor Group Mode: use FormName.__group__ config if enabled & exists
-	// ---------------------------------------------------------------------
-	$group_mode = (int) get_option('duplicateKiller_elementor_group_mode', 0);
-	$group_key  = $form_name . '.__group__';
-
-	if ($group_mode === 1 && isset($elementor_page[$group_key]) && is_array($elementor_page[$group_key])) {
-		$db_form_name = $group_key;
-	}
-
-	if ($dk_enabled) {
-		duplicateKiller_Diagnostics::log('elementor', 'group_mode_resolved', [
-			'request_debug_id' => $request_debug_id,
-			'group_mode'       => $group_mode,
-			'group_key'        => $group_key,
-			'db_form_name'     => $db_form_name,
-		]);
-	}
-
-	// cfg
-	$cfg = [];
-	if (!empty($elementor_page[$db_form_name]) && is_array($elementor_page[$db_form_name])) {
-		$cfg = $elementor_page[$db_form_name];
-	} else {
-		foreach ($elementor_page as $k => $v) {
-			if (!is_array($v) || empty($v['form_id'])) {
-				continue;
-			}
-			if ((string)$v['form_id'] === (string)$node_id) {
-				$cfg = $v;
-				if (is_string($k) && $k !== '') {
-					$db_form_name = $k;
-				}
-				break;
-			}
-		}
-	}
-
-	if ($dk_enabled) {
-		duplicateKiller_Diagnostics::log('elementor', 'config_resolved', [
-			'request_debug_id' => $request_debug_id,
-			'db_form_name'     => $db_form_name,
-			'config_found'     => !empty($cfg) ? 1 : 0,
-			'config'           => $cfg,
-		]);
-	}
-
-	if (empty($cfg)) {
-		return;
-	}
-
-	// build data map
-	$fields = $record->get('fields');
-	if (!is_array($fields)) {
-		$fields = [];
-	}
-
-	$data = [];
-	foreach ($fields as $key => $field) {
-		if (!is_array($field)) {
-			continue;
-		}
-		$fid = (string)($field['id'] ?? $key);
-		$val = $field['value'] ?? '';
-		if (is_array($val)) {
-			$val = implode(' ', array_map('strval', $val));
-		}
-		$data[$fid] = sanitize_text_field((string)$val);
-	}
-
-	if ($dk_enabled) {
-		duplicateKiller_Diagnostics::log('elementor', 'fields_mapped', [
-			'request_debug_id' => $request_debug_id,
-			'db_form_name'     => $db_form_name,
-			'fields_raw'       => $fields,
-			'data_mapped'      => $data,
-		]);
-	}
-
-	// 1) IP check
-	if (function_exists('duplicateKiller_ip_limit_trigger') && duplicateKiller_ip_limit_trigger("elementor", $elementor_page, $db_form_name)) {
-		$message = !empty($cfg['error_message_limit_ip_option'])
-			? (string)$cfg['error_message_limit_ip_option']
-			: __('This IP has been already submitted.', 'duplicate-killer');
-
-		$ajax_handler->add_error_message($message);
-
-		//stop elementor
-		$first_field_id = '';
-		if (is_array($fields) && $fields) {
-			$first = reset($fields);
-			if (is_array($first)) {
-				$first_field_id = (string)($first['id'] ?? '');
-			}
-		}
-
-		if ($first_field_id && method_exists($ajax_handler, 'add_error')) {
-			//$ajax_handler->add_error($first_field_id, $message);
-		}
-
-		if ($dk_enabled) {
-			duplicateKiller_Diagnostics::log('elementor', 'ip_limit_blocked', [
-				'request_debug_id' => $request_debug_id,
-				'db_form_name'     => $db_form_name,
-				'message'          => $message,
-				'first_field_id'   => $first_field_id,
-			]);
-		}
-
-		return;
-	}
-
-	// 2) duplicate check
-
-	//cookie check
-	$cookie = duplicateKiller_get_form_cookie_simple(
+	$resolved_form = DuplicateKiller_Form_Config_Resolver::resolve_elementor(
 		$elementor_page,
-		$db_form_name,
-		'dk_form_cookie_elementor_forms_'
+		$current_form
 	);
 
-	$form_cookie    = $cookie['form_cookie'];
-	$checked_cookie = $cookie['checked_cookie'];
+	if ( false === $resolved_form ) {
+		if ( $dk_enabled ) {
+			duplicateKiller_Diagnostics::log( 'elementor', 'form_config_not_found', array(
+				'request_debug_id' => $request_debug_id,
+				'current_form'     => $current_form,
+			) );
+		}
 
-	if ($dk_enabled) {
-		duplicateKiller_Diagnostics::log('elementor', 'cookie_state_resolved', [
-			'request_debug_id' => $request_debug_id,
-			'db_form_name'     => $db_form_name,
-			'form_cookie'      => $form_cookie,
-			'checked_cookie'   => $checked_cookie,
-		]);
+		return;
 	}
 
-	foreach ($cfg as $field_key => $enabled) {
-		if (in_array($field_key, [
-			'form_id','error_message','error_message_limit_ip_option',
-			'cookie_option','cookie_option_days','cross_form_option',
-			'user_ip','user_ip_days'
-		], true)) {
-			continue;
-		}
+	$form_name      = $resolved_form['form_name'];
+	$form_config    = $resolved_form['form_config'];
+	$enabled_fields = $resolved_form['enabled_fields'];
+	$data           = DuplicateKiller_Form_Normalizer::elementor_data( $record );
 
-		if (!$enabled || !isset($data[$field_key])) {
-			continue;
-		}
+	$ip_limit_enabled    = ! empty( $form_config['user_ip'] ) && (string) $form_config['user_ip'] === '1';
+	$field_check_enabled = ! empty( $enabled_fields );
+	$cross_form_enabled  = ! empty( $form_config['cross_form_option'] ) && (string) $form_config['cross_form_option'] === '1';
 
-		$submitted_value = $data[$field_key];
-		if ($submitted_value === '') {
-			continue;
-		}
-
-		if ($dk_enabled) {
-			duplicateKiller_Diagnostics::log('elementor', 'field_duplicate_check_start', [
+	if ( ! $ip_limit_enabled && ! $field_check_enabled && ! $cross_form_enabled ) {
+		if ( $dk_enabled ) {
+			duplicateKiller_Diagnostics::log( 'elementor', 'no_duplicate_killer_feature_enabled', array(
 				'request_debug_id' => $request_debug_id,
-				'db_form_name'     => $db_form_name,
-				'field_key'        => $field_key,
-				'field_value'      => $submitted_value,
-				'enabled'          => $enabled ? 1 : 0,
-			]);
+				'form_name'        => $form_name,
+				'form_config'      => $form_config,
+			) );
 		}
 
-		$result = duplicateKiller_check_duplicate_by_key_value(
-			"elementor",
-			$db_form_name,
-			$field_key,
-			$submitted_value,
-			$form_cookie,
-			$checked_cookie
+		return;
+	}
+
+	if ( $dk_enabled ) {
+		duplicateKiller_Diagnostics::log( 'elementor', 'process_start', array(
+			'request_debug_id'    => $request_debug_id,
+			'current_form'        => $current_form,
+			'form_name'           => $form_name,
+			'form_config'         => $form_config,
+			'enabled_fields'      => $enabled_fields,
+			'ip_limit_enabled'    => $ip_limit_enabled ? 1 : 0,
+			'field_check_enabled' => $field_check_enabled ? 1 : 0,
+			'cross_form_enabled'  => $cross_form_enabled ? 1 : 0,
+			'data'                => $data,
+			'group_mode'          => $resolved_form['group_mode'],
+			'group_key'           => $resolved_form['group_key'],
+		) );
+	}
+
+	// 1. IP limit check.
+	if ( $ip_limit_enabled ) {
+		$ip_limit_result = DuplicateKiller_IP_Limit_Checker::check(
+			'elementor',
+			$form_name,
+			$form_config,
+			array(
+				'request_debug_id' => $request_debug_id,
+				'form_name'        => $form_name,
+			)
 		);
 
-		if ($dk_enabled) {
-			duplicateKiller_Diagnostics::log('elementor', 'field_duplicate_check_result', [
-				'request_debug_id' => $request_debug_id,
-				'db_form_name'     => $db_form_name,
-				'field_key'        => $field_key,
-				'field_value'      => $submitted_value,
-				'duplicate_result' => $result ? 1 : 0,
-			]);
-		}
+		if ( $ip_limit_result['blocked'] ) {
+			$message = $ip_limit_result['message'];
 
-		if ($result) {
-			$msg = !empty($cfg['error_message'])
-				? (string)$cfg['error_message']
-				: __('Duplicate found.', 'duplicate-killer');
-
-			$ajax_handler->add_error_message($msg);
-			if (method_exists($ajax_handler, 'add_error')) {
-				//$ajax_handler->add_error($field_key, $msg);
+			if ( is_object( $ajax_handler ) && method_exists( $ajax_handler, 'add_error_message' ) ) {
+				$ajax_handler->add_error_message( $message );
 			}
 
-			if ($dk_enabled) {
-				duplicateKiller_Diagnostics::log('elementor', 'duplicate_found', [
+			if ( $dk_enabled ) {
+				duplicateKiller_Diagnostics::log( 'elementor', 'ip_limit_blocked', array(
 					'request_debug_id' => $request_debug_id,
-					'db_form_name'     => $db_form_name,
-					'field_key'        => $field_key,
-					'message'          => $msg,
-				]);
+					'form_name'        => $form_name,
+					'message'          => $message,
+				) );
 			}
 
 			return;
 		}
 	}
 
-	if ($dk_enabled) {
-		duplicateKiller_Diagnostics::log('elementor', 'guard_end_success', [
+	$cookie = duplicateKiller_get_form_cookie_simple(
+		$elementor_page,
+		$form_name,
+		'dk_form_cookie_elementor_forms_'
+	);
+
+	$form_cookie    = $cookie['form_cookie'];
+	$checked_cookie = $cookie['checked_cookie'];
+
+	if ( $dk_enabled ) {
+		duplicateKiller_Diagnostics::log( 'elementor', 'cookie_state_resolved', array(
 			'request_debug_id' => $request_debug_id,
-			'db_form_name'     => $db_form_name,
-		]);
+			'form_name'        => $form_name,
+			'form_cookie'      => $form_cookie,
+			'checked_cookie'   => $checked_cookie ? 1 : 0,
+		) );
 	}
 
-	// IMPORTANT: no DB insert here
+	// 2. Duplicate field check.
+	if ( $field_check_enabled ) {
+		$result = DuplicateKiller_FieldDuplicate_Checker::check(
+			'elementor',
+			$form_name,
+			$enabled_fields,
+			$data,
+			$form_cookie,
+			$checked_cookie,
+			$form_config,
+			array(
+				'request_debug_id' => $request_debug_id,
+				'form_name'        => $form_name,
+			)
+		);
+
+		if ( $result['blocked'] ) {
+			$message = $result['message'];
+
+			if ( is_object( $ajax_handler ) && method_exists( $ajax_handler, 'add_error_message' ) ) {
+				$ajax_handler->add_error_message( $message );
+			}
+
+			if ( $dk_enabled ) {
+				duplicateKiller_Diagnostics::log( 'elementor', 'duplicate_found', array(
+					'request_debug_id' => $request_debug_id,
+					'form_name'        => $form_name,
+					'field_key'        => $result['field_key'],
+					'message'          => $message,
+				) );
+			}
+
+			return;
+		}
+	}
+
+	// 3. Cross-form duplicate check.
+	if (
+		$cross_form_enabled
+		&& class_exists( 'DuplicateKiller_CrossForm' )
+	) {
+		$cross_match = DuplicateKiller_CrossForm::checkAssocCrossFormDuplicate(
+			'elementor',
+			$elementor_page,
+			$form_name,
+			$form_config,
+			$data
+		);
+
+		if ( $cross_match ) {
+			$message = ! empty( $form_config['error_message'] )
+				? (string) $form_config['error_message']
+				: __( 'Duplicate found.', 'duplicate-killer' );
+
+			if ( is_object( $ajax_handler ) && method_exists( $ajax_handler, 'add_error_message' ) ) {
+				$ajax_handler->add_error_message( $message );
+			}
+
+			if ( $dk_enabled ) {
+				duplicateKiller_Diagnostics::log( 'elementor', 'cross_form_duplicate_found', array(
+					'request_debug_id' => $request_debug_id,
+					'form_name'        => $form_name,
+					'field_key'        => $cross_match['current_field_id'] ?? '',
+					'cross_match'      => $cross_match,
+					'message'          => $message,
+				) );
+			}
+
+			return;
+		}
+	}
+
+	if ( $dk_enabled ) {
+		duplicateKiller_Diagnostics::log( 'elementor', 'guard_end_success', array(
+			'request_debug_id' => $request_debug_id,
+			'form_name'        => $form_name,
+		) );
+	}
 }
 
-add_action('elementor_pro/forms/new_record', 'duplicateKiller_elementor_save_only', 10, 2);
-
-function duplicateKiller_elementor_save_only($record, $handler) {
+function duplicateKiller_elementor_save_only( $record, $handler ) {
 	if ( is_object( $handler ) ) {
 		if ( isset( $handler->is_success ) && false === $handler->is_success ) {
 			return;
@@ -285,215 +212,100 @@ function duplicateKiller_elementor_save_only($record, $handler) {
 			return;
 		}
 	}
-	global $wpdb;
-	$table_name = $wpdb->prefix . 'dk_forms_duplicate';
 
-	$elementor_page = get_option('Elementor_page');
+	$elementor_page = get_option( 'Elementor_page' );
 	$elementor_page = duplicateKiller_convert_option_architecture( $elementor_page, 'elementor_' );
-	if (!is_array($elementor_page)) {
-		$elementor_page = [];
+	if ( ! is_array( $elementor_page ) ) {
+		$elementor_page = array();
 	}
 
-	$request_debug_id = uniqid('duplicateKiller_elementor_save_', true);
-	$dk_enabled       = class_exists('duplicateKiller_Diagnostics');
+	$request_debug_id = uniqid( 'duplicateKiller_elementor_save_', true );
+	$dk_enabled       = class_exists( 'duplicateKiller_Diagnostics' );
 
-	// context
-	$post_id   = (int)($record->get_form_settings('post_id') ?? 0);
-	$form_name = trim((string)($record->get_form_settings('form_name') ?? ''));
+	$current_form = DuplicateKiller_Form_Normalizer::elementor( $record );
 
-	$node_id = (string)($record->get_form_settings('id') ?? '');
-	if ($node_id === '') {
-		$node_id = (string)($record->get_form_settings('form_id') ?? '');
-	}
+	$resolved_form = DuplicateKiller_Form_Config_Resolver::resolve_elementor(
+		$elementor_page,
+		$current_form
+	);
 
-	if ($form_name === '' && $post_id) {
-		$post = get_post($post_id);
-		$form_name = $post ? $post->post_title : 'Elementor Form';
-	}
-
-	if ($dk_enabled) {
-		duplicateKiller_Diagnostics::log('elementor', 'save_start', [
-			'request_debug_id' => $request_debug_id,
-			'post_id'          => $post_id,
-			'form_name'        => $form_name,
-			'node_id'          => $node_id,
-		]);
-	}
-
-	if ($form_name === '' || $node_id === '') {
-		if ($dk_enabled) {
-			duplicateKiller_Diagnostics::log('elementor', 'save_exit_missing_context', [
+	if ( false === $resolved_form ) {
+		if ( $dk_enabled ) {
+			duplicateKiller_Diagnostics::log( 'elementor', 'save_form_config_not_found', array(
 				'request_debug_id' => $request_debug_id,
-				'post_id'          => $post_id,
+				'current_form'     => $current_form,
+			) );
+		}
+
+		return;
+	}
+
+	$form_name      = $resolved_form['form_name'];
+	$form_config    = $resolved_form['form_config'];
+	$enabled_fields = $resolved_form['enabled_fields'];
+	$data           = DuplicateKiller_Form_Normalizer::elementor_data( $record );
+
+	$ip_limit_enabled    = ! empty( $form_config['user_ip'] ) && (string) $form_config['user_ip'] === '1';
+	$field_check_enabled = ! empty( $enabled_fields );
+	$cross_form_enabled  = ! empty( $form_config['cross_form_option'] ) && (string) $form_config['cross_form_option'] === '1';
+
+	$should_save_submission = (
+		$ip_limit_enabled
+		|| $field_check_enabled
+		|| $cross_form_enabled
+	);
+
+	if ( ! $should_save_submission ) {
+		if ( $dk_enabled ) {
+			duplicateKiller_Diagnostics::log( 'elementor', 'save_skipped_no_feature_enabled', array(
+				'request_debug_id' => $request_debug_id,
 				'form_name'        => $form_name,
-				'node_id'          => $node_id,
-			]);
+				'form_config'      => $form_config,
+			) );
 		}
+
 		return;
 	}
 
-	$db_form_name = $form_name . '.' . $node_id;
-
-	// ---------------------------------------------------------------------
-	// Elementor Group Mode: store under FormName.__group__ so duplicates match across instances
-	// ---------------------------------------------------------------------
-	$group_mode = (int) get_option('duplicateKiller_elementor_group_mode', 0);
-	$group_key  = $form_name . '.__group__';
-
-	if ($group_mode === 1 && isset($elementor_page[$group_key]) && is_array($elementor_page[$group_key])) {
-		$db_form_name = $group_key;
-	}
-
-	if ($dk_enabled) {
-		duplicateKiller_Diagnostics::log('elementor', 'save_group_mode_resolved', [
-			'request_debug_id' => $request_debug_id,
-			'group_mode'       => $group_mode,
-			'group_key'        => $group_key,
-			'db_form_name'     => $db_form_name,
-		]);
-	}
-
-	// cfg
-	$cfg = [];
-	if (!empty($elementor_page[$db_form_name]) && is_array($elementor_page[$db_form_name])) {
-		$cfg = $elementor_page[$db_form_name];
-	} else {
-		foreach ($elementor_page as $k => $v) {
-			if (!is_array($v) || empty($v['form_id'])) {
-				continue;
-			}
-			if ((string)$v['form_id'] === (string)$node_id) {
-				$cfg = $v;
-				if (is_string($k) && $k !== '') {
-					$db_form_name = $k;
-				}
-				break;
-			}
-		}
-	}
-
-	if ($dk_enabled) {
-		duplicateKiller_Diagnostics::log('elementor', 'save_config_resolved', [
-			'request_debug_id' => $request_debug_id,
-			'db_form_name'     => $db_form_name,
-			'config_found'     => !empty($cfg) ? 1 : 0,
-			'config'           => $cfg,
-		]);
-	}
-
-	if (empty($cfg)) {
-		return;
-	}
-
-	//cookie check
 	$cookie = duplicateKiller_get_form_cookie_simple(
 		$elementor_page,
-		$db_form_name,
+		$form_name,
 		'dk_form_cookie_elementor_forms_'
 	);
 
-	$form_cookie    = $cookie['form_cookie'];
-	$checked_cookie = $cookie['checked_cookie'];
+	$form_cookie = $cookie['form_cookie'];
 
-	if ($dk_enabled) {
-		duplicateKiller_Diagnostics::log('elementor', 'save_cookie_state_resolved', [
+	if ( $dk_enabled ) {
+		duplicateKiller_Diagnostics::log( 'elementor', 'save_start', array(
+			'request_debug_id'        => $request_debug_id,
+			'current_form'            => $current_form,
+			'form_name'               => $form_name,
+			'form_config'             => $form_config,
+			'enabled_fields'          => $enabled_fields,
+			'ip_limit_enabled'        => $ip_limit_enabled ? 1 : 0,
+			'field_check_enabled'     => $field_check_enabled ? 1 : 0,
+			'cross_form_enabled'      => $cross_form_enabled ? 1 : 0,
+			'should_save_submission'  => $should_save_submission ? 1 : 0,
+			'data'                    => $data,
+			'group_mode'              => $resolved_form['group_mode'],
+			'group_key'               => $resolved_form['group_key'],
+		) );
+	}
+
+	DuplicateKiller_Submission_Storage::save(
+		'elementor',
+		$form_name,
+		$data,
+		$form_cookie,
+		$should_save_submission,
+		$ip_limit_enabled,
+		array(),
+		array(),
+		array(
 			'request_debug_id' => $request_debug_id,
-			'db_form_name'     => $db_form_name,
-			'form_cookie'      => $form_cookie,
-			'checked_cookie'   => $checked_cookie,
-		]);
-	}
-
-	// data
-	$fields = $record->get('fields');
-	if (!is_array($fields)) {
-		$fields = [];
-	}
-
-	$data = [];
-	foreach ($fields as $key => $field) {
-		if (!is_array($field)) {
-			continue;
-		}
-		$fid = (string)($field['id'] ?? $key);
-
-		$val = $field['value'] ?? '';
-		if (is_array($val)) {
-			$val = implode(' ', array_map('strval', $val));
-		}
-		$data[$fid] = sanitize_text_field((string)$val);
-	}
-
-	if ($dk_enabled) {
-		duplicateKiller_Diagnostics::log('elementor', 'save_fields_mapped', [
-			'request_debug_id' => $request_debug_id,
-			'db_form_name'     => $db_form_name,
-			'fields_raw'       => $fields,
-			'data_mapped'      => $data,
-		]);
-	}
-	$meta_keys = [
-		'form_id',
-		'error_message',
-		'error_message_limit_ip_option',
-		'cookie_option',
-		'cookie_option_days',
-		'cross_form_option',
-		'user_ip',
-		'user_ip_days',
-	];
-
-	$enabled_duplicate_fields = array_diff(
-		array_keys( $cfg ),
-		$meta_keys
+			'form_name'        => $form_name,
+		)
 	);
-
-	$submitted_duplicate_fields = array_intersect(
-		$enabled_duplicate_fields,
-		array_keys( $data )
-	);
-
-	if (
-		empty( $submitted_duplicate_fields ) &&
-		( ! isset( $cfg['user_ip'] ) || (string) $cfg['user_ip'] !== '1' )
-	) {
-		return;
-	}
-	// IP store flag
-	$form_ip = (isset($cfg['user_ip']) && $cfg['user_ip'] === "1") ? duplicateKiller_get_user_ip() : 'NULL';
-
-	if ($dk_enabled) {
-		duplicateKiller_Diagnostics::log('elementor', 'save_ip_resolved', [
-			'request_debug_id' => $request_debug_id,
-			'db_form_name'     => $db_form_name,
-			'form_ip'          => $form_ip,
-		]);
-	}
-	
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- Required for custom plugin table insert.
-	$insert_result = $wpdb->insert(
-		$table_name,
-		[
-			'form_plugin' => 'elementor',
-			'form_name'   => $db_form_name,
-			'form_value'  => serialize($data),
-			'form_cookie' => $form_cookie,
-			'form_date'   => current_time('Y-m-d H:i:s'),
-			'form_ip'     => $form_ip,
-		],
-		['%s','%s','%s','%s','%s','%s']
-	);
-
-	if ($dk_enabled) {
-		duplicateKiller_Diagnostics::log('elementor', 'save_after_insert', [
-			'request_debug_id' => $request_debug_id,
-			'db_form_name'     => $db_form_name,
-			'insert_ok'        => empty($wpdb->last_error) && false !== $insert_result ? 1 : 0,
-			'wpdb_last_error'  => $wpdb->last_error,
-			'insert_id'        => $wpdb->insert_id,
-			'table_name'       => $table_name,
-		]);
-	}
 }
 
 /**

@@ -2,236 +2,171 @@
 defined( 'ABSPATH' ) or die( 'You shall not pass!' );
 
 add_filter('frm_validate_entry', 'duplicateKiller_formidable_before_send_email', 10, 2);
-function duplicateKiller_formidable_before_send_email($errors, $values) {
-    global $wpdb;
-
-    $table_name = $wpdb->prefix . 'dk_forms_duplicate';
-
-    $formidable_page = get_option('Formidable_page');
+function duplicateKiller_formidable_before_send_email( $errors, $values ) {
+	$formidable_page = get_option( 'Formidable_page' );
 	$formidable_page = duplicateKiller_convert_option_architecture( $formidable_page, 'formidable_' );
-    if (!is_array($formidable_page)) {
-        return $errors;
-    }
-
-    $request_debug_id = uniqid('duplicateKiller_formidable_', true);
-    $dk_enabled       = class_exists('duplicateKiller_Diagnostics');
-
-    // Only handle real create submissions
-    if (empty($values['frm_action']) || (string)$values['frm_action'] !== 'create') {
-        return $errors;
-    }
-
-    $form_id  = !empty($values['form_id']) ? (int)$values['form_id'] : 0;
-    $form_key = !empty($values['form_key']) ? trim((string)$values['form_key']) : '';
-
-    if ($dk_enabled) {
-        duplicateKiller_Diagnostics::log('formidable', 'process_start', [
-            'request_debug_id' => $request_debug_id,
-            'form_id'          => $form_id,
-            'form_key'         => $form_key,
-            'values'           => $values,
-        ]);
-    }
-
-    if ($form_id <= 0 || $form_key === '') {
-        return $errors;
-    }
-
-    $wanted_form_id = $form_key . '.' . $form_id;
-
-    if (empty($formidable_page[$wanted_form_id]) || !is_array($formidable_page[$wanted_form_id])) {
-        return $errors;
-    }
-
-    $cfg = $formidable_page[$wanted_form_id];
-
-    if (empty($cfg['form_id'])) {
-        return $errors;
-    }
-
-    $form_name = (string)$cfg['form_id'];
-
-    if ($dk_enabled) {
-        duplicateKiller_Diagnostics::log('formidable', 'config_resolved', [
-            'request_debug_id' => $request_debug_id,
-            'form_name'        => $form_name,
-            'config'           => $cfg,
-        ]);
-    }
-
-    // =========================
-    // 1) IP check
-    // =========================
-    if (duplicateKiller_ip_limit_trigger('Formidable', $formidable_page, $form_name)) {
-
-        $message = !empty($cfg['error_message_limit_ip_option'])
-            ? (string)$cfg['error_message_limit_ip_option']
-            : 'This IP has been already submitted.';
-
-        if ($dk_enabled) {
-            duplicateKiller_Diagnostics::log('formidable', 'ip_limit_blocked', [
-                'request_debug_id' => $request_debug_id,
-                'form_name'        => $form_name,
-                'message'          => $message,
-            ]);
-        }
-
-        $errors['frm_error'] = $message;
-        return $errors;
-    }
-
-    // =========================
-    // 2) Duplicate field check
-    // =========================
-    $posted = (!empty($values['item_meta']) && is_array($values['item_meta'])) ? $values['item_meta'] : [];
-
-    if (empty($posted)) {
-        return $errors;
-    }
-
-    $cookie = duplicateKiller_get_form_cookie_simple(
-        $formidable_page,
-        $form_name,
-        'dk_form_cookie_formidable_'
-    );
-
-    $form_cookie    = $cookie['form_cookie'];
-    $checked_cookie = $cookie['checked_cookie'];
-
-    if ($dk_enabled) {
-        duplicateKiller_Diagnostics::log('formidable', 'cookie_state_resolved', [
-            'request_debug_id' => $request_debug_id,
-            'form_name'        => $form_name,
-            'form_cookie'      => $form_cookie,
-            'checked_cookie'   => $checked_cookie,
-        ]);
-    }
-
-    $storage_fields = [];
-
-    $duplicate_message = !empty($cfg['error_message'])
-        ? (string)$cfg['error_message']
-        : 'Please check all fields! These values have been submitted already!';
-		
-	$has_active_duplicate_field = false;
-    foreach ($posted as $fid => $val) {
-
-        if (!is_numeric($fid)) continue;
-        $fid = (int)$fid;
-        if ($fid <= 0) continue;
-
-        $submitted_value = $val;
-
-        if (is_array($submitted_value)) {
-            $submitted_value = reset($submitted_value);
-        }
-
-        $submitted_value = is_string($submitted_value) ? wp_unslash($submitted_value) : $submitted_value;
-        $submitted_value = is_scalar($submitted_value) ? sanitize_text_field((string)$submitted_value) : '';
-
-        $storage_fields[$fid] = $submitted_value;
-
-        if ($dk_enabled) {
-            duplicateKiller_Diagnostics::log('formidable', 'field_inspected', [
-                'request_debug_id' => $request_debug_id,
-                'field_id'         => $fid,
-                'value'            => $submitted_value,
-                'enabled'          => !empty($cfg[$fid]) ? 1 : 0,
-            ]);
-        }
-
-        if (empty($cfg[$fid]) || (int)$cfg[$fid] !== 1) {
-            continue;
-        }
-		$has_active_duplicate_field = true;
-        $is_dup = duplicateKiller_check_duplicate_by_key_value(
-            'Formidable',
-            $form_name,
-            $fid,
-            $submitted_value,
-            $form_cookie,
-            $checked_cookie
-        );
-
-        if ($dk_enabled) {
-            duplicateKiller_Diagnostics::log('formidable', 'field_duplicate_check_result', [
-                'request_debug_id' => $request_debug_id,
-                'field_id'         => $fid,
-                'value'            => $submitted_value,
-                'duplicate'        => $is_dup ? 1 : 0,
-            ]);
-        }
-
-        if ($is_dup) {
-
-            if ($dk_enabled) {
-                duplicateKiller_Diagnostics::log('formidable', 'duplicate_found', [
-                    'request_debug_id' => $request_debug_id,
-                    'field_id'         => $fid,
-                    'message'          => $duplicate_message,
-                ]);
-            }
-
-            $errors['form'] = $duplicate_message;
-            $errors[$fid]   = $duplicate_message;
-            return $errors;
-        }
-    }
-
-    // =========================
-    // 3) Pro feature - Cross-form duplicate
-    // =========================
-	
-	$should_save_submission = (
-		$has_active_duplicate_field ||
-		(!empty($cfg['user_ip']) && (int)$cfg['user_ip'] > 0)
-	);
-
-	if (!$should_save_submission) {
-		if ($dk_enabled) {
-			duplicateKiller_Diagnostics::log('formidable', 'save_skipped_no_active_rules', [
-				'request_debug_id'         => $request_debug_id,
-				'form_name'                => $form_name,
-				'has_active_duplicate_field' => $has_active_duplicate_field ? 1 : 0,
-				'user_ip_enabled'          => (!empty($cfg['user_ip']) && (int)$cfg['user_ip'] > 0) ? 1 : 0,
-			]);
-		}
-
+	if ( ! is_array( $formidable_page ) ) {
 		return $errors;
 	}
-    // =========================
-    // 4) Save to DB
-    // =========================
-    $form_ip = (!empty($cfg['user_ip']) && (int)$cfg['user_ip'] > 0)
-        ? duplicateKiller_get_user_ip()
-        : 'NULL';
 
-    $form_value = serialize($storage_fields);
-    $form_date  = current_time('Y-m-d H:i:s');
+	if ( empty( $values['frm_action'] ) || (string) $values['frm_action'] !== 'create' ) {
+		return $errors;
+	}
 
-    // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
-    $insert_result = $wpdb->insert(
-        $table_name,
-        [
-            'form_plugin' => 'Formidable',
-            'form_name'   => $form_name,
-            'form_value'  => $form_value,
-            'form_cookie' => $form_cookie,
-            'form_date'   => $form_date,
-            'form_ip'     => $form_ip,
-        ]
-    );
+	$request_debug_id = uniqid( 'duplicateKiller_formidable_', true );
+	$dk_enabled       = class_exists( 'duplicateKiller_Diagnostics' );
 
-    if ($dk_enabled) {
-        duplicateKiller_Diagnostics::log('formidable', 'save_after_insert', [
-            'request_debug_id' => $request_debug_id,
-            'insert_ok'        => empty($wpdb->last_error) && false !== $insert_result ? 1 : 0,
-            'wpdb_last_error'  => $wpdb->last_error,
-            'insert_id'        => $wpdb->insert_id,
-        ]);
-    }
+	$current_form = DuplicateKiller_Form_Normalizer::formidable( $values );
 
-    return $errors;
+	$resolved_form = DuplicateKiller_Form_Config_Resolver::resolve_formidable(
+		$formidable_page,
+		$current_form
+	);
+
+	if ( false === $resolved_form ) {
+		if ( $dk_enabled ) {
+			duplicateKiller_Diagnostics::log( 'formidable', 'form_config_not_found', array(
+				'request_debug_id' => $request_debug_id,
+				'current_form'     => $current_form,
+				'values'           => $values,
+			) );
+		}
+		return $errors;
+	}
+
+	$form_name      = $resolved_form['form_name'];
+	$form_config    = $resolved_form['form_config'];
+	$enabled_fields = $resolved_form['enabled_fields'];
+	$data           = DuplicateKiller_Form_Normalizer::formidable_data( $values );
+
+	$ip_limit_enabled    = ! empty( $form_config['user_ip'] ) && (string) $form_config['user_ip'] === '1';
+	$field_check_enabled = ! empty( $enabled_fields );
+	$cross_form_enabled  = ! empty( $form_config['cross_form_option'] ) && (string) $form_config['cross_form_option'] === '1';
+
+	if ( ! $ip_limit_enabled && ! $field_check_enabled && ! $cross_form_enabled ) {
+		if ( $dk_enabled ) {
+			duplicateKiller_Diagnostics::log( 'formidable', 'no_duplicate_killer_feature_enabled', array(
+				'request_debug_id' => $request_debug_id,
+				'form_name'        => $form_name,
+				'form_config'      => $form_config,
+			) );
+		}
+		return $errors;
+	}
+
+	if ( $dk_enabled ) {
+		duplicateKiller_Diagnostics::log( 'formidable', 'process_start', array(
+			'request_debug_id'    => $request_debug_id,
+			'current_form'        => $current_form,
+			'form_name'           => $form_name,
+			'form_config'         => $form_config,
+			'enabled_fields'      => $enabled_fields,
+			'ip_limit_enabled'    => $ip_limit_enabled ? 1 : 0,
+			'field_check_enabled' => $field_check_enabled ? 1 : 0,
+			'cross_form_enabled'  => $cross_form_enabled ? 1 : 0,
+			'data'                => $data,
+		) );
+	}
+
+	if ( $ip_limit_enabled ) {
+		$ip_limit_result = DuplicateKiller_IP_Limit_Checker::check(
+			'Formidable',
+			$form_name,
+			$form_config,
+			array(
+				'request_debug_id' => $request_debug_id,
+				'form_name'        => $form_name,
+			)
+		);
+
+		if ( $ip_limit_result['blocked'] ) {
+			$errors['frm_error'] = $ip_limit_result['message'];
+			return $errors;
+		}
+	}
+
+	$cookie = duplicateKiller_get_form_cookie_simple(
+		$formidable_page,
+		$form_name,
+		'dk_form_cookie_formidable_'
+	);
+
+	$form_cookie    = $cookie['form_cookie'];
+	$checked_cookie = $cookie['checked_cookie'];
+
+	if ( $field_check_enabled ) {
+		$result = DuplicateKiller_FieldDuplicate_Checker::check(
+			'Formidable',
+			$form_name,
+			$enabled_fields,
+			$data,
+			$form_cookie,
+			$checked_cookie,
+			$form_config,
+			array(
+				'request_debug_id' => $request_debug_id,
+				'form_name'        => $form_name,
+			)
+		);
+
+		if ( $result['blocked'] ) {
+			$errors['form'] = $result['message'];
+			$errors[$result['field_key'] ] = $result['message'];
+			return $errors;
+		}
+	}
+
+	if (
+		$cross_form_enabled
+		&& class_exists( 'DuplicateKiller_CrossForm' )
+	) {
+		$cross_match = DuplicateKiller_CrossForm::checkAssocCrossFormDuplicate(
+			'Formidable',
+			$formidable_page,
+			$form_name,
+			$form_config,
+			$data
+		);
+
+		if ( $cross_match ) {
+			$message = ! empty( $form_config['error_message'] )
+				? (string) $form_config['error_message']
+				: __( 'Please check all fields! These values have been submitted already!', 'duplicate-killer' );
+
+			$matched_field_id = $cross_match['current_field_id'] ?? '';
+
+			$errors['form'] = $message;
+
+			if ( '' !== $matched_field_id ) {
+				$errors[ (int) $matched_field_id ] = ' ';
+			}
+
+			return $errors;
+		}
+	}
+
+	$should_save_submission = (
+		$ip_limit_enabled
+		|| $field_check_enabled
+		|| $cross_form_enabled
+	);
+
+	DuplicateKiller_Submission_Storage::save(
+		'Formidable',
+		$form_name,
+		$data,
+		$form_cookie,
+		$should_save_submission,
+		$ip_limit_enabled,
+		array(),
+		array(),
+		array(
+			'request_debug_id' => $request_debug_id,
+			'form_name'        => $form_name,
+		)
+	);
+
+	return $errors;
 }
 
 function duplicateKiller_formidable_get_forms(): array {

@@ -3,70 +3,37 @@ defined( 'ABSPATH' ) or die( 'You shall not pass!' );
 
 add_filter('breakdance_form_run_action_store_submission', 'duplicateKiller_breakdance_guard_action', 10, 5);
 add_filter('breakdance_form_run_action_email',            'duplicateKiller_breakdance_guard_action', 10, 5);
+function duplicateKiller_breakdance_guard_action( $canExecute, $action, $extra, $form, $settings ) {
 
-function duplicateKiller_breakdance_guard_action($canExecute, $action, $extra, $form, $settings)
-{
-
-	if (is_wp_error($canExecute)) {
+	if ( is_wp_error( $canExecute ) ) {
 		return $canExecute;
 	}
 
-	static $dk_state = [
+	static $dk_state = array(
 		'checked_once'     => false,
 		'duplicate_found'  => false,
 		'error_sent'       => false,
 		'saved_once'       => false,
 		'error_message'    => '',
 		'request_debug_id' => '',
-	];
+	);
 
-	if ($dk_state['request_debug_id'] === '') {
-		$dk_state['request_debug_id'] = uniqid('duplicateKiller_breakdance_', true);
+	if ( '' === $dk_state['request_debug_id'] ) {
+		$dk_state['request_debug_id'] = uniqid( 'duplicateKiller_breakdance_', true );
 	}
 
 	$request_debug_id = $dk_state['request_debug_id'];
-	$dk_enabled       = class_exists('duplicateKiller_Diagnostics');
+	$dk_enabled       = class_exists( 'duplicateKiller_Diagnostics' );
 
-	if ($dk_enabled) {
-		duplicateKiller_Diagnostics::log('breakdance', 'guard_start', [
-			'request_debug_id' => $request_debug_id,
-			'action'           => $action,
-			'can_execute_type' => is_object($canExecute) ? get_class($canExecute) : gettype($canExecute),
-			'is_wp_error'      => is_wp_error($canExecute) ? 1 : 0,
-			'extra_raw'        => is_array($extra) ? $extra : [],
-			'form_raw'         => is_array($form) ? $form : [],
-			'settings_raw'     => is_array($settings) ? $settings : [],
-			'dk_state_before'  => $dk_state,
-		]);
-	}
-
-	if ($dk_state['checked_once']) {
-		if ($dk_enabled) {
-			duplicateKiller_Diagnostics::log('breakdance', 'guard_already_checked', [
-				'request_debug_id' => $request_debug_id,
-				'dk_state'         => $dk_state,
-			]);
-		}
-
-		if ($dk_state['duplicate_found']) {
-			if (!$dk_state['error_sent']) {
+	if ( $dk_state['checked_once'] ) {
+		if ( $dk_state['duplicate_found'] ) {
+			if ( ! $dk_state['error_sent'] ) {
 				$dk_state['error_sent'] = true;
 
-				if ($dk_enabled) {
-					duplicateKiller_Diagnostics::log('breakdance', 'duplicate_block_return_wp_error', [
-						'request_debug_id' => $request_debug_id,
-						'message'          => $dk_state['error_message'] ?: __('Duplicate found.', 'duplicate-killer'),
-					]);
-				}
-
-				return new \WP_Error('dk_duplicate', $dk_state['error_message'] ?: __('Duplicate found.', 'duplicate-killer'));
-			}
-
-			if ($dk_enabled) {
-				duplicateKiller_Diagnostics::log('breakdance', 'duplicate_block_return_false', [
-					'request_debug_id' => $request_debug_id,
-					'dk_state'         => $dk_state,
-				]);
+				return new \WP_Error(
+					'dk_duplicate',
+					$dk_state['error_message'] ?: __( 'Duplicate found.', 'duplicate-killer' )
+				);
 			}
 
 			return false;
@@ -77,289 +44,258 @@ function duplicateKiller_breakdance_guard_action($canExecute, $action, $extra, $
 
 	$dk_state['checked_once'] = true;
 
-	$post_id = (int)($extra['postId'] ?? 0);
-	$node_id = (int)($extra['formId'] ?? 0);
-
-	if ($dk_enabled) {
-		duplicateKiller_Diagnostics::log('breakdance', 'ids_resolved', [
-			'request_debug_id' => $request_debug_id,
-			'post_id'          => $post_id,
-			'node_id'          => $node_id,
-		]);
-	}
-
-	if (!$post_id || !$node_id) {
-		if ($dk_enabled) {
-			duplicateKiller_Diagnostics::log('breakdance', 'guard_exit_missing_ids', [
-				'request_debug_id' => $request_debug_id,
-				'post_id'          => $post_id,
-				'node_id'          => $node_id,
-			]);
-		}
-		return $canExecute;
-	}
-
-	$bd_form   = $settings['form'] ?? [];
-	$base_name = trim((string)($bd_form['form_name'] ?? ''));
-	if ($base_name === '') {
-		$post = get_post($post_id);
-		$base_name = $post ? $post->post_title : 'Breakdance Form';
-	}
-
-	$options = get_option('Breakdance_page');
+	$options = get_option( 'Breakdance_page' );
 	$options = duplicateKiller_convert_option_architecture( $options, 'breakdance_' );
-	if (!is_array($options)) {
-		$options = [];
+	if ( ! is_array( $options ) ) {
+		$options = array();
 	}
 
-	$db_form_name = $base_name . '.' . $post_id . '.' . $node_id;
-	$cfg          = array();
+	$current_form = DuplicateKiller_Form_Normalizer::breakdance(
+		is_array( $extra ) ? $extra : array(),
+		is_array( $form ) ? $form : array(),
+		is_array( $settings ) ? $settings : array()
+	);
 
-	if ( isset( $options[ $db_form_name ] ) && is_array( $options[ $db_form_name ] ) ) {
-		$cfg = $options[ $db_form_name ];
-	}
-
-	if ($dk_enabled) {
-		duplicateKiller_Diagnostics::log('breakdance', 'config_resolved', [
-			'request_debug_id' => $request_debug_id,
-			'base_name'        => $base_name,
-			'config_found'     => !empty($cfg) ? 1 : 0,
-			'config'           => $cfg,
-		]);
-	}
-	
-	if (empty($cfg)) {
-		if ($dk_enabled) {
-			duplicateKiller_Diagnostics::log('breakdance', 'no_form_name_found', [
-				'request_debug_id' => $request_debug_id,
-				'db_form_name'     => $db_form_name,
-				'post_id'          => $post_id,
-				'node_id'          => $node_id,
-				'base_name'        => $base_name,
-				'available_keys'   => is_array($options) ? array_keys($options) : [],
-			]);
-		}
+	if ( empty( $current_form['post_id'] ) || empty( $current_form['form_id'] ) ) {
 		return $canExecute;
 	}
 
+	$resolved_form = DuplicateKiller_Form_Config_Resolver::resolve_by_form_id(
+		$options,
+		$current_form
+	);
 
-	$default_msg        = __('Please check all fields! These values have been submitted already!', 'duplicate-killer');
-	$error_message_base = isset($cfg['error_message']) ? (string)$cfg['error_message'] : $default_msg;
-
-	$id_to_val   = [];
-	$id_to_label = [];
-	foreach ($form as $field) {
-		$fid = \Breakdance\Forms\getIdFromField($field);
-		$id_to_val[$fid]   = (string)($field['value'] ?? '');
-		$id_to_label[$fid] = (string)($field['label'] ?? $fid);
-	}
-
-	if ($dk_enabled) {
-		duplicateKiller_Diagnostics::log('breakdance', 'form_map_built', [
-			'request_debug_id' => $request_debug_id,
-			'db_form_name'     => $db_form_name,
-			'id_to_val'        => $id_to_val,
-			'id_to_label'      => $id_to_label,
-		]);
-	}
-
-	if (function_exists('duplicateKiller_ip_limit_trigger')) {
-		$triggered = duplicateKiller_ip_limit_trigger('breakdance', $options, $db_form_name);
-
-		$msg = !empty($cfg['error_message_limit_ip_option'])
-			? (string)$cfg['error_message_limit_ip_option']
-			: __('This IP has been already submitted.', 'duplicate-killer');
-
-		if ($dk_enabled) {
-			duplicateKiller_Diagnostics::log('breakdance', 'ip_check_result', [
+	if ( false === $resolved_form ) {
+		if ( $dk_enabled ) {
+			duplicateKiller_Diagnostics::log( 'breakdance', 'form_config_not_found', array(
 				'request_debug_id' => $request_debug_id,
-				'db_form_name'     => $db_form_name,
-				'triggered'        => $triggered ? 1 : 0,
-				'message'          => $msg,
-			]);
+				'current_form'     => $current_form,
+			) );
 		}
 
-		if ($triggered) {
-			$dk_state['duplicate_found'] = true;
-			$dk_state['error_sent']      = true;
-			$dk_state['error_message']   = $msg;
-
-			if ($dk_enabled) {
-				duplicateKiller_Diagnostics::log('breakdance', 'ip_limit_blocked', [
-					'request_debug_id' => $request_debug_id,
-					'message'          => $msg,
-					'dk_state'         => $dk_state,
-				]);
-			}
-
-			return new \WP_Error('dk_duplicate_ip', $msg);
-		}
+		return $canExecute;
 	}
 
-	$unique_ids = [];
-	foreach ($cfg as $k => $v) {
-		if (
-			in_array($k, ['error_message','cookie_option','cookie_option_days','user_ip','error_message_limit_ip_option','user_ip_days','form_id','cross_form_option'], true)
-			|| substr((string)$k, -3) === '_ck'
-		) {
-			continue;
-		}
-		if ($v == '1') {
-			$unique_ids[] = $k;
-		}
-	}
-	//error_log(print_r($unique_ids, true));
+	$form_name           = $resolved_form['form_name'];
+	$form_config         = $resolved_form['form_config'];
+	$enabled_fields      = $resolved_form['enabled_fields'];
+	$form_names_to_check = ! empty( $current_form['form_names_to_check'] ) && is_array( $current_form['form_names_to_check'] )
+		? $current_form['form_names_to_check']
+		: array( $form_name );
 
-	if ($dk_enabled) {
-		duplicateKiller_Diagnostics::log('breakdance', 'unique_ids_resolved', [
-			'request_debug_id' => $request_debug_id,
-			'db_form_name'     => $db_form_name,
-			'unique_ids'       => $unique_ids,
-		]);
+	$data         = ! empty( $current_form['field_values'] ) && is_array( $current_form['field_values'] ) ? $current_form['field_values'] : array();
+	$field_labels = ! empty( $current_form['field_labels'] ) && is_array( $current_form['field_labels'] ) ? $current_form['field_labels'] : array();
+
+	$ip_limit_enabled    = ! empty( $form_config['user_ip'] ) && (string) $form_config['user_ip'] === '1';
+	$field_check_enabled = ! empty( $enabled_fields );
+	$cross_form_enabled  = ! empty( $form_config['cross_form_option'] ) && (string) $form_config['cross_form_option'] === '1';
+
+	if ( ! $ip_limit_enabled && ! $field_check_enabled && ! $cross_form_enabled ) {
+		if ( $dk_enabled ) {
+			duplicateKiller_Diagnostics::log( 'breakdance', 'no_duplicate_killer_feature_enabled', array(
+				'request_debug_id' => $request_debug_id,
+				'form_name'        => $form_name,
+				'form_config'      => $form_config,
+			) );
+		}
+
+		return $canExecute;
+	}
+
+	if ( $dk_enabled ) {
+		duplicateKiller_Diagnostics::log( 'breakdance', 'process_start', array(
+			'request_debug_id'    => $request_debug_id,
+			'action'              => $action,
+			'form_name'           => $form_name,
+			'current_form'        => $current_form,
+			'form_config'         => $form_config,
+			'enabled_fields'      => $enabled_fields,
+			'ip_limit_enabled'    => $ip_limit_enabled ? 1 : 0,
+			'field_check_enabled' => $field_check_enabled ? 1 : 0,
+			'cross_form_enabled'  => $cross_form_enabled ? 1 : 0,
+			'data'                => $data,
+			'dk_state_before'     => $dk_state,
+		) );
 	}
 
 	$cookie = duplicateKiller_get_form_cookie_simple(
-			$options,
-			$db_form_name,
-			'dk_form_cookie_breakdance_'
+		$options,
+		$form_name,
+		'dk_form_cookie_breakdance_'
 	);
 
 	$form_cookie    = $cookie['form_cookie'];
 	$checked_cookie = $cookie['checked_cookie'];
-	
-	if ($unique_ids) {
-		if ($dk_enabled) {
-			duplicateKiller_Diagnostics::log('breakdance', 'cookie_state_resolved', [
-				'request_debug_id' => $request_debug_id,
-				'db_form_name'     => $db_form_name,
-				'form_cookie'      => $form_cookie,
-				'checked_cookie'   => $checked_cookie,
-			]);
+
+	// 1. IP limit check.
+	if ( $ip_limit_enabled ) {
+		$ip_blocked = false;
+		$ip_message = '';
+
+		foreach ( $form_names_to_check as $check_form_name ) {
+			$ip_limit_result = DuplicateKiller_IP_Limit_Checker::check(
+				'breakdance',
+				$check_form_name,
+				$form_config,
+				array(
+					'request_debug_id' => $request_debug_id,
+					'form_name'        => $check_form_name,
+				)
+			);
+
+			if ( ! empty( $ip_limit_result['blocked'] ) ) {
+				$ip_blocked = true;
+				$ip_message = $ip_limit_result['message'];
+				break;
+			}
 		}
 
-		foreach ($unique_ids as $field_id) {
-			$submitted_value = isset($id_to_val[$field_id]) ? $id_to_val[$field_id] : '';
+		if ( $ip_blocked ) {
+			$dk_state['duplicate_found'] = true;
+			$dk_state['error_sent']      = true;
+			$dk_state['error_message']   = $ip_message;
 
-			if ($submitted_value === '' || $submitted_value === null) {
-				if ($dk_enabled) {
-					duplicateKiller_Diagnostics::log('breakdance', 'field_skipped_empty', [
-						'request_debug_id' => $request_debug_id,
-						'field_id'         => $field_id,
-					]);
-				}
+			return new \WP_Error( 'dk_duplicate_ip', $ip_message );
+		}
+	}
+
+	// 2. Duplicate field check.
+	if ( $field_check_enabled ) {
+		foreach ( $enabled_fields as $field_id ) {
+			$submitted_value = array_key_exists( $field_id, $data ) ? $data[ $field_id ] : '';
+
+			if ( is_array( $submitted_value ) ) {
+				$submitted_value = implode( ' ', array_map( 'strval', $submitted_value ) );
+			} else {
+				$submitted_value = (string) $submitted_value;
+			}
+
+			$submitted_value = sanitize_text_field( $submitted_value );
+
+			if ( '' === $submitted_value ) {
 				continue;
 			}
 
-			if (is_array($submitted_value)) {
-				$submitted_value = implode(' ', array_map('strval', $submitted_value));
-			} else {
-				$submitted_value = (string)$submitted_value;
+			$exists = false;
+
+			foreach ( $form_names_to_check as $check_form_name ) {
+				$exists = DuplicateKiller_FieldDuplicate_Checker::check_duplicate_by_key_value(
+					'breakdance',
+					$check_form_name,
+					$field_id,
+					$submitted_value,
+					$form_cookie,
+					$checked_cookie
+				);
+
+				if ( $exists ) {
+					break;
+				}
 			}
 
-			if ($dk_enabled) {
-				duplicateKiller_Diagnostics::log('breakdance', 'field_duplicate_check_start', [
-					'request_debug_id' => $request_debug_id,
-					'field_id'         => $field_id,
-					'field_label'      => $id_to_label[$field_id] ?? $field_id,
-					'field_value'      => $submitted_value,
-				]);
-			}
+			if ( $exists ) {
+				$error_message_base = ! empty( $form_config['error_message'] )
+					? (string) $form_config['error_message']
+					: __( 'Please check all fields! These values have been submitted already!', 'duplicate-killer' );
 
-			$exists = duplicateKiller_check_duplicate_by_key_value(
-				'breakdance',          // $form_plugin
-				$db_form_name,         // $form_name
-				$field_id,             // $key
-				$submitted_value,      // $value
-				$form_cookie,          // $form_cookie
-				$checked_cookie        // $checked_cookie
-			);
-
-			if ($dk_enabled) {
-				duplicateKiller_Diagnostics::log('breakdance', 'field_duplicate_check_result', [
-					'request_debug_id' => $request_debug_id,
-					'field_id'         => $field_id,
-					'field_label'      => $id_to_label[$field_id] ?? $field_id,
-					'field_value'      => $submitted_value,
-					'duplicate_result' => $exists ? 1 : 0,
-				]);
-			}
-
-			if ($exists) {
-				$label  = $id_to_label[$field_id] ?? $field_id;
-				$pretty = sprintf('%s: %s', $label, $error_message_base);
+				$label  = $field_labels[ $field_id ] ?? $field_id;
+				$pretty = sprintf( '%s: %s', $label, $error_message_base );
 
 				$dk_state['duplicate_found'] = true;
 				$dk_state['error_sent']      = true;
 				$dk_state['error_message']   = $pretty;
 
-				if ($dk_enabled) {
-					duplicateKiller_Diagnostics::log('breakdance', 'duplicate_found', [
+				if ( $dk_enabled ) {
+					duplicateKiller_Diagnostics::log( 'breakdance', 'duplicate_found', array(
 						'request_debug_id' => $request_debug_id,
+						'form_name'        => $form_name,
 						'field_id'         => $field_id,
 						'field_label'      => $label,
 						'message'          => $pretty,
-						'dk_state'         => $dk_state,
-					]);
+					) );
 				}
 
-				return new \WP_Error('dk_duplicate', $pretty);
+				return new \WP_Error( 'dk_duplicate', $pretty );
 			}
 		}
 	}
-	
+
+	// 3. Cross-form duplicate check.
+	if (
+		$cross_form_enabled
+		&& class_exists( 'DuplicateKiller_CrossForm' )
+	) {
+		$cross_match = DuplicateKiller_CrossForm::checkAssocCrossFormDuplicate(
+			'breakdance',
+			$options,
+			$form_name,
+			$form_config,
+			$data
+		);
+
+		if ( $cross_match ) {
+			$field_id = $cross_match['current_field_id'] ?? '';
+
+			$error_message_base = ! empty( $form_config['error_message'] )
+				? (string) $form_config['error_message']
+				: __( 'Please check all fields! These values have been submitted already!', 'duplicate-killer' );
+
+			$label  = $field_labels[ $field_id ] ?? $field_id;
+			$pretty = sprintf( '%s: %s', $label, $error_message_base );
+
+			$dk_state['duplicate_found'] = true;
+			$dk_state['error_sent']      = true;
+			$dk_state['error_message']   = $pretty;
+
+			if ( $dk_enabled ) {
+				duplicateKiller_Diagnostics::log( 'breakdance', 'cross_form_duplicate_found', array(
+					'request_debug_id' => $request_debug_id,
+					'form_name'        => $form_name,
+					'field_id'         => $field_id,
+					'field_label'      => $label,
+					'cross_match'      => $cross_match,
+					'message'          => $pretty,
+				) );
+			}
+
+			return new \WP_Error( 'dk_cross_duplicate', $pretty );
+		}
+	}
+
+	// 4. Save submission.
 	$should_save_submission = (
-		! empty( $unique_ids ) ||
-		( isset( $cfg['user_ip'] ) && (string) $cfg['user_ip'] === '1' )
+		! $dk_state['saved_once']
+		&& (
+			$ip_limit_enabled
+			|| $field_check_enabled
+			|| $cross_form_enabled
+		)
 	);
-	if (!$dk_state['saved_once'] && $should_save_submission) {
-		global $wpdb;
-		$table_name = $wpdb->prefix . 'dk_forms_duplicate';
 
-		$payload = serialize($extra['fields'] ?? []);
-
-		$form_ip = (isset($cfg['user_ip']) && $cfg['user_ip'] === "1") ? (duplicateKiller_get_user_ip()) : 'NULL';
-
-		$now_gmt = current_time('Y-m-d H:i:s');
-
-		if ($dk_enabled) {
-			duplicateKiller_Diagnostics::log('breakdance', 'save_start', [
+	if ( $should_save_submission ) {
+		DuplicateKiller_Submission_Storage::save(
+			'breakdance',
+			$form_name,
+			! empty( $current_form['storage_payload'] ) && is_array( $current_form['storage_payload'] ) ? $current_form['storage_payload'] : array(),
+			$form_cookie,
+			true,
+			$ip_limit_enabled,
+			array(),
+			array(),
+			array(
 				'request_debug_id' => $request_debug_id,
-				'db_form_name'     => $db_form_name,
-				'payload'          => $extra['fields'] ?? [],
-				'form_ip'          => $form_ip,
-				'table_name'       => $table_name,
-			]);
-		}
-
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- Required for custom plugin table insert.
-		$insert_result = $wpdb->insert($table_name, [
-			'form_plugin' => 'breakdance',
-			'form_name'   => $db_form_name,
-			'form_value'  => $payload,
-			'form_cookie' => $form_cookie,
-			'form_date'   => $now_gmt,
-			'form_ip'     => $form_ip,
-		], ['%s','%s','%s','%s','%s','%s']);
-
-		if ($dk_enabled) {
-			duplicateKiller_Diagnostics::log('breakdance', 'save_after_insert', [
-				'request_debug_id' => $request_debug_id,
-				'db_form_name'     => $db_form_name,
-				'insert_ok'        => empty($wpdb->last_error) && false !== $insert_result ? 1 : 0,
-				'wpdb_last_error'  => $wpdb->last_error,
-				'insert_id'        => $wpdb->insert_id,
-				'table_name'       => $table_name,
-			]);
-		}
+				'form_name'        => $form_name,
+			)
+		);
 
 		$dk_state['saved_once'] = true;
 	}
 
-	if ($dk_enabled) {
-		duplicateKiller_Diagnostics::log('breakdance', 'guard_end_success', [
+	if ( $dk_enabled ) {
+		duplicateKiller_Diagnostics::log( 'breakdance', 'guard_end_success', array(
 			'request_debug_id' => $request_debug_id,
 			'dk_state'         => $dk_state,
-		]);
+		) );
 	}
 
 	return $canExecute;

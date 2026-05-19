@@ -2,50 +2,80 @@
 defined( 'ABSPATH' ) or die( 'You shall not pass!' );
 
 add_action( 'wpcf7_before_send_mail', 'duplicateKiller_cf7_before_send_email', 1, 3 );
-function duplicateKiller_cf7_before_send_email($contact_form, &$abort, $object) {
+function duplicateKiller_cf7_before_send_email( $contact_form, &$abort, $object ) {
 
-	global $wpdb;
-	$table_name = $wpdb->prefix . 'dk_forms_duplicate';
-	
-	$cf7_page   = get_option("CF7_page");
-	//error_log(print_r($cf7_page,true));
-	$cf7_page = duplicateKiller_convert_option_architecture( $cf7_page, 'cf7_' );
-	//error_log(print_r($cf7_page,true));
-	
-	if (!is_array($cf7_page)) {
+	$cf7_page   = get_option( 'CF7_page' );
+	if ( ! is_array( $cf7_page ) ) {
 		$cf7_page = [];
 	}
+	$cf7_page = duplicateKiller_convert_option_architecture( $cf7_page, 'cf7_' );
 
-	$request_debug_id = uniqid('duplicateKiller_cf7_', true);
-	$dk_enabled       = class_exists('duplicateKiller_Diagnostics');
+	$request_debug_id = uniqid( 'duplicateKiller_cf7_', true );
+	$dk_enabled       = class_exists( 'duplicateKiller_Diagnostics' );
 
 	$submission = WPCF7_Submission::get_instance();
 	$data       = $submission ? $submission->get_posted_data() : [];
 	$files      = $submission ? $submission->uploaded_files() : [];
-	$upload_dir = wp_upload_dir();
-
-	// NEW location (WP.org compliant)
-	$dkcf7_folder     = trailingslashit($upload_dir['basedir']) . 'duplicate-killer';
-	$dkcf7_folder_url = trailingslashit($upload_dir['baseurl']) . 'duplicate-killer';
-
-	// ensure dir exists
-	if (!file_exists($dkcf7_folder)) {
-		wp_mkdir_p($dkcf7_folder);
+	
+	if ( ! is_array( $data ) ) {
+		$data = [];
+	}
+	if ( ! is_array( $files ) ) {
+		$files = [];
 	}
 
-	$form_name = $contact_form->title();
+	$current_form = DuplicateKiller_Form_Normalizer::cf7( $contact_form );
 
-	if ($dk_enabled) {
-		duplicateKiller_Diagnostics::log('cf7', 'process_start', [
-			'request_debug_id'      => $request_debug_id,
-			'form_name'             => $form_name,
-			'form_id'               => method_exists($contact_form, 'id') ? (int) $contact_form->id() : 0,
-			'cf7_page_has_form_config' => !empty($cf7_page[$form_name]) ? 1 : 0,
-			'cf7_page_form_config'     => !empty($cf7_page[$form_name]) ? $cf7_page[$form_name] : [],
-			'posted_data_raw'          => is_array($data) ? $data : [],
-			'uploaded_files_raw'       => is_array($files) ? $files : [],
-			'abort_before_processing'  => $abort ? 1 : 0,
-		]);
+	$resolved_form = DuplicateKiller_Form_Config_Resolver::resolve(
+		$cf7_page,
+		$current_form
+	);
+
+	if ( false === $resolved_form ) {
+		if ( $dk_enabled ) {
+			duplicateKiller_Diagnostics::log( 'cf7', 'form_config_not_found', [
+				'request_debug_id' => $request_debug_id,
+				'current_form'     => $current_form,
+			] );
+		}
+
+		return;
+	}
+
+	$form_name      = $resolved_form['form_name'];
+	$form_config    = $resolved_form['form_config'];
+	$enabled_fields = $resolved_form['enabled_fields'];
+
+	$ip_limit_enabled    = ! empty( $form_config['user_ip'] ) && (string) $form_config['user_ip'] === '1';
+	$field_check_enabled = ! empty( $enabled_fields );
+	$cross_form_enabled  = ! empty( $form_config['cross_form_option'] ) && (string) $form_config['cross_form_option'] === '1';
+
+	if ( ! $ip_limit_enabled && ! $field_check_enabled && ! $cross_form_enabled ) {
+		if ( $dk_enabled ) {
+			duplicateKiller_Diagnostics::log( 'cf7', 'no_duplicate_killer_feature_enabled', [
+				'request_debug_id' => $request_debug_id,
+				'form_name'        => $form_name,
+				'form_config'      => $form_config,
+			] );
+		}
+
+		return;
+	}
+
+	if ( $dk_enabled ) {
+		duplicateKiller_Diagnostics::log( 'cf7', 'process_start', [
+			'request_debug_id'     => $request_debug_id,
+			'form_name'            => $form_name,
+			'form_id'              => $resolved_form['form_id'],
+			'form_config'          => $form_config,
+			'enabled_fields'       => $enabled_fields,
+			'ip_limit_enabled'     => $ip_limit_enabled ? 1 : 0,
+			'field_check_enabled'  => $field_check_enabled ? 1 : 0,
+			'cross_form_enabled'   => $cross_form_enabled ? 1 : 0,
+			'posted_data_raw'      => $data,
+			'uploaded_files_raw'   => $files,
+			'abort_before_process' => $abort ? 1 : 0,
+		] );
 	}
 
 	$cookie = duplicateKiller_get_form_cookie_simple(
@@ -57,249 +87,150 @@ function duplicateKiller_cf7_before_send_email($contact_form, &$abort, $object) 
 	$form_cookie    = $cookie['form_cookie'];
 	$checked_cookie = $cookie['checked_cookie'];
 
-	if ($dk_enabled) {
-		duplicateKiller_Diagnostics::log('cf7', 'cookie_state_resolved', [
+	if ( $dk_enabled ) {
+		duplicateKiller_Diagnostics::log( 'cf7', 'cookie_state_resolved', [
 			'request_debug_id' => $request_debug_id,
 			'form_name'        => $form_name,
 			'form_cookie'      => $form_cookie,
-			'checked_cookie'   => $checked_cookie,
-		]);
+			'checked_cookie'   => $checked_cookie ? 1 : 0,
+		] );
 	}
 
-	$abort   = false;
-	$no_form = false;
-	
-	$ip_limit_enabled = ! empty( $cf7_page[ $form_name ]['user_ip'] ) && (string) $cf7_page[ $form_name ]['user_ip'] === '1';
-	
-	$form_ip = isset($cf7_page[$form_name]['user_ip']) && $cf7_page[$form_name]['user_ip'] === "1" ? true : 'NULL';
+	$abort = false;
 
-	if ($dk_enabled) {
-		duplicateKiller_Diagnostics::log('cf7', 'ip_check_start', [
-			'request_debug_id' => $request_debug_id,
-			'form_name'        => $form_name,
-			'user_ip_enabled'  => isset($cf7_page[$form_name]['user_ip']) && $cf7_page[$form_name]['user_ip'] === "1" ? 1 : 0,
-			'user_ip_days'     => isset($cf7_page[$form_name]['user_ip_days']) ? $cf7_page[$form_name]['user_ip_days'] : '',
-		]);
-	}
-
-	// 1. IP check
-	if (duplicateKiller_ip_limit_trigger("CF7", $cf7_page, $form_name)) {
-		$message = $cf7_page[$form_name]['error_message_limit_ip_option'];
-
-		// change the general error message with the dk_custom_error_message
-		add_filter('cf7_custom_form_invalid_form_message', function($invalid_form_message, $contact_form) use ($message) {
-			$invalid_form_message = $message;
-			return $invalid_form_message = $message;
-		}, 15, 2);
-
-		// stop form for submission if IP limit is triggered
-		$abort = true;
-		$object->set_response($message);
-
-		if ($dk_enabled) {
-			duplicateKiller_Diagnostics::log('cf7', 'ip_limit_blocked', [
-				'request_debug_id' => $request_debug_id,
-				'form_name'        => $form_name,
-				'message'          => $message,
-				'response_after_block' => $message,
-			]);
-		}
-
-		return;
-	}
-
-	if ($dk_enabled) {
-		duplicateKiller_Diagnostics::log('cf7', 'duplicate_check_start', [
-			'request_debug_id' => $request_debug_id,
-			'form_name'        => $form_name,
-			'posted_keys'      => is_array($data) ? array_keys($data) : [],
-			'config_keys'      => !empty($cf7_page[$form_name]) && is_array($cf7_page[$form_name]) ? array_keys($cf7_page[$form_name]) : [],
-		]);
-	}
-
-	// 2. Duplicate field check
-	if (!empty($data) && !empty($cf7_page)) {
-		foreach ($cf7_page as $cf7_form => $fields_to_check) {
-			if ($cf7_form !== $form_name) {
-				continue;
-			}
-
-			if (!is_array($fields_to_check)) {
-				continue;
-			}
-
-			foreach ($fields_to_check as $field_key => $enabled) {
-				if (!$enabled || !isset($data[$field_key])) {
-					continue;
-				}
-
-				$submitted_value = is_array($data[$field_key]) ? reset($data[$field_key]) : $data[$field_key];
-				$submitted_value = sanitize_text_field($submitted_value);
-
-				if ($dk_enabled) {
-					duplicateKiller_Diagnostics::log('cf7', 'field_inspected', [
-						'request_debug_id' => $request_debug_id,
-						'form_name'        => $form_name,
-						'field_key'        => $field_key,
-						'field_value'      => $submitted_value,
-						'is_enabled_in_config' => !empty($enabled) ? 1 : 0,
-					]);
-				}
-
-				$result = duplicateKiller_check_duplicate_by_key_value(
-					"CF7",
-					$form_name,
-					$field_key,
-					$submitted_value,
-					$form_cookie,
-					$checked_cookie
-				);
-
-				if ($dk_enabled) {
-					duplicateKiller_Diagnostics::log('cf7', 'field_duplicate_check_result', [
-						'request_debug_id' => $request_debug_id,
-						'form_name'        => $form_name,
-						'field_key'        => $field_key,
-						'field_value'      => $submitted_value,
-						'duplicate_result' => $result ? 1 : 0,
-						'form_cookie'      => $form_cookie,
-						'checked_cookie'   => $checked_cookie,
-					]);
-				}
-
-				if ($result = duplicateKiller_check_duplicate_by_key_value("CF7", $form_name, $field_key, $submitted_value, $form_cookie, $checked_cookie)) {
-
-					if (!$result) {
-						$no_form = true;
-					}
-
-					if ($no_form == false) {
-						$abort = true;
-						$object->set_response($cf7_page[$form_name]['error_message']);
-						remove_action('wpcf7_before_send_mail', 'cfdb7_before_send_mail');
-						remove_action('wpcf7_before_send_mail', 'vsz_cf7_before_send_email');
-
-						if ($dk_enabled) {
-							duplicateKiller_Diagnostics::log('cf7', 'duplicate_found', [
-								'request_debug_id' => $request_debug_id,
-								'form_name'        => $form_name,
-								'field_key'        => $field_key,
-								'message'          => $cf7_page[$form_name]['error_message'],
-								'response_after_block' => $cf7_page[$form_name]['error_message'],
-							]);
-						}
-
-						return;
-					}
-				}
-
-				$no_form = true;
-			}
-		}
-	}
-
-	if ($dk_enabled) {
-		duplicateKiller_Diagnostics::log('cf7', $abort ? 'save_skipped_abort' : 'save_start', [
-			'request_debug_id'   => $request_debug_id,
-			'form_name'          => $form_name,
-			'abort'              => $abort ? 1 : 0,
-			'no_form'            => $no_form ? 1 : 0,
-			'form_ip_before_resolve' => $form_ip,
-			'posted_data_before_save' => is_array($data) ? $data : [],
-			'files_before_save'       => is_array($files) ? $files : [],
-		]);
-	}
-
-	// 3. Save to DB
-	if ( ! $abort && ( $no_form || $ip_limit_enabled ) ) {
-
-		// check if IP limit feature is active and store it
-		if ($form_ip === true) {
-			$form_ip = duplicateKiller_get_user_ip();
-		}
-
-		if ($dk_enabled) {
-			duplicateKiller_Diagnostics::log('cf7', 'save_ip_resolved', [
-				'request_debug_id' => $request_debug_id,
-				'form_name'        => $form_name,
-				'resolved_form_ip' => $form_ip,
-			]);
-		}
-
-		// Save files (if enabled)
-		// check if user want to save the files locally
-		if (!isset($cf7_page['cf7_save_image']) || (string) $cf7_page['cf7_save_image'] === '1') {
-			if ($files) {
-				// Init filesystem once
-				global $wp_filesystem;
-				if (!$wp_filesystem) {
-					require_once ABSPATH . 'wp-admin/includes/file.php';
-					WP_Filesystem();
-				}
-
-				$random_number = uniqid((string) time(), true);
-
-				foreach ($files as $file_key => $file) {
-					$file = is_array($file) ? reset($file) : $file;
-					if (empty($file)) {
-						continue;
-					}
-
-					$dest_name = $file_key . '-' . $random_number . '-' . basename($file);
-					$file_path = trailingslashit($dkcf7_folder) . $dest_name;
-					$file_url  = trailingslashit($dkcf7_folder_url) . rawurlencode($dest_name);
-
-					if ($wp_filesystem) {
-						$contents = file_get_contents($file);
-						if (false !== $contents) {
-							$wp_filesystem->put_contents($file_path, $contents, FS_CHMOD_FILE);
-
-							if (array_key_exists($file_key, $data)) {
-								$data[$file_key] = $file_url;
-							}
-
-							if ($dk_enabled) {
-								duplicateKiller_Diagnostics::log('cf7', 'file_saved_locally', [
-									'request_debug_id' => $request_debug_id,
-									'form_name'        => $form_name,
-									'file_key'         => $file_key,
-									'file_path'        => $file_path,
-									'file_url'         => $file_url,
-								]);
-							}
-						}
-					}
-				}
-			}
-		}
-
-		$form_value = serialize($data);
-		$form_date  = current_time('Y-m-d H:i:s');
-
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- Required for custom plugin table insert.
-		$insert_result = $wpdb->insert(
-			$table_name,
+	// 1. IP limit check.
+	if ( $ip_limit_enabled ) {
+		$ip_limit_result = DuplicateKiller_IP_Limit_Checker::check(
+			'CF7',
+			$form_name,
+			$form_config,
 			array(
-				'form_plugin' => "CF7",
-				'form_name'   => $form_name,
-				'form_value'  => $form_value,
-				'form_cookie' => $form_cookie,
-				'form_date'   => $form_date,
-				'form_ip'     => $form_ip
+				'request_debug_id' => $request_debug_id,
+				'form_name'        => $form_name,
 			)
 		);
 
-		if ($dk_enabled) {
-			duplicateKiller_Diagnostics::log('cf7', 'save_after_insert', [
-				'request_debug_id' => $request_debug_id,
-				'form_name'        => $form_name,
-				'insert_ok'        => empty($wpdb->last_error) && false !== $insert_result ? 1 : 0,
-				'wpdb_last_error'  => $wpdb->last_error,
-				'insert_id'        => $wpdb->insert_id,
-				'table_name'       => $table_name,
-			]);
+		if ( $ip_limit_result['blocked'] ) {
+			add_filter(
+				'cf7_custom_form_invalid_form_message',
+				function( $invalid_form_message, $contact_form ) use ( $ip_limit_result ) {
+					return $ip_limit_result['message'];
+				},
+				15,
+				2
+			);
+
+			$abort = true;
+
+			if ( is_object( $object ) && method_exists( $object, 'set_response' ) ) {
+				$object->set_response( $ip_limit_result['message'] );
+			}
+			
+			remove_action( 'wpcf7_before_send_mail', 'cfdb7_before_send_mail' );
+			remove_action( 'wpcf7_before_send_mail', 'vsz_cf7_before_send_email' );
+
+			return;
 		}
 	}
+
+	// 2. Duplicate field check: simple or cookie-based.
+	if ( $field_check_enabled ) {
+		$result = DuplicateKiller_FieldDuplicate_Checker::check(
+			'CF7',
+			$form_name,
+			$enabled_fields,
+			$data,
+			$form_cookie,
+			$checked_cookie,
+			$form_config,
+			array(
+				'request_debug_id' => $request_debug_id,
+			)
+		);
+
+		if ( $result['blocked'] ) {
+			$abort = true;
+
+			if ( is_object( $object ) && method_exists( $object, 'set_response' ) ) {
+				$object->set_response( $result['message'] );
+			}
+
+			remove_action( 'wpcf7_before_send_mail', 'cfdb7_before_send_mail' );
+			remove_action( 'wpcf7_before_send_mail', 'vsz_cf7_before_send_email' );
+
+			return;
+		}
+	}
+
+	// 3. Cross-form duplicate check.
+	if (
+		! $abort
+		&& $cross_form_enabled
+		&& class_exists( 'DuplicateKiller_CrossForm' )
+	) {
+		$cross_match = DuplicateKiller_CrossForm::checkAssocCrossFormDuplicate(
+			'CF7',
+			$cf7_page,
+			$form_name,
+			$form_config,
+			$data
+		);
+
+		if ( $cross_match ) {
+			$message = ! empty( $form_config['error_message'] )
+				? $form_config['error_message']
+				: __( 'Please check all fields!', 'duplicate-killer' );
+
+			$abort = true;
+
+			if ( is_object( $object ) && method_exists( $object, 'set_response' ) ) {
+				$object->set_response( $message );
+			}
+
+			remove_action( 'wpcf7_before_send_mail', 'cfdb7_before_send_mail' );
+			remove_action( 'wpcf7_before_send_mail', 'vsz_cf7_before_send_email' );
+
+			if ( $dk_enabled ) {
+				duplicateKiller_Diagnostics::log( 'cf7', 'cross_form_duplicate_found', [
+					'request_debug_id' => $request_debug_id,
+					'form_name'        => $form_name,
+					'cross_match'      => $cross_match,
+					'message'          => $message,
+				] );
+			}
+
+			return;
+		}
+	}
+
+	// 4. Save to DB only if at least one Duplicate Killer feature is active.
+	$should_save_submission = (
+		! $abort
+		&& (
+			$ip_limit_enabled
+			|| $field_check_enabled
+			|| $cross_form_enabled
+		)
+	);
+
+	$storage_options = array(
+		'save_files' => isset( $cf7_page['cf7_save_image'] ) ? (string) $cf7_page['cf7_save_image'] : '1',
+	);
+
+	DuplicateKiller_Submission_Storage::save(
+		'CF7',
+		$form_name,
+		$data,
+		$form_cookie,
+		$should_save_submission,
+		$ip_limit_enabled,
+		$files,
+		$storage_options,
+		array(
+			'request_debug_id' => $request_debug_id,
+			'form_name'        => $form_name,
+		)
+	);
 }
 /**
  * Retrieve CF7 forms and extract their text/email/tel fields.

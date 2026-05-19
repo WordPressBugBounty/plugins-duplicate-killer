@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: Duplicate Killer
- * Version: 1.6.1
+ * Version: 1.6.2
  * Description: Block duplicate form submissions by validating unique email, phone and text fields — without CAPTCHA.
  * Author: NIA
  * Author URI: https://profiles.wordpress.org/wpnia/
@@ -13,7 +13,7 @@
 	defined('ABSPATH') or die('You shall not pass!');
 	
 	define('DUPLICATEKILLER_PLUGIN',__FILE__);
-	define('DUPLICATEKILLER_VERSION','1.6.1');
+	define('DUPLICATEKILLER_VERSION','1.6.2');
 	define('DUPLICATEKILLER_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 	define('DUPLICATEKILLER_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 	
@@ -36,8 +36,6 @@
 	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/class-duplicateKiller-woocommerce.php';
 	duplicateKiller_WooCommerce::init();
 	
-	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/class-duplicateKiller-cross-form.php';
-	
 	//debug/diagnostics
 	require_once DUPLICATEKILLER_PLUGIN_DIR . '/includes/class-duplicateKiller-diagnostics.php';
 	duplicateKiller_Diagnostics::init();
@@ -45,6 +43,14 @@
 	//uninstall/feedback
 	require_once DUPLICATEKILLER_PLUGIN_DIR . '/uninstall/class-duplicatekiller-deactivation-feedback.php';
 	duplicateKiller_Deactivation_Feedback::init();
+	
+	require_once DUPLICATEKILLER_PLUGIN_DIR . '/includes/class-duplicatekiller-form-normalizer.php';
+	require_once DUPLICATEKILLER_PLUGIN_DIR . '/includes/class-duplicatekiller-form-config-resolver.php';
+	require_once DUPLICATEKILLER_PLUGIN_DIR . '/includes/class-duplicatekiller-ip-limit-checker.php';
+	require_once DUPLICATEKILLER_PLUGIN_DIR . '/includes/class-duplicatekiller-fieldduplicate-checker.php';
+	require_once DUPLICATEKILLER_PLUGIN_DIR . '/includes/class-duplicatekiller-submission-storage.php';
+	
+	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/class-duplicateKiller-cross-form.php';
 	
 	//location helpers.php
 	add_action('admin_init', 'duplicateKiller_handle_delete_records_request');
