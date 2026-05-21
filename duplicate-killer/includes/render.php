@@ -208,6 +208,10 @@ function duplicateKiller_render_forms_overview(array $config) {
 			? (string)$form_opts['error_message']
 			: $defaults['error_message'];
 
+		$field_duplicate_block_days = isset( $form_opts['field_duplicate_block_days'] )
+			? (string) absint( $form_opts['field_duplicate_block_days'] )
+			: '0';
+			
 		$ip_err_msg = !empty($form_opts['error_message_limit_ip_option'])
 			? (string)$form_opts['error_message_limit_ip_option']
 			: $defaults['error_message_limit_ip_option'];
@@ -437,6 +441,33 @@ function duplicateKiller_render_forms_overview(array $config) {
 							name="<?php echo esc_attr($option_name . '[' . $form_key . '][error_message]'); ?>"
 							value="<?php echo esc_attr($err_msg); ?>"
 							<?php echo $disabled_attr; ?> />
+					</div>
+
+					<div class="dk-section-header" style="margin-top:15px">
+						<h4 class="dk-section-title-with-link">
+							<span>
+								<?php esc_html_e('Block duration', 'duplicate-killer'); ?>
+							</span>
+						</h4>
+
+						<p>
+							<?php esc_html_e('How many days duplicate values should remain blocked. Set 0 to block permanently.', 'duplicate-killer'); ?>
+						</p>
+					</div>
+
+					<div class="dk-card-section-inner">
+
+						<div class="dk-input-prefix-group">
+							<span class="dk-input-prefix-label">
+								<?php esc_html_e('Days', 'duplicate-killer'); ?>
+							</span>
+
+							<input type="text"
+								class="dk-input-prefix-field"
+								name="<?php echo esc_attr($option_name . '[' . $form_key . '][field_duplicate_block_days]'); ?>"
+								value="<?php echo esc_attr($field_duplicate_block_days); ?>" />
+						</div>
+
 					</div>
 				</div>
 				<!-- Advanced settings -->

@@ -47,6 +47,7 @@ function duplicateKiller_sanitize_forms_option(
     $known_scalar_keys = [
         'form_id',
         'error_message',
+		'field_duplicate_block_days',
         'error_message_limit_ip_option',
         'user_ip_days',
         'cookie_option_days',
@@ -174,12 +175,13 @@ function duplicateKiller_sanitize_forms_option(
         }
 
         // Enforce numeric-only for days
-        if (in_array($k, ['user_ip_days', 'cookie_option_days'], true)) {
-            $val = preg_replace('/[^0-9]/', '', $val);
-            if ($val === '') {
-                continue;
+        if (in_array($k, ['user_ip_days', 'cookie_option_days', 'field_duplicate_block_days'], true)) {
+                $val = preg_replace('/[^0-9]/', '', $val);
+                if ($val === '') {
+                    // don't store empty; allow default fallback
+                    continue;
+                }
             }
-        }
 
         $row[$k] = $val;
     }

@@ -84,7 +84,8 @@ class DuplicateKiller_FieldDuplicate_Checker {
 				$field_key,
 				$submitted_value,
 				$form_cookie,
-				$checked_cookie
+				$checked_cookie,
+				$form_config
 			);
 			self::log( $form_plugin, 'field_duplicate_check_result', array_merge(
 				$debug_context,
@@ -152,7 +153,8 @@ class DuplicateKiller_FieldDuplicate_Checker {
 		string $key,
 		$value,
 		string $form_cookie = 'NULL',
-		bool $checked_cookie = false
+		bool $checked_cookie = false,
+		array $form_config = array()
 	): bool {
 		global $wpdb;
 
@@ -162,22 +164,38 @@ class DuplicateKiller_FieldDuplicate_Checker {
 		// Cache key is based on plugin + form name.
 		static $dk_results_cache = array();
 
-		$cache_key = $form_plugin . '|' . $form_name;
+		$field_duplicate_block_days = isset( $form_config['field_duplicate_block_days'] )
+			? absint( $form_config['field_duplicate_block_days'] )
+			: 0;
+
+		$cache_key = $form_plugin . '|' . $form_name . '|' . $field_duplicate_block_days . '|' . ( $checked_cookie ? 'cookie' : 'nocookie' ) . '|' . md5( $form_cookie );
 
 		// Load stored submissions only once per plugin + form during this request.
 		if ( ! isset( $dk_results_cache[ $cache_key ] ) ) {
 
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Required duplicate check query on plugin-owned table.
+			$sql = "SELECT form_value, form_cookie
+				FROM " . esc_sql( $table_name ) . "
+				WHERE form_plugin = %s
+				AND form_name = %s";
+
+			$params = array(
+				$form_plugin,
+				$form_name,
+			);
+
+			if ( true === $checked_cookie && $form_cookie !== 'NULL' && $form_cookie !== '' ) {
+				$sql .= " AND form_cookie = %s";
+				$params[] = $form_cookie;
+			} elseif ( $field_duplicate_block_days > 0 ) {
+				$sql .= " AND form_date >= DATE_SUB(NOW(), INTERVAL %d DAY)";
+				$params[] = $field_duplicate_block_days;
+			}
+
+			$sql .= " ORDER BY form_id DESC";
+
 			$results = $wpdb->get_results(
-				$wpdb->prepare(
-					"SELECT form_value, form_cookie
-					 FROM " . esc_sql( $table_name ) . "
-					 WHERE form_plugin = %s
-					 AND form_name = %s
-					 ORDER BY form_id DESC",
-					$form_plugin,
-					$form_name
-				)
+				$wpdb->prepare( $sql, $params )
 			);
 
 			// Always store an array in cache, even if the query fails or returns nothing.

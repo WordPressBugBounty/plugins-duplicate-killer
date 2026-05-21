@@ -244,7 +244,7 @@ class duplicateKiller_Deactivation_Feedback {
 		if (is_array($parsed) && !empty($parsed['host'])) {
 			$domain = strtolower($parsed['host']);
 		}
-
+		$enhanced_reason_text = self::build_enhanced_feedback_text($reason_text);
 		return array(
 			'plugin_slug'      => self::$plugin_slug,
 			'plugin_name'      => self::$plugin_name,
@@ -260,11 +260,147 @@ class duplicateKiller_Deactivation_Feedback {
 			'is_multisite'     => is_multisite() ? 1 : 0,
 
 			'reason_key'       => $reason_key,
-			'reason_text'      => $reason_text,
+			'reason_text'      => $enhanced_reason_text,
 			'timestamp'        => current_time('mysql'),
 		);
 	}
+	private static function build_enhanced_feedback_text($reason_text) {
+		$sections = array();
 
+		if (!empty($reason_text)) {
+			$sections[] = "User Feedback:\n" . $reason_text;
+		}
+
+		$sections[] = self::get_active_plugins_feedback_text();
+		$sections[] = self::get_active_theme_feedback_text();
+		$sections[] = self::get_duplicate_killer_settings_feedback_text();
+
+		return implode("\n\n-----------------------------\n\n", array_filter($sections));
+	}
+
+	private static function get_active_plugins_feedback_text() {
+		if (!function_exists('get_plugins')) {
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
+
+		$active_plugins = (array) get_option('active_plugins', array());
+		$all_plugins    = get_plugins();
+
+		if (empty($active_plugins)) {
+			return "Active Plugins:\nNo active plugins detected.";
+		}
+
+		$lines = array();
+		$lines[] = 'Active Plugins:';
+
+		foreach ($active_plugins as $plugin_file) {
+			if (empty($all_plugins[$plugin_file])) {
+				continue;
+			}
+
+			$plugin_data = $all_plugins[$plugin_file];
+
+			$name    = isset($plugin_data['Name']) ? sanitize_text_field($plugin_data['Name']) : $plugin_file;
+			$version = isset($plugin_data['Version']) ? sanitize_text_field($plugin_data['Version']) : 'unknown';
+
+			$lines[] = '- ' . $name . ' | Slug: ' . sanitize_text_field($plugin_file) . ' | Version: ' . $version;
+		}
+
+		return implode("\n", $lines);
+	}
+
+	private static function get_active_theme_feedback_text() {
+		$theme = wp_get_theme();
+
+		if (!$theme || !$theme->exists()) {
+			return "Active Theme:\nNo active theme detected.";
+		}
+
+		$name       = sanitize_text_field($theme->get('Name'));
+		$version    = sanitize_text_field($theme->get('Version'));
+		$template   = sanitize_text_field($theme->get_template());
+		$stylesheet = sanitize_text_field($theme->get_stylesheet());
+
+		return implode("\n", array(
+			'Active Theme:',
+			'- Name: ' . $name,
+			'- Version: ' . ($version ? $version : 'unknown'),
+			'- Template: ' . $template,
+			'- Stylesheet: ' . $stylesheet,
+		));
+	}
+
+	private static function get_duplicate_killer_settings_feedback_text() {
+		$option_names = array(
+			'CF7_page',
+			'Forminator_page',
+			'WPForms_page',
+			'Breakdance_page',
+			'Elementor_page',
+			'Formidable_page',
+			'NinjaForms_page',
+			'WooCommerce_page',
+		);
+
+		$lines = array();
+		$lines[] = 'Duplicate Killer Settings:';
+
+		foreach ($option_names as $option_name) {
+			$option_value = get_option($option_name);
+
+			if (empty($option_value) || !is_array($option_value)) {
+				$lines[] = $option_name . ': not configured';
+				continue;
+			}
+
+			$lines[] = $option_name . ':';
+
+			foreach ($option_value as $form_name => $settings) {
+				if (!is_array($settings)) {
+					continue;
+				}
+
+				$form_label = sanitize_text_field((string) $form_name);
+				$form_id    = isset($settings['form_id']) ? sanitize_text_field((string) $settings['form_id']) : 'unknown';
+
+				$enabled_features = self::extract_enabled_duplicate_killer_features($settings);
+
+				$lines[] = '- Form: ' . $form_label . ' | ID: ' . $form_id;
+				$lines[] = '  Enabled: ' . (!empty($enabled_features) ? implode(', ', $enabled_features) : 'none detected');
+			}
+		}
+
+		return implode("\n", $lines);
+	}
+
+	private static function extract_enabled_duplicate_killer_features(array $settings) {
+		$ignored_keys = array(
+			'form_id',
+			'error_message',
+			'field_duplicate_block_days',
+			'error_message_limit_ip_option',
+			'user_ip_days',
+			'cookie_option_days',
+		);
+
+		$enabled = array();
+
+		foreach ($settings as $key => $value) {
+			if (in_array($key, $ignored_keys, true)) {
+				continue;
+			}
+
+			if (is_array($value) || is_object($value)) {
+				continue;
+			}
+
+			if ((string) $value === '1' || $value === 1 || $value === true) {
+				$enabled[] = sanitize_key($key);
+			}
+		}
+
+		return $enabled;
+	}
 	private static function send_feedback_to_api(array $payload) {
 		$endpoint = 'https://api.verselabwp.com/api/feedback/v1/deactivation';
 
