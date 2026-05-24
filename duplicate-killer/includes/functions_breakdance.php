@@ -161,41 +161,26 @@ function duplicateKiller_breakdance_guard_action( $canExecute, $action, $extra, 
 
 	// 2. Duplicate field check.
 	if ( $field_check_enabled ) {
-		foreach ( $enabled_fields as $field_id ) {
-			$submitted_value = array_key_exists( $field_id, $data ) ? $data[ $field_id ] : '';
+		foreach ( $form_names_to_check as $check_form_name ) {
+			$result = DuplicateKiller_FieldDuplicate_Checker::check(
+				'breakdance',
+				$check_form_name,
+				$enabled_fields,
+				$data,
+				$form_cookie,
+				$checked_cookie,
+				$form_config,
+				array(
+					'request_debug_id' => $request_debug_id,
+					'form_name'        => $check_form_name,
+				)
+			);
 
-			if ( is_array( $submitted_value ) ) {
-				$submitted_value = implode( ' ', array_map( 'strval', $submitted_value ) );
-			} else {
-				$submitted_value = (string) $submitted_value;
-			}
+			if ( ! empty( $result['blocked'] ) ) {
+				$field_id = $result['field_key'];
 
-			$submitted_value = sanitize_text_field( $submitted_value );
-
-			if ( '' === $submitted_value ) {
-				continue;
-			}
-
-			$exists = false;
-
-			foreach ( $form_names_to_check as $check_form_name ) {
-				$exists = DuplicateKiller_FieldDuplicate_Checker::check_duplicate_by_key_value(
-					'breakdance',
-					$check_form_name,
-					$field_id,
-					$submitted_value,
-					$form_cookie,
-					$checked_cookie
-				);
-
-				if ( $exists ) {
-					break;
-				}
-			}
-
-			if ( $exists ) {
-				$error_message_base = ! empty( $form_config['error_message'] )
-					? (string) $form_config['error_message']
+				$error_message_base = ! empty( $result['message'] )
+					? (string) $result['message']
 					: __( 'Please check all fields! These values have been submitted already!', 'duplicate-killer' );
 
 				$label  = $field_labels[ $field_id ] ?? $field_id;
@@ -208,7 +193,7 @@ function duplicateKiller_breakdance_guard_action( $canExecute, $action, $extra, 
 				if ( $dk_enabled ) {
 					duplicateKiller_Diagnostics::log( 'breakdance', 'duplicate_found', array(
 						'request_debug_id' => $request_debug_id,
-						'form_name'        => $form_name,
+						'form_name'        => $check_form_name,
 						'field_id'         => $field_id,
 						'field_label'      => $label,
 						'message'          => $pretty,

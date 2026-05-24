@@ -5,7 +5,47 @@ Version: 1.1.8
 /* =========================================================
    Duplicate Killer - Main layout
 ========================================================= */
+/* =========================================================
+   PRO feature badge inside feature rows
+========================================================= */
 
+.dk-feature-title-pro{
+	display:flex;
+	align-items:center;
+	flex-wrap:wrap;
+	gap:10px;
+	margin:0;
+}
+
+.dk-feature-title-pro .dk-feature-pro-badge{
+	display:inline-flex;
+	align-items:center;
+	justify-content:center;
+
+	padding:4px 10px;
+
+	border-radius:999px;
+
+	font-size:10px;
+	font-weight:800;
+	letter-spacing:.05em;
+	text-transform:uppercase;
+
+	color:#166534;
+
+	border:1px solid #bbf7d0;
+
+	background:
+		linear-gradient(
+			135deg,
+			rgba(240,253,244,1) 0%,
+			rgba(220,252,231,1) 100%
+		);
+
+	box-shadow:
+		0 1px 2px rgba(0,0,0,.04),
+		0 4px 10px rgba(34,197,94,.10);
+}
 .dk-forms-wrapper {
 	display: grid;
 	grid-template-columns: repeat(3, minmax(0, 1fr));

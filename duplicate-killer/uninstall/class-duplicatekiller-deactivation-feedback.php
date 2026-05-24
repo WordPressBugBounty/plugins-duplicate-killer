@@ -271,11 +271,26 @@ class duplicateKiller_Deactivation_Feedback {
 			$sections[] = "User Feedback:\n" . $reason_text;
 		}
 
+		$installed_at = self::get_installed_at();
+
+		if (!empty($installed_at)) {
+			$sections[] = "Plugin Lifecycle:\n- Installed at: " . $installed_at;
+		}
+
 		$sections[] = self::get_active_plugins_feedback_text();
 		$sections[] = self::get_active_theme_feedback_text();
 		$sections[] = self::get_duplicate_killer_settings_feedback_text();
 
 		return implode("\n\n-----------------------------\n\n", array_filter($sections));
+	}
+	private static function get_installed_at() {
+		$settings = get_option('DuplicateKillerSettings');
+
+		if (!is_array($settings) || empty($settings['installed_at'])) {
+			return '';
+		}
+
+		return sanitize_text_field((string) $settings['installed_at']);
 	}
 
 	private static function get_active_plugins_feedback_text() {

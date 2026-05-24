@@ -128,33 +128,25 @@ function duplicateKiller_ninjaforms_before_send_email( $form_data ) {
 
 	// 2. Duplicate field check.
 	if ( $field_check_enabled ) {
-		foreach ( $enabled_fields as $field_id ) {
-			$field_value = array_key_exists( $field_id, $data ) ? $data[ $field_id ] : '';
+		foreach ( array( 'NinjaForms', 'Ninja Forms' ) as $plugin_name ) {
+			$result = DuplicateKiller_FieldDuplicate_Checker::check(
+				$plugin_name,
+				$form_name,
+				$enabled_fields,
+				$data,
+				$form_cookie,
+				$checked_cookie,
+				$form_config,
+				array(
+					'form_name' => $form_name,
+				)
+			);
 
-			if ( '' === $field_value ) {
-				continue;
-			}
+			if ( ! empty( $result['blocked'] ) ) {
+				$field_id = $result['field_key'];
 
-			$is_duplicate = false;
-
-			foreach ( array( 'NinjaForms', 'Ninja Forms' ) as $plugin_name ) {
-				$is_duplicate = DuplicateKiller_FieldDuplicate_Checker::check_duplicate_by_key_value(
-					$plugin_name,
-					$form_name,
-					$field_id,
-					$field_value,
-					$form_cookie,
-					$checked_cookie
-				);
-
-				if ( $is_duplicate ) {
-					break;
-				}
-			}
-
-			if ( $is_duplicate ) {
-				$message = ! empty( $form_config['error_message'] )
-					? (string) $form_config['error_message']
+				$message = ! empty( $result['message'] )
+					? (string) $result['message']
 					: __( 'Please check all fields! These values have been submitted already!', 'duplicate-killer' );
 
 				$form_data['errors']['form'] = $message;

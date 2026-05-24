@@ -18,7 +18,15 @@ class DuplicateKiller_CrossForm {
         ?>
         <div class="dk-feature-row">
 			<div class="dk-feature-info">
-				<h4><?php esc_html_e('3. Cross-form protection - Pro feature', 'duplicate-killer'); ?></h4>
+				<h4 class="dk-feature-title-pro">
+					<span>
+						<?php esc_html_e('3. Cross-form protection', 'duplicate-killer'); ?>
+					</span>
+
+					<span class="dk-feature-pro-badge">
+						<?php esc_html_e('PRO feature', 'duplicate-killer'); ?>
+					</span>
+				</h4>
 
 				<p>
 					<?php esc_html_e(

@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: Duplicate Killer
- * Version: 1.6.3
+ * Version: 1.6.4
  * Description: Block duplicate form submissions by validating unique email, phone and text fields — without CAPTCHA.
  * Author: NIA
  * Author URI: https://profiles.wordpress.org/wpnia/
@@ -13,7 +13,7 @@
 	defined('ABSPATH') or die('You shall not pass!');
 	
 	define('DUPLICATEKILLER_PLUGIN',__FILE__);
-	define('DUPLICATEKILLER_VERSION','1.6.3');
+	define('DUPLICATEKILLER_VERSION','1.6.4');
 	define('DUPLICATEKILLER_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 	define('DUPLICATEKILLER_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 	
@@ -85,6 +85,19 @@ function duplicateKiller_create_table(){
 function duplicateKiller_on_activate(){
 	duplicateKiller_create_table();
 	duplicateKiller_ensure_forms_duplicate_index();
+	
+	$settings = get_option('DuplicateKillerSettings', []);
+    if (!is_array($settings)) {
+		$settings = array();
+	}
+
+	if (empty($settings['installed_at'])) {
+		$settings['installed_at'] = current_time('mysql');
+	}
+
+	$settings['plugin_version'] = DUPLICATEKILLER_VERSION;
+
+	update_option('DuplicateKillerSettings', $settings, false);
 }
 register_activation_hook( __FILE__, 'duplicateKiller_on_activate' );
 
