@@ -27,7 +27,7 @@ final class duplicateKiller_Diagnostics {
 	const ACTION_CLEAR    = 'duplicateKiller_diagnostics_clear';
 
 	const DEFAULT_ENABLED    = 0;
-	const DEFAULT_MAX_ENTRIES = 75;
+	const DEFAULT_MAX_ENTRIES = 150;
 	const DEFAULT_DEBUG_TAIL = 200;
 
 	/**
@@ -93,6 +93,12 @@ final class duplicateKiller_Diagnostics {
 				$logs = [];
 			}
 
+			$user_agent = isset($_SERVER['HTTP_USER_AGENT'])
+				? sanitize_text_field(wp_unslash($_SERVER['HTTP_USER_AGENT']))
+				: '';
+
+			$device = self::duplicateKiller_get_device_snapshot($user_agent);
+
 			$entry = [
 				'time_local'     => current_time('mysql'),
 				'time_utc'       => gmdate('Y-m-d H:i:s'),
@@ -102,7 +108,10 @@ final class duplicateKiller_Diagnostics {
 				'request_method' => isset($_SERVER['REQUEST_METHOD']) ? sanitize_text_field(wp_unslash($_SERVER['REQUEST_METHOD'])) : '',
 				'current_url'    => self::duplicateKiller_get_current_url(),
 				'http_referer'   => isset($_SERVER['HTTP_REFERER']) ? esc_url_raw(wp_unslash($_SERVER['HTTP_REFERER'])) : '',
-				'user_agent'     => isset($_SERVER['HTTP_USER_AGENT']) ? sanitize_text_field(wp_unslash($_SERVER['HTTP_USER_AGENT'])) : '',
+				'device_type'    => $device['device_type'],
+				'browser'        => $device['browser'],
+				'os'             => $device['os'],
+				'user_agent'     => $user_agent,
 				'remote_ip'      => self::duplicateKiller_get_user_ip_safe(),
 				'payload'        => self::duplicateKiller_sanitize_recursive($payload),
 			];
@@ -176,7 +185,9 @@ final class duplicateKiller_Diagnostics {
 
 		$output = [];
 		$output['enabled'] = !empty($input['enabled']) ? 1 : 0;
-		$output['max_entries'] = self::DEFAULT_MAX_ENTRIES;
+		$output['max_entries'] = isset($input['max_entries'])
+			? max(1, min(300, absint($input['max_entries'])))
+			: self::DEFAULT_MAX_ENTRIES;
 
 		add_settings_error(
 			self::OPTION_SETTINGS,
@@ -525,9 +536,11 @@ final class duplicateKiller_Diagnostics {
 			'WordPress Constants'               => self::duplicateKiller_get_constants_snapshot(),
 			'Request Snapshot'                  => self::duplicateKiller_get_request_snapshot(),
 			'Hook / Action Context'             => self::duplicateKiller_get_hook_context_snapshot(),
+			'Elementor Hooks Snapshot'          => self::duplicateKiller_get_elementor_hooks_snapshot(),
 			'Duplicate Killer Core Availability'=> self::duplicateKiller_get_core_availability_snapshot(),
 			'Supported Integrations Status'     => self::duplicateKiller_get_integrations_status_snapshot(),
 			'Duplicate Killer Table'            => self::duplicateKiller_get_duplicate_killer_table_snapshot(),
+			'Elementor Submissions Table'       => self::duplicateKiller_get_elementor_submissions_snapshot(),
 			'Database Indexes / Collation'      => self::duplicateKiller_get_database_indexes_snapshot(),
 			'Stored Diagnostics Logs'           => self::duplicateKiller_get_logs(),
 			'wp-content/debug.log tail'         => self::duplicateKiller_get_wp_debug_log_tail(self::DEFAULT_DEBUG_TAIL),
@@ -553,9 +566,13 @@ final class duplicateKiller_Diagnostics {
 			$settings = [];
 		}
 
+		$max_entries = isset($settings['max_entries'])
+			? max(1, min(300, absint($settings['max_entries'])))
+			: self::DEFAULT_MAX_ENTRIES;
+
 		return [
 			'enabled'     => !empty($settings['enabled']) ? 1 : self::DEFAULT_ENABLED,
-			'max_entries' => self::DEFAULT_MAX_ENTRIES,
+			'max_entries' => $max_entries,
 		];
 	}
 
@@ -616,17 +633,95 @@ final class duplicateKiller_Diagnostics {
 	 * Safe IP getter.
 	 */
 	private static function duplicateKiller_get_user_ip_safe(): string {
-		if (function_exists('duplicateKiller_get_user_ip')) {
-			try {
-				return sanitize_text_field((string) duplicateKiller_get_user_ip());
-			} catch (\Throwable $e) {
-				return '';
+
+		try {
+
+			// New architecture.
+			if ( class_exists( 'DuplicateKiller_IP_Limit_Checker' ) ) {
+
+				$ip = DuplicateKiller_IP_Limit_Checker::get_user_ip();
+
+				if ( is_string( $ip ) && $ip !== '' ) {
+					return sanitize_text_field( $ip );
+				}
 			}
+
+			// Legacy fallback.
+			if ( function_exists( 'duplicateKiller_get_user_ip' ) ) {
+				return sanitize_text_field(
+					(string) duplicateKiller_get_user_ip()
+				);
+			}
+
+		} catch ( \Throwable $e ) {
+			return '';
 		}
 
-		return isset($_SERVER['REMOTE_ADDR']) ? sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR'])) : '';
+		return isset( $_SERVER['REMOTE_ADDR'] )
+			? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) )
+			: '';
 	}
 
+	/**
+	 * Build a simple device snapshot from the user agent.
+	 */
+	private static function duplicateKiller_get_device_snapshot(string $user_agent): array {
+		$ua = strtolower($user_agent);
+
+		$device_type = 'desktop';
+		if ($ua === '') {
+			$device_type = 'unknown';
+		} elseif (
+			strpos($ua, 'bot') !== false ||
+			strpos($ua, 'crawl') !== false ||
+			strpos($ua, 'spider') !== false
+		) {
+			$device_type = 'bot';
+		} elseif (
+			strpos($ua, 'ipad') !== false ||
+			strpos($ua, 'tablet') !== false
+		) {
+			$device_type = 'tablet';
+		} elseif (
+			strpos($ua, 'mobile') !== false ||
+			strpos($ua, 'iphone') !== false ||
+			(strpos($ua, 'android') !== false && strpos($ua, 'mobile') !== false)
+		) {
+			$device_type = 'mobile';
+		}
+
+		$browser = 'unknown';
+		if (strpos($ua, 'instagram') !== false) {
+			$browser = 'Instagram';
+		} elseif (strpos($ua, 'edg/') !== false || strpos($ua, 'edge/') !== false) {
+			$browser = 'Edge';
+		} elseif (strpos($ua, 'crios') !== false || strpos($ua, 'chrome') !== false) {
+			$browser = 'Chrome';
+		} elseif (strpos($ua, 'firefox') !== false || strpos($ua, 'fxios') !== false) {
+			$browser = 'Firefox';
+		} elseif (strpos($ua, 'safari') !== false) {
+			$browser = 'Safari';
+		}
+
+		$os = 'unknown';
+		if (strpos($ua, 'iphone') !== false || strpos($ua, 'ipad') !== false || strpos($ua, 'cpu iphone os') !== false) {
+			$os = 'iOS';
+		} elseif (strpos($ua, 'android') !== false) {
+			$os = 'Android';
+		} elseif (strpos($ua, 'windows') !== false) {
+			$os = 'Windows';
+		} elseif (strpos($ua, 'mac os x') !== false || strpos($ua, 'macintosh') !== false) {
+			$os = 'macOS';
+		} elseif (strpos($ua, 'linux') !== false) {
+			$os = 'Linux';
+		}
+
+		return [
+			'device_type' => $device_type,
+			'browser'     => $browser,
+			'os'          => $os,
+		];
+	}
 	/**
 	 * Sanitize recursively for storage.
 	 */
@@ -904,7 +999,6 @@ final class duplicateKiller_Diagnostics {
 		$functions = [
 			'duplicateKiller_get_user_ip',
 			'duplicateKiller_get_form_cookie_simple',
-			'duplicateKiller_check_duplicate_by_key_value',
 			'duplicateKiller_ip_limit_trigger',
 			'duplicateKiller_sanitize_forms_option',
 			'duplicateKiller_render_forms_overview',
@@ -947,6 +1041,82 @@ final class duplicateKiller_Diagnostics {
 			'doing_action_elementor_pro_init' => did_action('elementor_pro/init'),
 			'registered_hook_count'     => is_array($wp_filter) ? count($wp_filter) : 0,
 		];
+	}
+	/**
+	 * Collect callbacks registered on Elementor form hooks.
+	 */
+	private static function duplicateKiller_get_elementor_hooks_snapshot(): array {
+		$hooks = [
+			'elementor_pro/forms/validation',
+			'elementor_pro/forms/new_record',
+		];
+
+		$out = [];
+
+		foreach ($hooks as $hook_name) {
+			$out[$hook_name] = self::duplicateKiller_describe_hook_callbacks($hook_name);
+		}
+
+		return $out;
+	}
+
+	/**
+	 * Describe registered callbacks for a hook.
+	 */
+	private static function duplicateKiller_describe_hook_callbacks(string $hook_name): array {
+		global $wp_filter;
+
+		if (empty($wp_filter[$hook_name])) {
+			return [];
+		}
+
+		$hook = $wp_filter[$hook_name];
+		if (!is_object($hook) || empty($hook->callbacks) || !is_array($hook->callbacks)) {
+			return [];
+		}
+
+		$out = [];
+
+		foreach ($hook->callbacks as $priority => $callbacks) {
+			if (!is_array($callbacks)) {
+				continue;
+			}
+
+			foreach ($callbacks as $callback) {
+				$function = isset($callback['function']) ? $callback['function'] : null;
+
+				$out[] = [
+					'priority' => (int) $priority,
+					'callback' => self::duplicateKiller_describe_callback($function),
+				];
+			}
+		}
+
+		return $out;
+	}
+
+	/**
+	 * Convert a callback to a readable label.
+	 */
+	private static function duplicateKiller_describe_callback($callback): string {
+		if (is_string($callback)) {
+			return $callback;
+		}
+
+		if (is_array($callback) && isset($callback[0], $callback[1])) {
+			$class = is_object($callback[0]) ? get_class($callback[0]) : (string) $callback[0];
+			return $class . '::' . (string) $callback[1];
+		}
+
+		if ($callback instanceof \Closure) {
+			return 'Closure';
+		}
+
+		if (is_object($callback)) {
+			return get_class($callback);
+		}
+
+		return 'unknown';
 	}
 	/**
 	 * Collect important constants snapshot.
@@ -1074,6 +1244,269 @@ final class duplicateKiller_Diagnostics {
 		return $out;
 	}
 
+		/**
+	 * Collect Elementor Pro submissions table details.
+	 */
+	private static function duplicateKiller_get_elementor_submissions_snapshot(): array {
+		global $wpdb;
+
+		$submissions_table = $wpdb->prefix . 'e_submissions';
+		$values_table      = $wpdb->prefix . 'e_submissions_values';
+		$actions_table     = $wpdb->prefix . 'e_submissions_actions_log';
+
+		$out = [
+			'tables' => [
+				'e_submissions'             => self::duplicateKiller_table_exists( $submissions_table ) ? 'yes' : 'no',
+				'e_submissions_values'      => self::duplicateKiller_table_exists( $values_table ) ? 'yes' : 'no',
+				'e_submissions_actions_log' => self::duplicateKiller_table_exists( $actions_table ) ? 'yes' : 'no',
+			],
+			'latest_submissions'   => [],
+			'values_by_submission' => [],
+			'actions_by_submission'=> [],
+		];
+
+		if ( 'yes' !== $out['tables']['e_submissions'] ) {
+			$out['note'] = 'Elementor submissions table was not found.';
+			return $out;
+		}
+
+		$submission_columns = self::duplicateKiller_get_table_columns( $submissions_table );
+		$select_columns     = array_values( array_intersect(
+			[
+				'id',
+				'type',
+				'post_id',
+				'referer',
+				'referer_title',
+				'element_id',
+				'form_name',
+				'user_id',
+				'user_ip',
+				'user_agent',
+				'actions_count',
+				'actions_succeeded_count',
+				'status',
+				'created_at_gmt',
+				'created_at',
+				'updated_at',
+			],
+			$submission_columns
+		) );
+
+		if ( empty( $select_columns ) || ! in_array( 'id', $select_columns, true ) ) {
+			$out['submission_columns'] = $submission_columns;
+			$out['note']               = 'Elementor submissions table exists, but expected columns were not found.';
+			return $out;
+		}
+
+		$select_sql = implode( ', ', array_map( [ __CLASS__, 'duplicateKiller_quote_identifier' ], $select_columns ) );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Diagnostics only.
+		$latest_submissions = $wpdb->get_results(
+			"SELECT {$select_sql} FROM {$submissions_table} ORDER BY id DESC LIMIT 20",
+			ARRAY_A
+		);
+
+		if ( ! is_array( $latest_submissions ) ) {
+			return $out;
+		}
+
+		$out['latest_submissions'] = self::duplicateKiller_mask_sensitive_recursive( $latest_submissions );
+
+		$submission_ids = [];
+		foreach ( $latest_submissions as $submission ) {
+			if ( isset( $submission['id'] ) ) {
+				$submission_ids[] = absint( $submission['id'] );
+			}
+		}
+
+		$submission_ids = array_values( array_filter( array_unique( $submission_ids ) ) );
+
+		if ( empty( $submission_ids ) ) {
+			return $out;
+		}
+
+		if ( 'yes' === $out['tables']['e_submissions_values'] ) {
+			$out['values_by_submission'] = self::duplicateKiller_get_elementor_submission_values_snapshot( $values_table, $submission_ids );
+		}
+
+		if ( 'yes' === $out['tables']['e_submissions_actions_log'] ) {
+			$out['actions_by_submission'] = self::duplicateKiller_get_elementor_submission_actions_snapshot( $actions_table, $submission_ids );
+		}
+
+		return $out;
+	}
+
+	/**
+	 * Collect Elementor submission values for selected submissions.
+	 */
+	private static function duplicateKiller_get_elementor_submission_values_snapshot( string $table_name, array $submission_ids ): array {
+		global $wpdb;
+
+		$columns = self::duplicateKiller_get_table_columns( $table_name );
+
+		if (
+			! in_array( 'submission_id', $columns, true ) ||
+			! in_array( 'key', $columns, true ) ||
+			! in_array( 'value', $columns, true )
+		) {
+			return [
+				'note'    => 'Expected Elementor submission value columns were not found.',
+				'columns' => $columns,
+			];
+		}
+
+		$placeholders = implode( ', ', array_fill( 0, count( $submission_ids ), '%d' ) );
+		$query        = "SELECT submission_id, `key`, `value` FROM {$table_name} WHERE submission_id IN ({$placeholders}) ORDER BY id ASC";
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Diagnostics only.
+		$rows = $wpdb->get_results(
+			call_user_func_array( [ $wpdb, 'prepare' ], array_merge( [ $query ], $submission_ids ) ),
+			ARRAY_A
+		);
+
+		$out = [];
+
+		if ( ! is_array( $rows ) ) {
+			return $out;
+		}
+
+		foreach ( $rows as $row ) {
+			$submission_id = isset( $row['submission_id'] ) ? absint( $row['submission_id'] ) : 0;
+			$field_key     = isset( $row['key'] ) ? sanitize_text_field( (string) $row['key'] ) : '';
+
+			if ( ! $submission_id || '' === $field_key ) {
+				continue;
+			}
+
+			$out[ $submission_id ][ $field_key ] = self::duplicateKiller_mask_elementor_submission_value(
+				$field_key,
+				isset( $row['value'] ) ? $row['value'] : ''
+			);
+		}
+
+		return $out;
+	}
+
+	/**
+	 * Collect Elementor submission actions for selected submissions.
+	 */
+	private static function duplicateKiller_get_elementor_submission_actions_snapshot( string $table_name, array $submission_ids ): array {
+		global $wpdb;
+
+		$columns = self::duplicateKiller_get_table_columns( $table_name );
+
+		if (
+			! in_array( 'submission_id', $columns, true ) ||
+			! in_array( 'action_name', $columns, true ) ||
+			! in_array( 'status', $columns, true )
+		) {
+			return [
+				'note'    => 'Expected Elementor submission action columns were not found.',
+				'columns' => $columns,
+			];
+		}
+
+		$select_columns = array_values( array_intersect(
+			[ 'submission_id', 'action_name', 'action_label', 'status', 'created_at' ],
+			$columns
+		) );
+
+		$select_sql    = implode( ', ', array_map( [ __CLASS__, 'duplicateKiller_quote_identifier' ], $select_columns ) );
+		$placeholders  = implode( ', ', array_fill( 0, count( $submission_ids ), '%d' ) );
+		$query         = "SELECT {$select_sql} FROM {$table_name} WHERE submission_id IN ({$placeholders}) ORDER BY id ASC";
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Diagnostics only.
+		$rows = $wpdb->get_results(
+			call_user_func_array( [ $wpdb, 'prepare' ], array_merge( [ $query ], $submission_ids ) ),
+			ARRAY_A
+		);
+
+		$out = [];
+
+		if ( ! is_array( $rows ) ) {
+			return $out;
+		}
+
+		foreach ( $rows as $row ) {
+			$submission_id = isset( $row['submission_id'] ) ? absint( $row['submission_id'] ) : 0;
+
+			if ( ! $submission_id ) {
+				continue;
+			}
+
+			$out[ $submission_id ][] = self::duplicateKiller_mask_sensitive_recursive( $row );
+		}
+
+		return $out;
+	}
+
+	/**
+	 * Collect table column names.
+	 */
+	private static function duplicateKiller_get_table_columns( string $table_name ): array {
+		global $wpdb;
+
+		if ( ! self::duplicateKiller_table_exists( $table_name ) ) {
+			return [];
+		}
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Diagnostics only.
+		$schema = $wpdb->get_results( "DESCRIBE {$table_name}", ARRAY_A );
+
+		if ( ! is_array( $schema ) ) {
+			return [];
+		}
+
+		$columns = [];
+
+		foreach ( $schema as $row ) {
+			if ( isset( $row['Field'] ) && '' !== (string) $row['Field'] ) {
+				$columns[] = (string) $row['Field'];
+			}
+		}
+
+		return $columns;
+	}
+
+	/**
+	 * Quote a known-safe SQL identifier.
+	 */
+	private static function duplicateKiller_quote_identifier( string $identifier ): string {
+		return '`' . str_replace( '`', '', $identifier ) . '`';
+	}
+
+	/**
+	 * Mask Elementor submission values for diagnostics output.
+	 */
+	private static function duplicateKiller_mask_elementor_submission_value( string $key, $value ): string {
+		$value = sanitize_text_field( (string) $value );
+		$key   = strtolower( $key );
+
+		if ( false !== strpos( $key, 'email' ) && is_email( $value ) ) {
+			$parts = explode( '@', $value );
+
+			return substr( $parts[0], 0, 2 ) . '***@' . $parts[1];
+		}
+
+		if (
+			false !== strpos( $key, 'phone' ) ||
+			false !== strpos( $key, 'tel' ) ||
+			preg_match( '/^\+?[0-9\s\-\(\)]{7,}$/', $value )
+		) {
+			$digits = preg_replace( '/\D+/', '', $value );
+
+			if ( is_string( $digits ) && strlen( $digits ) > 4 ) {
+				return str_repeat( '*', max( 0, strlen( $digits ) - 4 ) ) . substr( $digits, -4 );
+			}
+		}
+
+		if ( strlen( $value ) > 120 ) {
+			return substr( $value, 0, 120 ) . '...';
+		}
+
+		return $value;
+	}
 	/**
 	 * Check if a custom table exists.
 	 */

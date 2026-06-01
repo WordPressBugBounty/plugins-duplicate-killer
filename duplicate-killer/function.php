@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: Duplicate Killer
- * Version: 1.6.4
+ * Version: 1.6.5
  * Description: Block duplicate form submissions by validating unique email, phone and text fields — without CAPTCHA.
  * Author: NIA
  * Author URI: https://profiles.wordpress.org/wpnia/
@@ -13,7 +13,7 @@
 	defined('ABSPATH') or die('You shall not pass!');
 	
 	define('DUPLICATEKILLER_PLUGIN',__FILE__);
-	define('DUPLICATEKILLER_VERSION','1.6.4');
+	define('DUPLICATEKILLER_VERSION','1.6.5');
 	define('DUPLICATEKILLER_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 	define('DUPLICATEKILLER_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 	
@@ -223,114 +223,32 @@ function duplicateKiller_settings_link($links) {
 $plugin = plugin_basename(__FILE__);
 add_filter("plugin_action_links_$plugin", 'duplicateKiller_settings_link' );
 
-
-/**
- * Get the table data
- */
-function duplicateKiller_check_duplicate( $form_plugin, $form_name ) {
-	global $wpdb;
-
-	$table_name = esc_sql( $wpdb->prefix . 'dk_forms_duplicate' );
-	
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Reading from plugin-owned custom table (request-scoped, frequently changing).
-	return $wpdb->get_results(
-		$wpdb->prepare(
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is safe (plugin-owned, prefixed).
-			"SELECT form_value, form_cookie FROM {$table_name} WHERE form_plugin = %s AND form_name = %s ORDER BY form_id DESC",
-			$form_plugin,
-			$form_name
-		)
-	);
-}
-function duplicateKiller_check_cookie($data){
-	$option = $data['get_option'];
-	if(isset($option[$data['plugin_name']]) AND $option[$data['plugin_name']] == "1"){
-		if($data['cookie_stored'] == $data['cookie_db_set']){
-			return true;
-		}else{
-			return false;
-		}
-	}else{
-		return true;
-	}
-}
-//inserted from v1.2.1
-function duplicateKiller_check_values($db_values, $form_name, $form_value){
-	if(is_array($db_values)){
-		foreach($db_values as $row){
-			if(is_array($row)){
-				if($row['name'] == $form_name){
-					//check for forminator name field(Prefix,FirstName,MiddleName,LastName)
-					if(is_array($row['value']) AND is_array($form_value)){
-						$var1 = array_map('strtolower', $row['value']);
-						$var2 = array_map('strtolower', $form_value);
-							if($var1 == $var2){
-								return true;
-							}
-					}
-					elseif(strtolower($row['value']) == strtolower($form_value)){
-						return true;
-					}
-				}
-			}else{
-				//for version under 1.2.1
-				if($row == $form_value){
-					if(strtolower($row) == strtolower($form_value)){
-						return true;
-					}
-				}
-			}
-			
-		}
-	}
-	return false;
-}
 /**
  * Include plugin style
  */
 add_action( 'admin_enqueue_scripts', 'duplicateKiller_callback_for_setting_up_scripts' );
 
-function duplicateKiller_callback_for_setting_up_scripts( $hook ) {
+function duplicateKiller_callback_for_setting_up_scripts() {
 
-	// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Admin page slug only.
-	$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : '';
+	// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only admin routing param.
+	$page = isset( $_GET['page'] ) ? sanitize_text_field( wp_unslash( $_GET['page'] ) ) : '';
 
-	if (
-		'duplicatekiller' !== $page &&
-		'duplicateKiller_database' !== $page &&
-		'duplicatekiller_diagnostics' !== $page
-	) {
+	// Only load assets on Duplicate Killer admin pages.
+	// Handles both: page=duplicateKiller and any subpages like page=duplicateKiller_something
+	if ( $page === '' || stripos( $page, 'duplicateKiller' ) !== 0 ) {
 		return;
 	}
 
-	wp_register_style(
+	wp_enqueue_style(
 		'duplicateKillerStyle',
 		plugins_url( 'assets/style.css', DUPLICATEKILLER_PLUGIN ),
 		array(),
 		DUPLICATEKILLER_VERSION
 	);
 
-	wp_enqueue_style( 'duplicateKillerStyle' );
-
 	wp_enqueue_script(
 		'duplicateKiller-admin',
 		plugins_url( 'assets/admin-settings.js', DUPLICATEKILLER_PLUGIN ),
-		array(),
-		DUPLICATEKILLER_VERSION,
-		true
-	);
-	
-	// Only on Support tab
-	// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- UI navigation param only.
-	$tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : '';
-	// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- UI navigation param only.
-	if ( 'support' !== $tab ) {
-		return;
-	}
-
-	wp_enqueue_script(
-		'duplicateKiller-admin-support',
-		plugins_url( 'assets/admin-support.js', DUPLICATEKILLER_PLUGIN ),
 		array(),
 		DUPLICATEKILLER_VERSION,
 		true
@@ -573,7 +491,22 @@ function duplicateKiller_options() {
 		}
 	}    
 }
+/**
+ * Frontend footprint.
+ *
+ * Displays a small HTML comment in page source so developers
+ * can identify that Duplicate Killer is active.
+ */
+add_action( 'wp_footer', 'duplicateKiller_frontend_powered_by_comment', 999 );
 
+function duplicateKiller_frontend_powered_by_comment() {
+
+	if ( is_admin() ) {
+		return;
+	}
+
+	echo "\n<!-- Duplicate protection powered by Duplicate Killer by VerseLabWP -->\n";
+}
 /**
  * Display Page
 */

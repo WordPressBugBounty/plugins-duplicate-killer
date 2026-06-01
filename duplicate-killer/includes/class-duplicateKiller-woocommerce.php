@@ -263,7 +263,7 @@ final class duplicateKiller_WooCommerce {
 		$existing['payment_method']  = sanitize_key( $payment_method );
 		$existing['customer_id']     = function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0;
 		$existing['mode']            = self::get_checkout_mode();
-		$existing['ip']              = duplicateKiller_get_user_ip();
+		$existing['ip']              = self::get_user_ip();
 
 		// Keep same expiration window (do NOT extend it unexpectedly).
 		$window = (int) apply_filters( 'duplicateKiller_wc_lock_window_seconds', self::LOCK_WINDOW_SECONDS, $posted_data );
@@ -450,7 +450,7 @@ final class duplicateKiller_WooCommerce {
 		// Insert only on duplicates -> low volume, performance-safe.
 		$table = $wpdb->prefix . 'dk_forms_duplicate';
 
-		$ip = duplicateKiller_get_user_ip();
+		$ip = self::get_user_ip();
 
 		$email = '';
 		if ( isset( $data['billing_email'] ) ) {
@@ -717,5 +717,67 @@ final class duplicateKiller_WooCommerce {
 		}
 
 		return array_values( array_unique( $others ) );
+	}
+	private static function get_user_ip(): string {
+
+		if ( class_exists( 'DuplicateKiller_IP_Limit_Checker' ) ) {
+			return DuplicateKiller_IP_Limit_Checker::get_user_ip();
+		}
+
+		if ( function_exists( 'duplicateKiller_get_user_ip' ) ) {
+			return (string) duplicateKiller_get_user_ip();
+		}
+
+		return 'undefined';
+	}
+	public static function get_wc_analytics_summary(): array {
+		return array(
+			'total'    => 12,
+			'last_24h' => 2,
+			'last_7d'  => 8,
+		);
+	}
+
+	public static function get_wc_analytics_top( int $limit = 5 ): array {
+		return array(
+			'top_products' => array(
+				0 => 5,
+				1 => 3,
+			),
+			'top_domains' => array(
+				'gmail.com'   => 6,
+				'yahoo.com'   => 3,
+				'example.com' => 2,
+			),
+			'top_payments' => array(
+				'cod'    => 5,
+				'stripe' => 4,
+				'paypal' => 2,
+			),
+			'top_modes' => array(
+				'shortcode' => 7,
+				'blocks'    => 4,
+			),
+			'top_ips' => array(
+				'192.168.1.10' => 4,
+				'192.168.1.22' => 3,
+			),
+			'top_emails' => array(),
+			'unique_fingerprints' => 9,
+			'orders_created'      => 7,
+			'scanned_rows'        => 12,
+		);
+	}
+
+	public static function get_wc_analytics_trends( int $days = 14 ): array {
+		$days  = max( 2, min( 60, $days ) );
+		$trend = array();
+
+		for ( $i = $days - 1; $i >= 0; $i-- ) {
+			$date = date_i18n( 'Y-m-d', strtotime( '-' . $i . ' days' ) );
+			$trend[ $date ] = (int) max( 0, ( $days - $i ) % 5 );
+		}
+
+		return $trend;
 	}
 }

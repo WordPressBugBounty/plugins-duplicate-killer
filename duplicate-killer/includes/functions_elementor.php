@@ -82,17 +82,52 @@ function duplicateKiller_elementor_guard_only( $record, $ajax_handler ) {
 		);
 
 		if ( $ip_limit_result['blocked'] ) {
-			$message = $ip_limit_result['message'];
+			$message   = $ip_limit_result['message'];
+			$field_key = '';
+
+			foreach ( array_keys( $data ) as $data_key ) {
+				if ( false !== stripos( (string) $data_key, 'email' ) ) {
+					$field_key = (string) $data_key;
+					break;
+				}
+			}
+
+			if ( '' === $field_key ) {
+				foreach ( array_keys( $data ) as $data_key ) {
+					if (
+						false !== stripos( (string) $data_key, 'phone' )
+						|| false !== stripos( (string) $data_key, 'tel' )
+					) {
+						$field_key = (string) $data_key;
+						break;
+					}
+				}
+			}
+
+			if ( '' === $field_key && ! empty( $data ) ) {
+				$data_keys = array_keys( $data );
+				$field_key = (string) reset( $data_keys );
+			}
 
 			if ( is_object( $ajax_handler ) && method_exists( $ajax_handler, 'add_error_message' ) ) {
 				$ajax_handler->add_error_message( $message );
 			}
 
+			if (
+				is_object( $ajax_handler )
+				&& method_exists( $ajax_handler, 'add_error' )
+				&& '' !== $field_key
+			) {
+				$ajax_handler->add_error( $field_key, $message );
+			}
+
 			if ( $dk_enabled ) {
 				duplicateKiller_Diagnostics::log( 'elementor', 'ip_limit_blocked', array(
-					'request_debug_id' => $request_debug_id,
-					'form_name'        => $form_name,
-					'message'          => $message,
+					'request_debug_id'  => $request_debug_id,
+					'form_name'         => $form_name,
+					'message'           => $message,
+					'field_key'         => $field_key,
+					'field_error_added' => is_object( $ajax_handler ) && method_exists( $ajax_handler, 'add_error' ) && '' !== $field_key ? 1 : 0,
 				) );
 			}
 
@@ -141,12 +176,21 @@ function duplicateKiller_elementor_guard_only( $record, $ajax_handler ) {
 				$ajax_handler->add_error_message( $message );
 			}
 
+			if (
+				is_object( $ajax_handler ) &&
+				method_exists( $ajax_handler, 'add_error' ) &&
+				! empty( $result['field_key'] )
+			) {
+				$ajax_handler->add_error( $result['field_key'], $message );
+			}
+
 			if ( $dk_enabled ) {
 				duplicateKiller_Diagnostics::log( 'elementor', 'duplicate_found', array(
-					'request_debug_id' => $request_debug_id,
-					'form_name'        => $form_name,
-					'field_key'        => $result['field_key'],
-					'message'          => $message,
+					'request_debug_id'          => $request_debug_id,
+					'form_name'                 => $form_name,
+					'field_key'                 => $result['field_key'],
+					'message'                   => $message,
+					'field_error_added'         => is_object( $ajax_handler ) && method_exists( $ajax_handler, 'add_error' ) && ! empty( $result['field_key'] ) ? 1 : 0,
 				) );
 			}
 

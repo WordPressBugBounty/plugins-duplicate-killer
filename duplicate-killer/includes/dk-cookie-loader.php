@@ -11,6 +11,64 @@ defined( 'ABSPATH' ) || exit;
  */
 
 add_action( 'wp_enqueue_scripts', 'duplicateKiller_cookie_enqueue_script' );
+add_action( 'wp_enqueue_scripts', 'duplicateKiller_elementor_ui_enqueue_script' );
+
+function duplicateKiller_elementor_ui_enqueue_script() {
+
+	if ( is_admin() ) {
+		return;
+	}
+
+	$messages = duplicateKiller_elementor_ui_get_messages();
+
+	if ( empty( $messages ) ) {
+		return;
+	}
+
+	$handle = 'dk-elementor-ui';
+	$ver    = defined( 'DUPLICATEKILLER_VERSION' ) ? DUPLICATEKILLER_VERSION : '1.0.0';
+	$src    = plugins_url( 'assets/dk-elementor-ui.js', DUPLICATEKILLER_PLUGIN );
+
+	wp_enqueue_script( $handle, $src, array(), $ver, true );
+
+	wp_localize_script( $handle, 'DK_ELEMENTOR_UI', array(
+		'messages' => $messages,
+	) );
+}
+
+function duplicateKiller_elementor_ui_get_messages() {
+
+	$elementor_page = get_option( 'Elementor_page', array() );
+
+	if ( ! is_array( $elementor_page ) || empty( $elementor_page ) ) {
+		return array();
+	}
+
+	$messages = array(
+		__( 'Please check all fields! These values have been submitted already!', 'duplicate-killer' ),
+		__( 'Duplicate found.', 'duplicate-killer' ),
+		__( 'This IP has been already submitted.', 'duplicate-killer' ),
+	);
+
+	foreach ( $elementor_page as $form_config ) {
+		if ( ! is_array( $form_config ) ) {
+			continue;
+		}
+
+		if ( ! empty( $form_config['error_message'] ) ) {
+			$messages[] = (string) $form_config['error_message'];
+		}
+		if ( ! empty( $form_config['error_message_limit_ip_option'] ) ) {
+			$messages[] = (string) $form_config['error_message_limit_ip_option'];
+		}
+	}
+
+	$messages = array_map( 'wp_strip_all_tags', $messages );
+	$messages = array_map( 'trim', $messages );
+	$messages = array_filter( array_unique( $messages ) );
+
+	return array_values( $messages );
+}
 
 function duplicateKiller_cookie_enqueue_script() {
 
