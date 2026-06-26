@@ -1,5 +1,5 @@
 === Duplicate Killer – Prevent Duplicate Form Submissions ===
-Version: 1.6.5
+Version: 1.6.6
 Author: NIA
 Author URI: https://profiles.wordpress.org/wpnia/
 Contributors: wpnia
@@ -7,7 +7,7 @@ Tags: woocommerce, duplicate orders, duplicate submissions, elementor forms, con
 Donate link: https://www.paypal.com/paypalme/wpnia
 Requires at least: 5.2
 Tested up to: 7.0
-Stable tag: 1.6.5
+Stable tag: 1.6.6
 Requires PHP: 5.6.20
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -247,11 +247,16 @@ PRO adds enhanced idempotency handling and deeper gateway analytics.
 5. Works with popular WordPress form plugins
 
 == Upgrade Notice ==
-= 1.6.5 =
-* Improves Elementor duplicate submission validation and submissions page experience, while fixing duplicate error messages and a WooCommerce undefined function issue.
+= 1.6.6 =
+Improves Contact Form 7 message compatibility, especially for sites that display form responses in popups.
 
 
 == Changelog ==
+
+= 1.6.6 =
+* Improved compatibility with popup-based Contact Form 7 message plugins.
+* Duplicate protection messages now display correctly when Contact Form 7 responses are shown in popups.
+* Improved handling for blocked Contact Form 7 submissions without changing duplicate detection behavior.
 
 = 1.6.5 =
 * Tweaks: Improved Elementor duplicate submission blocking.

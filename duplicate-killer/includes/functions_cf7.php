@@ -2,6 +2,34 @@
 defined( 'ABSPATH' ) or die( 'You shall not pass!' );
 
 add_action( 'wpcf7_before_send_mail', 'duplicateKiller_cf7_before_send_email', 1, 3 );
+add_action( 'wp_enqueue_scripts', 'duplicateKiller_cf7_popups_compat_enqueue', 30 );
+
+function duplicateKiller_cf7_popups_compat_enqueue() {
+
+	if ( is_admin() ) {
+		return;
+	}
+
+	if ( ! defined( 'DUPLICATEKILLER_PLUGIN' ) || ! defined( 'DUPLICATEKILLER_VERSION' ) ) {
+		return;
+	}
+
+	if ( ! function_exists( 'is_plugin_active' ) ) {
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+	}
+
+	if ( ! is_plugin_active( 'cf7-popups/cf7-popups.php' ) ) {
+		return;
+	}
+
+	wp_enqueue_script(
+		'duplicatekiller-cf7-popups-compat',
+		plugins_url( 'assets/dk-cf7-popups-compat.js', DUPLICATEKILLER_PLUGIN ),
+		array( 'jquery', 'cf7-popups-frontend' ),
+		DUPLICATEKILLER_VERSION,
+		true
+	);
+}
 function duplicateKiller_cf7_before_send_email( $contact_form, &$abort, $object ) {
 
 	$cf7_page   = get_option( 'CF7_page' );
