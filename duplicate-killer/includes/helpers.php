@@ -4,6 +4,7 @@ defined( 'ABSPATH' ) or die( 'You shall not pass!' );
 define( 'DK_NINJA_FORMS', 'NinjaForms' );
 define( 'DK_NINJA_FORMS_LABEL', 'Ninja Forms' );
 
+
 function duplicateKiller_shortcode_duplicatekiller_count($atts) {
     $atts = shortcode_atts([
         'plugin' => '',

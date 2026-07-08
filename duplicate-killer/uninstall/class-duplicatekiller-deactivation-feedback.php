@@ -245,6 +245,7 @@ class duplicateKiller_Deactivation_Feedback {
 			$domain = strtolower($parsed['host']);
 		}
 		$enhanced_reason_text = self::build_enhanced_feedback_text($reason_text);
+
 		return array(
 			'plugin_slug'      => self::$plugin_slug,
 			'plugin_name'      => self::$plugin_name,
@@ -292,7 +293,6 @@ class duplicateKiller_Deactivation_Feedback {
 
 		return sanitize_text_field((string) $settings['installed_at']);
 	}
-
 	private static function get_active_plugins_feedback_text() {
 		if (!function_exists('get_plugins')) {
 			require_once ABSPATH . 'wp-admin/includes/plugin.php';
@@ -354,6 +354,7 @@ class duplicateKiller_Deactivation_Feedback {
 			'Elementor_page',
 			'Formidable_page',
 			'NinjaForms_page',
+			'FluentForms_page',
 			'WooCommerce_page',
 		);
 
@@ -497,6 +498,7 @@ class duplicateKiller_Deactivation_Feedback {
 		delete_option('WPForms_page');
 		delete_option('Formidable_page');
 		delete_option('NinjaForms_page');
+		delete_option('FluentForms_page');
 		delete_option('DuplicateKillerSettings');
 		delete_option('duplicatekillerpro_license_options');
 		delete_option('duplicate_killer_elementor_debug_logs');

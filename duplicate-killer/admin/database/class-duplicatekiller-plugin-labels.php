@@ -13,6 +13,7 @@ class DuplicateKiller_Plugin_Labels {
 			'Formidable'   => 'Formidable Forms',
 			'NinjaForms'   => 'Ninja Forms',
 			'Ninja Forms'  => 'Ninja Forms',
+			'FluentForms'  => 'Fluent Forms',
 			'WooCommerce'  => 'WooCommerce',
 		);
 

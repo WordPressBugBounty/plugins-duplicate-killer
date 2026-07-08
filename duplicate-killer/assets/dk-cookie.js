@@ -142,6 +142,24 @@
 	  var frmid = formEl.getAttribute("id");
 	  return frmid ? safeId(frmid) : null;
 	}
+	
+	if (providerKey === "fluentforms") {
+	  var ffData = formEl.getAttribute("data-form_id");
+	  var ffDataId = intOrNull(ffData);
+	  if (ffDataId) return ffDataId;
+
+	  var ffHidden = formEl.querySelector('input[name="form_id"]');
+	  var ffHiddenId = ffHidden ? intOrNull(ffHidden.value) : null;
+	  if (ffHiddenId) return ffHiddenId;
+
+	  var ffId = formEl.getAttribute("id");
+	  var ffIdNum = extractFirstNumber(ffId);
+	  if (ffIdNum) return ffIdNum;
+
+	  var cls = formEl.getAttribute("class") || "";
+	  var m = cls.match(/fluent_form_(\d+)/);
+	  return m ? intOrNull(m[1]) : null;
+	}
 
     // Generic fallback: numeric from id, else safe id string
     var generic = formEl.getAttribute("id");

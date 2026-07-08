@@ -558,6 +558,48 @@ function duplicateKiller_cookie_default_providers() {
 		// Keep it broad: Ninja often stores the form id on wrappers, not on <form>
 		'selector'       => '.nf-form-content, .nf-form-wrap, .nf-form-cont, form[id^="nf-form-"], [data-nf-form-id]',
 	);
+	
+	// =========================
+	// Fluent Forms - PRO ONLY (cookie_option must be explicitly enabled)
+	// =========================
+	$fluentforms_page = get_option( 'FluentForms_page', array() );
+
+	$fluentforms_on       = false;
+	$fluentforms_per_days = array();
+
+	if ( is_array( $fluentforms_page ) && ! empty( $fluentforms_page ) ) {
+		foreach ( $fluentforms_page as $cfg ) {
+			if ( ! is_array( $cfg ) ) {
+				continue;
+			}
+
+			if ( empty( $cfg['cookie_option'] ) || (string) $cfg['cookie_option'] !== '1' ) {
+				continue;
+			}
+
+			if ( empty( $cfg['form_id'] ) || ! is_numeric( $cfg['form_id'] ) ) {
+				continue;
+			}
+
+			$days = 1;
+			if ( isset( $cfg['cookie_option_days'] ) && is_numeric( $cfg['cookie_option_days'] ) ) {
+				$days = max( 1, absint( $cfg['cookie_option_days'] ) );
+			}
+
+			$fluentforms_per_days[ absint( $cfg['form_id'] ) ] = $days;
+		}
+
+		if ( ! empty( $fluentforms_per_days ) ) {
+			$fluentforms_on = true;
+		}
+	}
+
+	$providers['fluentforms'] = array(
+		'enabled'       => $fluentforms_on,
+		'per_form_days' => $fluentforms_per_days,
+		'cookie_prefix' => 'dk_form_cookie_fluentforms_',
+		'selector'      => 'form.frm-fluent-form, form[id^="fluentform_"], form[class*="fluent_form_"], .fluentform form',
+	);
 	/**
 	 * Future providers (placeholders):
 	 * Coming soon

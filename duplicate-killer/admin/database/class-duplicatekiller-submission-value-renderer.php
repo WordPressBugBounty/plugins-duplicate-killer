@@ -29,6 +29,10 @@ class DuplicateKiller_Submission_Value_Renderer {
 		if ( 'NinjaForms' === $plugin || 'Ninja Forms' === $plugin ) {
 			return $this->render_ninjaforms( $form_value, $form_name );
 		}
+		
+		if ( 'FluentForms' === $plugin ) {
+			return $this->render_fluentforms( $form_value );
+		}
 
 		if ( 'WooCommerce' === $plugin ) {
 			return $this->render_woocommerce( $form_value );
@@ -748,7 +752,22 @@ class DuplicateKiller_Submission_Value_Renderer {
 
 		return $out;
 	}
+	
+	private function render_fluentforms( $form_value ): string {
+		$form_value = maybe_unserialize( $form_value );
 
+		if ( ! is_array( $form_value ) || empty( $form_value ) ) {
+			return '';
+		}
+
+		$out = '';
+
+		foreach ( $form_value as $key => $value ) {
+			$out .= $this->render_modal_row( (string) $key, $value );
+		}
+
+		return $out;
+	}
 	private function render_woocommerce( $form_value ): string {
 		$form_value = maybe_unserialize( $form_value );
 

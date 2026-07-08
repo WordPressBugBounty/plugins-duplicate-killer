@@ -536,7 +536,7 @@ final class duplicateKiller_Diagnostics {
 			'WordPress Constants'               => self::duplicateKiller_get_constants_snapshot(),
 			'Request Snapshot'                  => self::duplicateKiller_get_request_snapshot(),
 			'Hook / Action Context'             => self::duplicateKiller_get_hook_context_snapshot(),
-			'Elementor Hooks Snapshot'          => self::duplicateKiller_get_elementor_hooks_snapshot(),
+			'Form Integration Hooks Snapshot'   => self::duplicateKiller_get_elementor_hooks_snapshot(),
 			'Duplicate Killer Core Availability'=> self::duplicateKiller_get_core_availability_snapshot(),
 			'Supported Integrations Status'     => self::duplicateKiller_get_integrations_status_snapshot(),
 			'Duplicate Killer Table'            => self::duplicateKiller_get_duplicate_killer_table_snapshot(),
@@ -771,6 +771,7 @@ final class duplicateKiller_Diagnostics {
 			'Elementor_page'                   => get_option('Elementor_page', []),
 			'Formidable_page'                  => get_option('Formidable_page', []),
 			'NinjaForms_page'                  => get_option('NinjaForms_page', []),
+			'FluentForms_page'                 => get_option('FluentForms_page', []),
 			'WooCommerce_page'                 => get_option('WooCommerce_page', []),
 		];
 
@@ -1049,6 +1050,8 @@ final class duplicateKiller_Diagnostics {
 		$hooks = [
 			'elementor_pro/forms/validation',
 			'elementor_pro/forms/new_record',
+			'fluentform/validation_errors',
+			'fluentform/submission_inserted',
 		];
 
 		$out = [];
@@ -1177,6 +1180,10 @@ final class duplicateKiller_Diagnostics {
 			'ninja_forms' => [
 				'plugin_active' => class_exists('Ninja_Forms') ? 'yes' : 'no',
 				'option_exists' => get_option('NinjaForms_page', null) !== null ? 'yes' : 'no',
+			],
+			'fluent_forms' => [
+				'plugin_active' => function_exists('duplicateKiller_fluentforms_is_ready') && duplicateKiller_fluentforms_is_ready() ? 'yes' : 'no',
+				'option_exists' => get_option('FluentForms_page', null) !== null ? 'yes' : 'no',
 			],
 			'woocommerce' => [
 				'plugin_active' => class_exists('WooCommerce') ? 'yes' : 'no',

@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: Duplicate Killer
- * Version: 1.6.6
+ * Version: 1.6.7
  * Description: Block duplicate form submissions by validating unique email, phone and text fields — without CAPTCHA.
  * Author: NIA
  * Author URI: https://profiles.wordpress.org/wpnia/
@@ -13,7 +13,7 @@
 	defined('ABSPATH') or die('You shall not pass!');
 	
 	define('DUPLICATEKILLER_PLUGIN',__FILE__);
-	define('DUPLICATEKILLER_VERSION','1.6.6');
+	define('DUPLICATEKILLER_VERSION','1.6.7');
 	define('DUPLICATEKILLER_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 	define('DUPLICATEKILLER_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 	
@@ -29,6 +29,7 @@
 	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/functions_elementor.php';
 	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/functions_formidable.php';
 	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/functions_ninjaforms.php';
+	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/functions_fluentforms.php';
 	
 	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/database.php';
 	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/pro.php';
@@ -451,6 +452,15 @@ function duplicateKiller_options() {
 				array('id' => 'NinjaForms_error_message', 'title' => '', 'callback' => 'duplicateKiller_ninjaforms_settings_callback'),
 			),
 		),
+		'FluentForms_page' => array(
+			'title'          => 'Fluent Forms',
+			'description_cb' => 'duplicateKiller_fluentforms_description',
+			'validate_cb'    => 'duplicateKiller_fluentforms_validate_input',
+			'fields'         => array(
+				array( 'id' => 'FluentForms_forms', 'title' => '', 'callback' => 'duplicateKiller_fluentforms_select_form_tag_callback' ),
+				array( 'id' => 'FluentForms_error_message', 'title' => '', 'callback' => 'duplicateKiller_fluentforms_settings_callback' ),
+			),
+		),
 		'WooCommerce_page' => array(
 			'title' => 'WooCommerce',
 			'description_cb' => array( 'duplicateKiller_WooCommerce', 'render_section' ),
@@ -575,6 +585,7 @@ function duplicateKiller_display_page() {
 				'fifth',
 				'sixth',
 				'seventh',
+				'fluentforms',
 				'woocommerce',
 				'pro',
 				'support',
@@ -603,6 +614,11 @@ function duplicateKiller_display_page() {
 			<a href="?page=duplicateKiller&tab=sixth" class="nav-tab <?php echo esc_attr($active_tab == 'sixth' ? 'nav-tab-active' : ''); ?>"><?php esc_html_e('Formidable','duplicate-killer');?></a>
 			
 			<a href="?page=duplicateKiller&tab=seventh" class="nav-tab <?php echo esc_attr($active_tab == 'seventh' ? 'nav-tab-active' : ''); ?>"><?php esc_html_e('Ninja Forms','duplicate-killer');?></a>
+			
+			<a href="?page=duplicateKiller&tab=fluentforms" class="nav-tab dk-nav-tab-new <?php echo esc_attr( $active_tab === 'fluentforms' ? 'nav-tab-active' : '' ); ?>">
+				<?php esc_html_e( 'Fluent Forms', 'duplicate-killer' ); ?>
+				<span class="dk-new-badge"><?php esc_html_e( 'New', 'duplicate-killer' ); ?></span>
+			</a>
 			
 			<a href="?page=duplicateKiller&tab=woocommerce" class="nav-tab <?php echo esc_attr($active_tab == 'woocommerce' ? 'nav-tab-active' : ''); ?>">
 				<?php esc_html_e('WooCommerce','duplicate-killer'); ?>
@@ -645,6 +661,10 @@ function duplicateKiller_display_page() {
 			}elseif($active_tab == 'seventh') {
                 settings_fields('NinjaForms_page');
 				duplicateKiller_do_settings_sections('NinjaForms_page');
+				submit_button();
+			}elseif ( $active_tab === 'fluentforms' ) {
+				settings_fields( 'FluentForms_page' );
+				duplicateKiller_do_settings_sections( 'FluentForms_page' );
 				submit_button();
 			}elseif($active_tab == 'woocommerce') {
 				settings_fields('WooCommerce_page');
