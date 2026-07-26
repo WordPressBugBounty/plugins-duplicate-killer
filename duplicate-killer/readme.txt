@@ -5,14 +5,14 @@ Author URI: https://profiles.wordpress.org/wpnia/
 Contributors: wpnia
 Tags: woocommerce, duplicate orders, duplicate submissions, elementor forms, contact form 7
 Donate link: https://www.paypal.com/paypalme/wpnia
-Requires at least: 5.2
+Requires at least: 5.3
 Tested up to: 7.0
-Stable tag: 1.6.7
+Stable tag: 1.6.8
 Requires PHP: 5.6.20
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Block duplicate form submissions by validating unique email, phone and text fields — without CAPTCHA.
+Block duplicate form submissions by validating unique email, phone and text fields without CAPTCHA.
 
 == Description ==
 
@@ -247,12 +247,17 @@ PRO adds enhanced idempotency handling and deeper gateway analytics.
 5. Works with popular WordPress form plugins
 
 == Upgrade Notice ==
-= 1.6.7 =
-* Added Fluent Forms support for duplicate submission protection.
-*Improved admin UI compatibility for Fluent Forms fields.
+= 1.6.8 =
+* Improved WordPress.org Plugin Check compliance across admin, diagnostics, and database handling.
+* Refined escaping, internationalization comments, and compatibility safeguards.
+* Added clearer inline documentation for intentional custom-table queries.
 
 
 == Changelog ==
+= 1.6.8 =
+* Improved WordPress.org Plugin Check compliance across admin, diagnostics, and database handling.
+* Refined escaping, internationalization comments, and compatibility safeguards.
+* Added clearer inline documentation for intentional custom-table queries.
 
 = 1.6.7 =
 * Added Fluent Forms support for duplicate submission protection.

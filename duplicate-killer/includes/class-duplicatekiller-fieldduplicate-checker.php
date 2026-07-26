@@ -194,9 +194,11 @@ class DuplicateKiller_FieldDuplicate_Checker {
 
 			$sql .= " ORDER BY form_id DESC";
 
-			$results = $wpdb->get_results(
-				$wpdb->prepare( $sql, $params )
-			);
+			// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Required duplicate check query on plugin-owned table; SQL uses placeholders prepared with dynamic params.
+$results = $wpdb->get_results(
+	$wpdb->prepare( $sql, $params )
+);
+// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
 
 			// Always store an array in cache, even if the query fails or returns nothing.
 			$dk_results_cache[ $cache_key ] = is_array( $results ) ? $results : array();

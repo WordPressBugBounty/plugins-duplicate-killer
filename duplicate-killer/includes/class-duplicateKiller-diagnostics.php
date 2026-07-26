@@ -754,6 +754,7 @@ final class duplicateKiller_Diagnostics {
 			return $data;
 		}
 
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_print_r -- Used to stringify diagnostic data, not for debug logging.
 		return print_r($data, true);
 	}
 
@@ -795,7 +796,7 @@ final class duplicateKiller_Diagnostics {
 			'server_name'             => isset($_SERVER['SERVER_NAME']) ? sanitize_text_field(wp_unslash($_SERVER['SERVER_NAME'])) : '',
 			'https'                   => is_ssl() ? 'yes' : 'no',
 			'locale'                  => get_locale(),
-			'timezone_string'         => wp_timezone_string(),
+			'timezone_string'         => function_exists( 'wp_timezone_string' ) ? wp_timezone_string() : (string) get_option( 'timezone_string' ),
 			'memory_limit'            => ini_get('memory_limit'),
 			'max_execution_time'      => ini_get('max_execution_time'),
 			'max_input_vars'          => ini_get('max_input_vars'),
@@ -975,7 +976,7 @@ final class duplicateKiller_Diagnostics {
 
 		$charset_collate = $wpdb->get_charset_collate();
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Diagnostics only.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Diagnostics only; table name is plugin-controlled.
 		$indexes = $wpdb->get_results("SHOW INDEX FROM {$table_name}", ARRAY_A);
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Diagnostics only.
@@ -1195,8 +1196,10 @@ final class duplicateKiller_Diagnostics {
 	 * Collect current request snapshot.
 	 */
 	private static function duplicateKiller_get_request_snapshot(): array {
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended, WordPress.Security.NonceVerification.Missing -- Read-only diagnostic snapshot; no state is changed here.
 		$get_raw  = isset($_GET) && is_array($_GET) ? wp_unslash($_GET) : [];
 		$post_raw = isset($_POST) && is_array($_POST) ? wp_unslash($_POST) : [];
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended, WordPress.Security.NonceVerification.Missing
 
 		return [
 			'request_method' => isset($_SERVER['REQUEST_METHOD']) ? sanitize_text_field(wp_unslash($_SERVER['REQUEST_METHOD'])) : '',
@@ -1229,13 +1232,13 @@ final class duplicateKiller_Diagnostics {
 			return $out;
 		}
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Diagnostics only.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Diagnostics only; table name is plugin-controlled.
 		$count = $wpdb->get_var("SELECT COUNT(*) FROM {$table_name}");
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Diagnostics only.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Diagnostics only; table name is plugin-controlled.
 		$schema = $wpdb->get_results("DESCRIBE {$table_name}", ARRAY_A);
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Diagnostics only.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Diagnostics only; table name is plugin-controlled.
 		$latest_rows = $wpdb->get_results(
 			"SELECT form_id, form_plugin, form_name, form_cookie, form_ip, form_date
 			 FROM {$table_name}
@@ -1308,7 +1311,7 @@ final class duplicateKiller_Diagnostics {
 
 		$select_sql = implode( ', ', array_map( [ __CLASS__, 'duplicateKiller_quote_identifier' ], $select_columns ) );
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Diagnostics only.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Diagnostics only; Elementor table name is plugin-derived and selected columns are schema-checked and quoted.
 		$latest_submissions = $wpdb->get_results(
 			"SELECT {$select_sql} FROM {$submissions_table} ORDER BY id DESC LIMIT 20",
 			ARRAY_A
@@ -1366,11 +1369,12 @@ final class duplicateKiller_Diagnostics {
 		$placeholders = implode( ', ', array_fill( 0, count( $submission_ids ), '%d' ) );
 		$query        = "SELECT submission_id, `key`, `value` FROM {$table_name} WHERE submission_id IN ({$placeholders}) ORDER BY id ASC";
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Diagnostics only.
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Diagnostics only; Elementor table name is plugin-derived and submission IDs are prepared.
 		$rows = $wpdb->get_results(
 			call_user_func_array( [ $wpdb, 'prepare' ], array_merge( [ $query ], $submission_ids ) ),
 			ARRAY_A
 		);
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
 
 		$out = [];
 
@@ -1423,11 +1427,12 @@ final class duplicateKiller_Diagnostics {
 		$placeholders  = implode( ', ', array_fill( 0, count( $submission_ids ), '%d' ) );
 		$query         = "SELECT {$select_sql} FROM {$table_name} WHERE submission_id IN ({$placeholders}) ORDER BY id ASC";
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Diagnostics only.
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Diagnostics only; Elementor table name is plugin-derived, columns are schema-checked and submission IDs are prepared.
 		$rows = $wpdb->get_results(
 			call_user_func_array( [ $wpdb, 'prepare' ], array_merge( [ $query ], $submission_ids ) ),
 			ARRAY_A
 		);
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
 
 		$out = [];
 
@@ -1458,7 +1463,7 @@ final class duplicateKiller_Diagnostics {
 			return [];
 		}
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Diagnostics only.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Diagnostics only; table name is checked before schema inspection.
 		$schema = $wpdb->get_results( "DESCRIBE {$table_name}", ARRAY_A );
 
 		if ( ! is_array( $schema ) ) {

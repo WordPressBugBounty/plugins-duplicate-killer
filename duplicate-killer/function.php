@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: Duplicate Killer
- * Version: 1.6.7
+ * Version: 1.6.8
  * Description: Block duplicate form submissions by validating unique email, phone and text fields — without CAPTCHA.
  * Author: NIA
  * Author URI: https://profiles.wordpress.org/wpnia/
@@ -13,7 +13,7 @@
 	defined('ABSPATH') or die('You shall not pass!');
 	
 	define('DUPLICATEKILLER_PLUGIN',__FILE__);
-	define('DUPLICATEKILLER_VERSION','1.6.7');
+	define('DUPLICATEKILLER_VERSION','1.6.8');
 	define('DUPLICATEKILLER_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 	define('DUPLICATEKILLER_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 	
@@ -183,14 +183,14 @@ function duplicateKiller_ensure_forms_duplicate_index() {
 
 	// Drop the existing index if it exists but has the wrong structure.
 	if ( ! empty( $indexes ) ) {
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- DDL query required for installation/upgrade routine.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- DDL query required for installation/upgrade routine; table and index names are plugin-controlled.
 		$wpdb->query(
 			"ALTER TABLE `{$table_name}` DROP INDEX `{$index_name}`"
 		);
 	}
 
 	// Create the expected composite index.
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- DDL query required for installation/upgrade routine.
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- DDL query required for installation/upgrade routine; table and index names are plugin-controlled.
 	$wpdb->query(
 		"ALTER TABLE `{$table_name}`
 		 ADD INDEX `{$index_name}` (`form_plugin`, `form_name`, `form_id`)"

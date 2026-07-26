@@ -82,11 +82,11 @@ function duplicateKiller_get_submission_counts(string $db_plugin_key): array {
 	}
 
 	$placeholders = implode( ',', array_fill( 0, count( $plugin_keys ), '%s' ) );
-    global $wpdb;
-    $table = $wpdb->prefix . 'dk_forms_duplicate';
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Querying Formidable custom table (admin-only, no WP API).
+	global $wpdb;
+	$table = $wpdb->prefix . 'dk_forms_duplicate';
+
+	// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Querying plugin custom table; dynamic IN placeholders are prepared with plugin keys.
 	$rows = $wpdb->get_results(
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Querying Formidable custom table (admin-only, no WP API).
 		$wpdb->prepare(
 			"SELECT form_name, COUNT(*) AS total
 			 FROM " . esc_sql( $table ) . "
@@ -96,6 +96,7 @@ function duplicateKiller_get_submission_counts(string $db_plugin_key): array {
 		),
 		ARRAY_A
 	);
+	// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
 
     $out = [];
     foreach ((array)$rows as $r) {
@@ -377,7 +378,41 @@ function duplicateKiller_render_forms_overview(array $config) {
 								<?php echo $disabled_attr; ?>>
 
 							<span class="dk-checkbox-ui" aria-hidden="true"></span>
-							<?php echo $field_icon_svg; ?>
+							<?php
+								$dk_allowed_icon_svg = array(
+									'svg'    => array(
+										'class'        => true,
+										'viewBox'      => true,
+										'viewbox'      => true,
+										'fill'         => true,
+										'stroke'       => true,
+										'aria-hidden'  => true,
+										'focusable'    => true,
+									),
+									'path'   => array(
+										'd'               => true,
+										'stroke-width'    => true,
+										'stroke-linecap'  => true,
+										'stroke-linejoin' => true,
+									),
+									'circle' => array(
+										'cx'             => true,
+										'cy'             => true,
+										'r'              => true,
+										'fill'           => true,
+										'stroke-width'   => true,
+									),
+									'rect'   => array(
+										'x'              => true,
+										'y'              => true,
+										'width'          => true,
+										'height'         => true,
+										'rx'             => true,
+										'stroke-width'   => true,
+									),
+								);
+								?>
+							<?php echo wp_kses( $field_icon_svg, $dk_allowed_icon_svg ); ?>
 							<span class="dk-protected-field-main">
 								<span class="dk-protected-field-name">
 									<?php echo esc_html($label); ?>
@@ -704,6 +739,7 @@ function duplicateKiller_render_forms_overview(array $config) {
 										<?php
 										printf(
 											esc_html(
+												/* translators: %s: Number of saved submissions for this form. */
 												_n(
 													'%s saved submission for this form.',
 													'%s saved submissions for this form.',
@@ -711,7 +747,7 @@ function duplicateKiller_render_forms_overview(array $config) {
 													'duplicate-killer'
 												)
 											),
-											esc_html( (string) $count )
+											esc_html( number_format_i18n( (int) $count ) )
 										);
 										?>
 									</strong>

@@ -1,6 +1,6 @@
 <?php
 defined( 'ABSPATH' ) || exit;
-
+// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- View template variables are local to this included admin partial.
 $clear_filter_url = DuplicateKiller_Admin_Submissions_Request::get_base_url();
 $clear_filter_url = add_query_arg( 'dk_view', $view, $clear_filter_url );
 $clear_filter_url = remove_query_arg(
@@ -16,9 +16,18 @@ $clear_filter_url = remove_query_arg(
 		<p>
 			<?php
 			if ( '' !== $form_plugin && '' !== $form_name ) {
-				echo esc_html( sprintf( __( 'Showing submissions from %1$s / %2$s.', 'duplicate-killer' ), $form_plugin, $form_name ) );
+				printf(
+					/* translators: 1: Form plugin name, 2: Form name. */
+					esc_html__( 'Showing submissions from %1$s / %2$s.', 'duplicate-killer' ),
+					esc_html( $form_plugin ),
+					esc_html( $form_name )
+				);
 			} elseif ( '' !== $form_plugin ) {
-				echo esc_html( sprintf( __( 'Showing submissions from %s.', 'duplicate-killer' ), $form_plugin ) );
+				printf(
+					/* translators: %s: Form plugin name. */
+					esc_html__( 'Showing submissions from %s.', 'duplicate-killer' ),
+					esc_html( $form_plugin )
+				);
 			} else {
 				esc_html_e( 'Showing all stored form submissions.', 'duplicate-killer' );
 			}
@@ -29,16 +38,17 @@ $clear_filter_url = remove_query_arg(
 	<div class="dk-db-main-header__actions">
 		<div class="dk-db-main-header__count">
 			<?php
-			echo esc_html(
-				sprintf(
+			printf(
+				esc_html(
+					/* translators: %s: Number of stored submissions. */
 					_n(
 						'%s submission',
 						'%s submissions',
 						$ListTable->get_total_items_count(),
 						'duplicate-killer'
-					),
-					number_format_i18n( $ListTable->get_total_items_count() )
-				)
+					)
+				),
+				esc_html( number_format_i18n( $ListTable->get_total_items_count() ) )
 			);
 			?>
 		</div>
@@ -50,3 +60,4 @@ $clear_filter_url = remove_query_arg(
 		<?php endif; ?>
 	</div>
 </div>
+<?php // phpcs:enable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound ?>

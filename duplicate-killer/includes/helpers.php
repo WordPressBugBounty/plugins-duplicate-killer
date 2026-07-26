@@ -698,15 +698,16 @@ function duplicateKiller_delete_saved_entries(string $plugin_key, string $form_n
 
 	$params = array_merge($plugin_keys, array($form_name));
 
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- Required for deleting entries from the plugin custom table.
+	// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Required for deleting entries from the plugin custom table; dynamic IN placeholders are prepared with params.
 	$wpdb->query(
 		$wpdb->prepare(
 			"DELETE FROM " . esc_sql($table) . "
 			 WHERE form_plugin IN ($placeholders)
-			 AND form_name = %s",
+			 AND form_name IN ($form_placeholders)",
 			$params
 		)
 	);
+	// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
 }
 function duplicateKiller_get_field_icon_svg( string $type, string $label = '', string $fid = '' ): string {
 	$type_key  = strtolower( trim( $type ) );
@@ -740,7 +741,7 @@ function duplicateKiller_get_field_icon_svg( string $type, string $label = '', s
 		return $icons['email'];
 	}
 
-	if ( $type_key === 'tel' || str_contains( $field_key, 'phone' ) || str_contains( $field_key, 'tel' ) ) {
+	if ( $type_key === 'tel' || false !== strpos( $field_key, 'phone' ) || false !== strpos( $field_key, 'tel' ) ) {
 		return $icons['phone'];
 	}
 

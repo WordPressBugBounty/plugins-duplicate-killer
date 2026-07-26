@@ -780,6 +780,7 @@ function duplicateKiller_elementor_get_forms(): array {
 			'no_found_rows'          => true,
 			'update_post_meta_cache' => false,
 			'update_post_term_cache' => false,
+			// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- Required admin-only scan for Elementor documents that store forms in post meta.
 			'meta_query'             => [
 				[
 					'key'     => '_elementor_data',
@@ -788,7 +789,6 @@ function duplicateKiller_elementor_get_forms(): array {
 			],
 		];
 
-		// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- Admin-only scan for Elementor documents.
 		$post_ids = get_posts( $query_args );
 
 		if ( empty( $post_ids ) || ! is_array( $post_ids ) ) {

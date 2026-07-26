@@ -900,7 +900,11 @@ class DuplicateKiller_Submission_Value_Renderer {
 		}
 
 		if ( $ts > 0 ) {
-			$out .= '<p><small style="opacity:.75;">' . esc_html__( 'Logged:', 'duplicate-killer' ) . ' ' . esc_html( wp_date( 'Y-m-d H:i', $ts ) ) . '</small></p>';
+			$logged_at = function_exists( 'wp_date' )
+				? wp_date( 'Y-m-d H:i', $ts )
+				: date_i18n( 'Y-m-d H:i', $ts );
+
+			$out .= '<p><small style="opacity:.75;">' . esc_html__( 'Logged:', 'duplicate-killer' ) . ' ' . esc_html( $logged_at ) . '</small></p>';
 		}
 
 		$out .= '</div>';

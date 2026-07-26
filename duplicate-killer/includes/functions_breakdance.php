@@ -288,6 +288,7 @@ function duplicateKiller_breakdance_guard_action( $canExecute, $action, $extra, 
 
 function duplicateKiller_breakdance_get_forms() {
 
+	// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Required to discover Breakdance forms stored in post meta; query is admin-only and limited to IDs.
 	$q = new WP_Query( [
 		'post_type'              => 'any',
 		'posts_per_page'         => -1,

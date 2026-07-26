@@ -8,6 +8,7 @@ class DuplicateKiller_Submissions_Repository {
 	public function __construct() {
 		global $wpdb;
 
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Existing public filter kept for backward compatibility.
 		$dkdb = apply_filters( 'duplicate_killer_database', $wpdb );
 
 		$this->table_name = $dkdb->prefix . 'dk_forms_duplicate';
@@ -25,9 +26,10 @@ class DuplicateKiller_Submissions_Repository {
 				WHERE form_plugin = %s
 				AND form_name = %s";
 
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Query uses a plugin-owned table name and placeholders prepared with explicit params.
 		$prepared = $wpdb->prepare( $sql, $form_plugin, $form_name );
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Required admin existence check on plugin-owned table; SQL is prepared above.
 		return (int) $wpdb->get_var( $prepared ) > 0;
 	}
 	public function get_items( string $search, string $view, int $per_page, int $page, string $form_plugin = '', string $form_name = '' ): array{
@@ -76,9 +78,10 @@ class DuplicateKiller_Submissions_Repository {
 		$params[] = $per_page;
 		$params[] = $offset;
 
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Query uses a plugin-owned table name and dynamic WHERE clauses with placeholders prepared from params.
 		$prepared = $wpdb->prepare( $sql, $params );
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Required admin listing query on plugin-owned table; SQL is prepared above.
 		$rows = $wpdb->get_results( $prepared, OBJECT );
 
 		return is_array( $rows ) ? $rows : array();
@@ -121,9 +124,10 @@ class DuplicateKiller_Submissions_Repository {
 			$sql .= ' WHERE ' . implode( ' AND ', $where );
 		}
 
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Query uses a plugin-owned table name and dynamic WHERE clauses with placeholders prepared from params.
 		$prepared = $wpdb->prepare( $sql, $params );
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Required admin count query on plugin-owned table; SQL is prepared above.
 		return (int) $wpdb->get_var( $prepared );
 	}
 	
@@ -136,9 +140,10 @@ class DuplicateKiller_Submissions_Repository {
 				GROUP BY form_plugin, form_name
 				ORDER BY form_plugin ASC, form_name ASC";
 
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Query uses a plugin-owned table name and a prepared placeholder for WooCommerce exclusion.
 		$prepared = $wpdb->prepare( $sql, 'WooCommerce' );
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Required admin grouping query on plugin-owned table; SQL is prepared above.
 		$rows = $wpdb->get_results( $prepared, ARRAY_A );
 
 		$groups = array();
@@ -182,9 +187,10 @@ class DuplicateKiller_Submissions_Repository {
 
 		$sql = "DELETE FROM {$this->table_name} WHERE form_id IN ({$placeholders})";
 
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Dynamic IN placeholders are generated from absint-cast IDs.
 		$prepared = $wpdb->prepare( $sql, $ids );
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Required admin delete query on plugin-owned table; IDs are absint-cast and SQL is prepared above.
 		return (int) $wpdb->query( $prepared );
 	}
 }

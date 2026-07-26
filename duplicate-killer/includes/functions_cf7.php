@@ -301,19 +301,19 @@ function duplicateKiller_CF7_get_forms() {
 			$field_type = '';
 
 			if (
-				str_contains($tagsArray[$i], '[text') &&
-				! str_contains($tagsArray[$i], '[textarea')
+				false !== strpos( $tagsArray[ $i ], '[text' ) &&
+				false === strpos( $tagsArray[ $i ], '[textarea' )
 			) {
 				$field_type = 'text';
-			} elseif (str_contains($tagsArray[$i], '[email')) {
+			} elseif ( false !== strpos( $tagsArray[ $i ], '[email' ) ) {
 				$field_type = 'email';
-			} elseif (str_contains($tagsArray[$i], '[tel')) {
+			} elseif ( false !== strpos( $tagsArray[ $i ], '[tel' ) ) {
 				$field_type = 'tel';
-			} elseif (str_contains($tagsArray[$i], '[number')) {
+			} elseif ( false !== strpos( $tagsArray[ $i ], '[number' ) ) {
 				$field_type = 'number';
-			} elseif (str_contains($tagsArray[$i], '[textarea')) {
+			} elseif ( false !== strpos( $tagsArray[ $i ], '[textarea' ) ) {
 				$field_type = 'textarea';
-			} elseif (str_contains($tagsArray[$i], '[submit')) {
+			} elseif ( false !== strpos( $tagsArray[ $i ], '[submit' ) ) {
 				break;
 			}
 
