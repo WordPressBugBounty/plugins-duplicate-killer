@@ -298,7 +298,8 @@ function duplicateKiller_breakdance_get_forms() {
 		'no_found_rows'          => true,
 		'update_post_meta_cache' => false,      // we'll fetch only needed meta manually
 		'update_post_term_cache' => false,
-		'meta_key'               => '_breakdance_data', // avoids meta_query
+		// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Required to discover Breakdance forms stored in post meta; query is admin-only and limited to IDs.
+		'meta_key'               => '_breakdance_data',
 		'meta_compare'           => 'EXISTS',
 	] );
 

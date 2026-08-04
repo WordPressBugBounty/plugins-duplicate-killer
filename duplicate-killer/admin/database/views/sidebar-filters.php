@@ -1,6 +1,6 @@
 <?php
 defined( 'ABSPATH' ) || exit;
-
+// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- View template variables are local to this included admin partial.
 $repository     = new DuplicateKiller_Submissions_Repository();
 $sidebar_groups = $repository->get_sidebar_groups();
 
@@ -121,3 +121,4 @@ $base_url = remove_query_arg(
 		<?php endforeach; ?>
 	</div>
 </aside>
+<?php // phpcs:enable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound ?>

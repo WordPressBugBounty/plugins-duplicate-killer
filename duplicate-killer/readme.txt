@@ -1,5 +1,5 @@
 === Duplicate Killer – Prevent Duplicate Form Submissions ===
-Version: 1.6.7
+Version: 1.6.9
 Author: NIA
 Author URI: https://profiles.wordpress.org/wpnia/
 Contributors: wpnia
@@ -7,7 +7,7 @@ Tags: woocommerce, duplicate orders, duplicate submissions, elementor forms, con
 Donate link: https://www.paypal.com/paypalme/wpnia
 Requires at least: 5.3
 Tested up to: 7.0
-Stable tag: 1.6.8
+Stable tag: 1.6.9
 Requires PHP: 5.6.20
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -240,20 +240,26 @@ PRO adds enhanced idempotency handling and deeper gateway analytics.
 
 == Screenshots ==
 
-1. Custom error message shown when a duplicate submission is detected
-2. Plugin settings – prevent duplicate form submissions in WordPress
-3. Block repeat submissions from the same user using browser cookies
-4. Display total form entries on the frontend using a shortcode
-5. Works with popular WordPress form plugins
+1. Custom validation message displayed when a duplicate WordPress form submission is detected.
+2. Plugin settings for selecting which WordPress form fields should be protected from duplicate submissions.
+3. Browser-based protection prevents the same visitor from submitting the same value more than once per form.
+4. Display the total number of saved form submissions on the WordPress frontend using a generated shortcode.
+5. IP-based protection blocks repeat form submissions from the same address for a configurable number of days.
+6. WooCommerce duplicate order protection blocks accidental checkout retries, repeated clicks, and duplicate submissions.
 
 == Upgrade Notice ==
-= 1.6.8 =
-* Improved WordPress.org Plugin Check compliance across admin, diagnostics, and database handling.
-* Refined escaping, internationalization comments, and compatibility safeguards.
-* Added clearer inline documentation for intentional custom-table queries.
+= 1.6.9 =
+* Improved WordPress.org Plugin Check compliance across admin screens, diagnostics, and database routines.
+* Improved plugin stability, review readiness, and long-term WordPress.org compatibility.
 
 
 == Changelog ==
+
+= 1.6.9 =
+* Improved WordPress.org Plugin Check compliance across admin screens, diagnostics, and database routines.
+* Refined custom-table query documentation to better align with WordPress coding standards.
+* Improved plugin stability, review readiness, and long-term WordPress.org compatibility.
+
 = 1.6.8 =
 * Improved WordPress.org Plugin Check compliance across admin, diagnostics, and database handling.
 * Refined escaping, internationalization comments, and compatibility safeguards.

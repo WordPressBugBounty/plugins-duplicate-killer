@@ -1238,7 +1238,7 @@ final class duplicateKiller_Diagnostics {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Diagnostics only; table name is plugin-controlled.
 		$schema = $wpdb->get_results("DESCRIBE {$table_name}", ARRAY_A);
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Diagnostics only; table name is plugin-controlled.
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Diagnostics only; table name is plugin-controlled.
 		$latest_rows = $wpdb->get_results(
 			"SELECT form_id, form_plugin, form_name, form_cookie, form_ip, form_date
 			 FROM {$table_name}
@@ -1246,6 +1246,7 @@ final class duplicateKiller_Diagnostics {
 			 LIMIT 20",
 			ARRAY_A
 		);
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
 
 		$out['row_count']   = (int) $count;
 		$out['schema']      = is_array($schema) ? $schema : [];
@@ -1311,11 +1312,12 @@ final class duplicateKiller_Diagnostics {
 
 		$select_sql = implode( ', ', array_map( [ __CLASS__, 'duplicateKiller_quote_identifier' ], $select_columns ) );
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Diagnostics only; Elementor table name is plugin-derived and selected columns are schema-checked and quoted.
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Diagnostics only; Elementor table name is plugin-derived and selected columns are schema-checked and quoted.
 		$latest_submissions = $wpdb->get_results(
 			"SELECT {$select_sql} FROM {$submissions_table} ORDER BY id DESC LIMIT 20",
 			ARRAY_A
 		);
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
 
 		if ( ! is_array( $latest_submissions ) ) {
 			return $out;

@@ -375,7 +375,7 @@ function duplicateKiller_render_forms_overview(array $config) {
 								value="1"
 								class="dk-protected-field-checkbox"
 								<?php checked($is_checked); ?>
-								<?php echo $disabled_attr; ?>>
+								<?php echo $disabled_attr; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Attribute fragment is generated internally from a boolean lock state. ?>>
 
 							<span class="dk-checkbox-ui" aria-hidden="true"></span>
 							<?php
@@ -481,7 +481,7 @@ function duplicateKiller_render_forms_overview(array $config) {
 							class="dk-error-input"
 							name="<?php echo esc_attr($option_name . '[' . $form_key . '][error_message]'); ?>"
 							value="<?php echo esc_attr($err_msg); ?>"
-							<?php echo $disabled_attr; ?> />
+							<?php echo $disabled_attr; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Attribute fragment is generated internally from a boolean lock state. ?> />
 					</div>
 
 					<div class="dk-section-header" style="margin-top:15px">
@@ -555,7 +555,7 @@ function duplicateKiller_render_forms_overview(array $config) {
 											value="1"
 											data-target="<?php echo esc_attr('#dk-limit-ip_' . $form_safe); ?>"
 											<?php checked($ip_enabled); ?>
-											<?php echo $disabled_attr; ?> />
+											<?php echo $disabled_attr; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Attribute fragment is generated internally from a boolean lock state. ?> />
 
 										<label class="ios-switch-label" for="<?php echo esc_attr('user_ip_' . $form_safe); ?>"></label>
 									</div>
@@ -572,7 +572,7 @@ function duplicateKiller_render_forms_overview(array $config) {
 											class="dk-error-input"
 											name="<?php echo esc_attr($option_name . '[' . $form_key . '][error_message_limit_ip_option]'); ?>"
 											value="<?php echo esc_attr($ip_err_msg); ?>"
-											<?php echo $disabled_attr; ?> />
+											<?php echo $disabled_attr; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Attribute fragment is generated internally from a boolean lock state. ?> />
 									</div>
 
 									<div class="dk-feature-field dk-feature-field--small">
@@ -588,7 +588,7 @@ function duplicateKiller_render_forms_overview(array $config) {
 												class="dk-input-prefix-field"
 												name="<?php echo esc_attr($option_name . '[' . $form_key . '][user_ip_days]'); ?>"
 												value="<?php echo esc_attr($ip_days); ?>"
-												<?php echo $disabled_attr; ?> />
+												<?php echo $disabled_attr; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Attribute fragment is generated internally from a boolean lock state. ?> />
 										</div>
 									</div>
 								</div>
@@ -620,7 +620,7 @@ function duplicateKiller_render_forms_overview(array $config) {
 											value="1"
 											data-target="<?php echo esc_attr('#cookie_section_' . $form_safe); ?>"
 											<?php checked($cookie_enabled); ?>
-											<?php echo $disabled_attr; ?> />
+											<?php echo $disabled_attr; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Attribute fragment is generated internally from a boolean lock state. ?> />
 
 										<label class="ios-switch-label" for="<?php echo esc_attr('cookie_' . $form_safe); ?>"></label>
 									</div>
@@ -642,7 +642,7 @@ function duplicateKiller_render_forms_overview(array $config) {
 												class="dk-input-prefix-field"
 												name="<?php echo esc_attr($option_name . '[' . $form_key . '][cookie_option_days]'); ?>"
 												value="<?php echo esc_attr($cookie_days); ?>"
-												<?php echo $disabled_attr; ?> />
+												<?php echo $disabled_attr; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Attribute fragment is generated internally from a boolean lock state. ?> />
 										</div>
 									</div>
 								</div>
@@ -696,7 +696,8 @@ function duplicateKiller_render_forms_overview(array $config) {
 											<button type="button"
 												onclick="copyDKShortcode('<?php echo esc_js($short_id); ?>')"
 												class="button button-primary"
-												<?php echo $disabled_attr; ?>>
+												<?php echo $disabled_attr; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Attribute fragment is generated internally from a boolean lock state. ?>
+												>
 												<?php esc_html_e('Copy', 'duplicate-killer'); ?>
 											</button>
 										</div>
@@ -732,7 +733,8 @@ function duplicateKiller_render_forms_overview(array $config) {
 									name="<?php echo esc_attr( $option_name . '[' . $form_key . '][delete_records]' ); ?>"
 									value="1"
 									class="dk-delete-checkbox"
-									<?php echo $disabled_attr; ?>>
+									<?php echo $disabled_attr; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Attribute fragment is generated internally from a boolean lock state. ?>
+									>
 
 								<span>
 									<strong>

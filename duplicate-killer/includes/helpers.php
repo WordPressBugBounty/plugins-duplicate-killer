@@ -607,7 +607,7 @@ function duplicateKiller_get_form_cookie_simple(
 	// Cookie is named using "group_<safe_form_name>" suffix (set by JS)
 	// Example: dk_form_cookie_elementor_forms_group_mainquote_form
 	// =========================
-	if ( str_ends_with( $form_name, '.__group__' ) ) {
+	if ( substr( $form_name, -10 ) === '.__group__' ) {
 
 		$raw_name = (string) $form_name;
 		$raw_name = preg_replace( '/\.__group__$/', '', $raw_name );
@@ -698,16 +698,16 @@ function duplicateKiller_delete_saved_entries(string $plugin_key, string $form_n
 
 	$params = array_merge($plugin_keys, array($form_name));
 
-	// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Required for deleting entries from the plugin custom table; dynamic IN placeholders are prepared with params.
+	// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Required for deleting entries from the plugin custom table; dynamic IN placeholders are prepared with params.
 	$wpdb->query(
 		$wpdb->prepare(
 			"DELETE FROM " . esc_sql($table) . "
 			 WHERE form_plugin IN ($placeholders)
-			 AND form_name IN ($form_placeholders)",
+			 AND form_name = %s",
 			$params
 		)
 	);
-	// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+	// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, PluginCheck.Security.DirectDB.UnescapedDBParameter
 }
 function duplicateKiller_get_field_icon_svg( string $type, string $label = '', string $fid = '' ): string {
 	$type_key  = strtolower( trim( $type ) );

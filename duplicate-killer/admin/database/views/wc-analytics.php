@@ -1,5 +1,6 @@
 <?php
 defined( 'ABSPATH' ) || exit;
+// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- View template variables are local to this included admin partial.
 
 if ( class_exists( 'duplicateKiller_WooCommerce' ) && class_exists( 'WooCommerce' ) ) {
 
@@ -14,7 +15,7 @@ if ( class_exists( 'duplicateKiller_WooCommerce' ) && class_exists( 'WooCommerce
 					printf(
 						/* translators: %s = duplicate count */
 						esc_html__( '%s WooCommerce duplicate orders have been detected and blocked.', 'duplicate-killer' ),
-						number_format_i18n( (int) $wc['count'] )
+						esc_html( number_format_i18n( (int) $wc['count'] ) )
 					);
 					?>
 				</strong>
@@ -261,3 +262,4 @@ if ( class_exists( 'duplicateKiller_WooCommerce' ) && class_exists( 'WooCommerce
 		</div>
 	</div>
 </div>
+<?php // phpcs:enable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound ?>
