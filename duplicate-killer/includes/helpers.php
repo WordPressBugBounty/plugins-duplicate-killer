@@ -678,6 +678,7 @@ function duplicateKiller_sanitize_id($string) {
 function duplicateKiller_get_form_defaults(): array {
     return [
         'error_message' => 'Please check all fields! These values have been submitted already!',
+        'modern_error_message' => '<strong style="color:#b32d2e;">This entry already exists.</strong>' . "\n" . '<p>Please <a href="/contact">contact us</a> if you need help.</p>',
         'error_message_limit_ip_option' => 'This IP has been already submitted.',
         'user_ip_days' => '7',
         'cookie_option_days' => '7',

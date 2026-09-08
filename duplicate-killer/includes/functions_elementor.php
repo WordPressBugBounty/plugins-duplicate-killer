@@ -172,6 +172,20 @@ function duplicateKiller_elementor_guard_only( $record, $ajax_handler ) {
 		if ( $result['blocked'] ) {
 			$message = $result['message'];
 
+			if ( function_exists( 'duplicateKiller_modern_popup_maybe_add_marker' ) ) {
+				$modern_popup_form_id = isset( $form_config['form_id'] ) && '__group__' === (string) $form_config['form_id']
+					? '__group__'
+					: $resolved_form['form_id'];
+
+				$message = duplicateKiller_modern_popup_maybe_add_marker(
+					$message,
+					'elementor',
+					$form_config,
+					$modern_popup_form_id,
+					$form_name
+				);
+			}
+
 			if ( is_object( $ajax_handler ) && method_exists( $ajax_handler, 'add_error_message' ) ) {
 				$ajax_handler->add_error_message( $message );
 			}

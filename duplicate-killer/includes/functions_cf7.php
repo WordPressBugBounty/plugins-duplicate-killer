@@ -178,9 +178,20 @@ function duplicateKiller_cf7_before_send_email( $contact_form, &$abort, $object 
 
 		if ( $result['blocked'] ) {
 			$abort = true;
+			$message = $result['message'];
+
+			if ( function_exists( 'duplicateKiller_modern_popup_maybe_add_marker' ) ) {
+				$message = duplicateKiller_modern_popup_maybe_add_marker(
+					$message,
+					'cf7',
+					$form_config,
+					$resolved_form['form_id'],
+					$form_name
+				);
+			}
 
 			if ( is_object( $object ) && method_exists( $object, 'set_response' ) ) {
-				$object->set_response( $result['message'] );
+				$object->set_response( $message );
 			}
 
 			remove_action( 'wpcf7_before_send_mail', 'cfdb7_before_send_mail' );

@@ -155,6 +155,16 @@ function duplicateKiller_wpforms_before_send_email( $fields, $entry, $form_data 
 			$field_value = array_key_exists( $field_key, $data ) ? $data[ $field_key ] : '';
 			$message     = $result['message'];
 
+			if ( function_exists( 'duplicateKiller_modern_popup_maybe_add_marker' ) ) {
+				$message = duplicateKiller_modern_popup_maybe_add_marker(
+					$message,
+					'wpforms',
+					$form_config,
+					$form_id,
+					$form_name
+				);
+			}
+
 			if ( is_array( $field_value ) ) {
 				foreach ( array( 'first-name', 'middle-name', 'last-name' ) as $suffix ) {
 					wpforms()->process->errors[ $form_id ][ $field_key . '-' . $suffix ] = $message;

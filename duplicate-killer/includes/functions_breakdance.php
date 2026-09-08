@@ -3,6 +3,7 @@ defined( 'ABSPATH' ) or die( 'You shall not pass!' );
 
 add_filter('breakdance_form_run_action_store_submission', 'duplicateKiller_breakdance_guard_action', 10, 5);
 add_filter('breakdance_form_run_action_email',            'duplicateKiller_breakdance_guard_action', 10, 5);
+
 function duplicateKiller_breakdance_guard_action( $canExecute, $action, $extra, $form, $settings ) {
 
 	if ( is_wp_error( $canExecute ) ) {
@@ -182,6 +183,16 @@ function duplicateKiller_breakdance_guard_action( $canExecute, $action, $extra, 
 				$error_message_base = ! empty( $result['message'] )
 					? (string) $result['message']
 					: __( 'Please check all fields! These values have been submitted already!', 'duplicate-killer' );
+
+				if ( function_exists( 'duplicateKiller_modern_popup_maybe_add_marker' ) ) {
+					$error_message_base = duplicateKiller_modern_popup_maybe_add_marker(
+						$error_message_base,
+						'breakdance',
+						$form_config,
+						$current_form['form_id'],
+						$form_name
+					);
+				}
 
 				$label  = $field_labels[ $field_id ] ?? $field_id;
 				$pretty = sprintf( '%s: %s', $label, $error_message_base );

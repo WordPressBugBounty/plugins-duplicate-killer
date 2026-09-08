@@ -1,13 +1,13 @@
 === Duplicate Killer – Prevent Duplicate Form Submissions ===
-Version: 1.6.9
+Version: 1.7.0
 Author: NIA
 Author URI: https://profiles.wordpress.org/wpnia/
 Contributors: wpnia
 Tags: woocommerce, duplicate orders, duplicate submissions, elementor forms, contact form 7
 Donate link: https://www.paypal.com/paypalme/wpnia
 Requires at least: 5.3
-Tested up to: 7.0
-Stable tag: 1.6.9
+Tested up to: 7.1
+Stable tag: 1.7.0
 Requires PHP: 5.6.20
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -248,17 +248,22 @@ PRO adds enhanced idempotency handling and deeper gateway analytics.
 6. WooCommerce duplicate order protection blocks accidental checkout retries, repeated clicks, and duplicate submissions.
 
 == Upgrade Notice ==
-= 1.6.9 =
-* Improved WordPress.org Plugin Check compliance across admin screens, diagnostics, and database routines.
-* Improved plugin stability, review readiness, and long-term WordPress.org compatibility.
+= 1.7.0 =
+- New: Modern Popup Mode displays duplicate submission messages in a customizable popup.
+- Customize messages with links, colors, and formatted text.
+- Preview your popup directly in the plugin settings.
+- Choose Classic Message or Modern Popup Mode for each form.
+- Existing forms keep Classic Message by default.
 
 
 == Changelog ==
 
-= 1.6.9 =
-* Improved WordPress.org Plugin Check compliance across admin screens, diagnostics, and database routines.
-* Refined custom-table query documentation to better align with WordPress coding standards.
-* Improved plugin stability, review readiness, and long-term WordPress.org compatibility.
+= 1.7.0 =
+- New: Modern Popup Mode displays duplicate submission messages in a customizable popup.
+- Customize messages with links, colors, and formatted text.
+- Preview your popup directly in the plugin settings.
+- Choose Classic Message or Modern Popup Mode for each form.
+- Existing forms keep Classic Message by default.
 
 = 1.6.8 =
 * Improved WordPress.org Plugin Check compliance across admin, diagnostics, and database handling.

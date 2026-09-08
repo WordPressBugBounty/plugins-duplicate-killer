@@ -214,6 +214,16 @@ function duplicateKiller_render_forms_overview(array $config) {
 		$err_msg = !empty($form_opts['error_message'])
 			? (string)$form_opts['error_message']
 			: $defaults['error_message'];
+			
+		$error_message_type = ! empty( $form_opts['error_message_type'] ) && 'modern' === (string) $form_opts['error_message_type']
+			? 'modern'
+			: 'classic';
+
+		$modern_err_msg = ! empty( $form_opts['modern_error_message'] )
+			? (string) $form_opts['modern_error_message']
+			: (string) $defaults['modern_error_message'];
+
+		$modern_message_id = 'dk_modern_error_message_' . duplicateKiller_sanitize_id( $option_name . '_' . $form_key );
 
 		$field_duplicate_block_days = isset( $form_opts['field_duplicate_block_days'] )
 			? (string) absint( $form_opts['field_duplicate_block_days'] )
@@ -477,11 +487,66 @@ function duplicateKiller_render_forms_overview(array $config) {
 					</div>
 
 					<div class="dk-card-section-inner">
-						<input type="text"
-							class="dk-error-input"
-							name="<?php echo esc_attr($option_name . '[' . $form_key . '][error_message]'); ?>"
-							value="<?php echo esc_attr($err_msg); ?>"
-							<?php echo $disabled_attr; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Attribute fragment is generated internally from a boolean lock state. ?> />
+						<div class="dk-message-mode-control" data-dk-message-mode>
+							<div class="dk-message-mode-tabs" role="radiogroup" aria-label="<?php echo esc_attr__( 'Duplicate message display mode', 'duplicate-killer' ); ?>">
+								<label class="dk-message-mode-tab<?php echo 'classic' === $error_message_type ? ' is-active' : ''; ?>">
+									<input type="radio"
+										name="<?php echo esc_attr( $option_name . '[' . $form_key . '][error_message_type]' ); ?>"
+										value="classic"
+										<?php checked( 'classic', $error_message_type ); ?> />
+									<span><?php esc_html_e( 'Classic Message', 'duplicate-killer' ); ?></span>
+								</label>
+
+								<label class="dk-message-mode-tab dk-message-mode-tab-new<?php echo 'modern' === $error_message_type ? ' is-active' : ''; ?>">
+									<input type="radio"
+										name="<?php echo esc_attr( $option_name . '[' . $form_key . '][error_message_type]' ); ?>"
+										value="modern"
+										<?php checked( 'modern', $error_message_type ); ?> />
+									<span><?php esc_html_e( 'Modern Popup Mode', 'duplicate-killer' ); ?></span>
+									<span class="dk-new-badge"><?php esc_html_e( 'New', 'duplicate-killer' ); ?></span>
+								</label>
+							</div>
+
+							<div class="dk-message-mode-panel dk-message-mode-panel-classic<?php echo 'classic' === $error_message_type ? ' is-active' : ''; ?>" data-dk-message-panel="classic">
+								<label class="dk-message-mode-label">
+									<?php esc_html_e( 'Classic message', 'duplicate-killer' ); ?>
+								</label>
+
+								<input type="text"
+									class="dk-error-input"
+									name="<?php echo esc_attr( $option_name . '[' . $form_key . '][error_message]' ); ?>"
+									value="<?php echo esc_attr( $err_msg ); ?>" />
+							</div>
+
+							<div class="dk-message-mode-panel dk-message-mode-panel-modern<?php echo 'modern' === $error_message_type ? ' is-active' : ''; ?>" data-dk-message-panel="modern">
+								<div class="dk-message-mode-label-row">
+									<label class="dk-message-mode-label" for="<?php echo esc_attr( $modern_message_id ); ?>">
+										<?php esc_html_e( 'Modern popup content', 'duplicate-killer' ); ?>
+									</label>
+
+									<button
+										type="button"
+										class="dk-modern-preview-button"
+										data-dk-modern-preview
+										data-target="<?php echo esc_attr( $modern_message_id ); ?>"
+										aria-label="<?php echo esc_attr__( 'Preview modern popup', 'duplicate-killer' ); ?>"
+										title="<?php echo esc_attr__( 'Preview modern popup', 'duplicate-killer' ); ?>">
+										<span class="dashicons dashicons-visibility" aria-hidden="true"></span>
+									</button>
+								</div>
+
+								<textarea
+									id="<?php echo esc_attr( $modern_message_id ); ?>"
+									class="dk-modern-message-textarea"
+									rows="7"
+									data-dk-quicktags="1"
+									name="<?php echo esc_attr( $option_name . '[' . $form_key . '][modern_error_message]' ); ?>"><?php echo esc_textarea( $modern_err_msg ); ?></textarea>
+
+								<p class="description dk-message-mode-description">
+									<?php esc_html_e( 'You can use safe HTML, links, formatting and inline styles. The popup appears only when Duplicate Killer blocks this form.', 'duplicate-killer' ); ?>
+								</p>
+							</div>
+						</div>
 					</div>
 
 					<div class="dk-section-header" style="margin-top:15px">
@@ -804,6 +869,29 @@ function duplicateKiller_render_forms_overview(array $config) {
 		$form_index++;
     }
 	?>
+	</div>
+	<div class="dk-modern-preview-modal" id="dk-modern-preview-modal" hidden>
+		<div class="dk-modern-preview-modal__overlay" data-dk-modern-preview-close></div>
+
+		<div class="dk-modern-preview-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="dk-modern-preview-title">
+			<button
+				type="button"
+				class="dk-modern-preview-modal__close"
+				data-dk-modern-preview-close
+				aria-label="<?php echo esc_attr__( 'Close preview', 'duplicate-killer' ); ?>">
+				&times;
+			</button>
+
+			<h3 class="dk-modern-preview-modal__title" id="dk-modern-preview-title">
+				<?php esc_html_e( 'Modern popup preview', 'duplicate-killer' ); ?>
+			</h3>
+
+			<p class="dk-modern-preview-modal__notice">
+				<?php esc_html_e( 'After saving changes, clear your site cache and test the form on the frontend.', 'duplicate-killer' ); ?>
+			</p>
+
+			<div class="dk-modern-preview-modal__body" id="dk-modern-preview-modal-body"></div>
+		</div>
 	</div>
 	<?php
 }

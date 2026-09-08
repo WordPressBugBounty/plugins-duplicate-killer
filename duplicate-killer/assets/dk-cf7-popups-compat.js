@@ -28,7 +28,12 @@
 
 		return '';
 	}
-
+	function stripDuplicateKillerMarker(message) {
+		return String(message || '')
+			.replace(/\s*DKM[A-F0-9]{10}\s*/g, ' ')
+			.replace(/\s+/g, ' ')
+			.trim();
+	}
 	function getSwal() {
 		if (typeof window.swal === 'function') {
 			return window.swal;
@@ -132,7 +137,7 @@
 
 		// Duplicate Killer blocks CF7 by aborting the send. cf7-popups does not handle this event.
 		if (status === 'aborted' || event.type === 'wpcf7aborted') {
-			showPopup('aborted', message);
+			showPopup('aborted', stripDuplicateKillerMarker(message));
 			return;
 		}
 

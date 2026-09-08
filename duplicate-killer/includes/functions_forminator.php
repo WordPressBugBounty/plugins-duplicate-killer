@@ -145,13 +145,24 @@ function duplicateKiller_forminator_before_send_email( $submit_errors, $form_id,
 		if ( $result['blocked'] ) {
 			$field_key   = $result['field_key'];
 			$field_value = array_key_exists( $field_key, $data ) ? $data[ $field_key ] : '';
+			$message     = $result['message'];
+
+			if ( function_exists( 'duplicateKiller_modern_popup_maybe_add_marker' ) ) {
+				$message = duplicateKiller_modern_popup_maybe_add_marker(
+					$message,
+					'forminator',
+					$form_config,
+					$form_id,
+					$form_name
+				);
+			}
 
 			if ( is_array( $field_value ) ) {
 				foreach ( array( 'first-name', 'middle-name', 'last-name' ) as $suffix ) {
-					$submit_errors[][ $field_key . '-' . $suffix ] = $result['message'];
+					$submit_errors[][ $field_key . '-' . $suffix ] = $message;
 				}
 			} else {
-				$submit_errors[][ $field_key ] = $result['message'];
+				$submit_errors[][ $field_key ] = $message;
 			}
 
 			if ( $dk_enabled ) {
@@ -159,7 +170,7 @@ function duplicateKiller_forminator_before_send_email( $submit_errors, $form_id,
 					'request_debug_id'    => $request_debug_id,
 					'form_name'           => $form_name,
 					'field_key'           => $field_key,
-					'message'             => $result['message'],
+					'message'             => $message,
 					'submit_errors_after' => $submit_errors,
 				) );
 			}

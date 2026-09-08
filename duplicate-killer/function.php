@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: Duplicate Killer
- * Version: 1.6.9
+ * Version: 1.7.0
  * Description: Block duplicate form submissions by validating unique email, phone and text fields — without CAPTCHA.
  * Author: NIA
  * Author URI: https://profiles.wordpress.org/wpnia/
@@ -13,11 +13,12 @@
 	defined('ABSPATH') or die('You shall not pass!');
 	
 	define('DUPLICATEKILLER_PLUGIN',__FILE__);
-	define('DUPLICATEKILLER_VERSION','1.6.9');
+	define('DUPLICATEKILLER_VERSION','1.7.0');
 	define('DUPLICATEKILLER_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 	define('DUPLICATEKILLER_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 	
 	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/helpers.php';
+	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/modern-popup-mode.php';
 	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/dk-cookie-loader.php';
 	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/render.php';
 	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/sanitize.php';
@@ -249,10 +250,12 @@ function duplicateKiller_callback_for_setting_up_scripts() {
 		DUPLICATEKILLER_VERSION
 	);
 
+	wp_enqueue_script( 'quicktags' );
+
 	wp_enqueue_script(
 		'duplicateKiller-admin',
 		plugins_url( 'assets/admin-settings.js', DUPLICATEKILLER_PLUGIN ),
-		array(),
+		array( 'quicktags' ),
 		DUPLICATEKILLER_VERSION,
 		true
 	);

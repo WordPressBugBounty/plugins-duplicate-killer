@@ -64,6 +64,19 @@ function duplicateKiller_fluentforms_validation_errors( $errors, $form_data, $fo
 
 		if ( ! empty( $field_result['blocked'] ) ) {
 			$field_key = ! empty( $field_result['field_key'] ) ? $field_result['field_key'] : '_duplicatekiller';
+			$message   = ! empty( $field_result['message'] )
+				? (string) $field_result['message']
+				: __( 'Please check all fields! These values have been submitted already!', 'duplicate-killer' );
+
+			if ( function_exists( 'duplicateKiller_modern_popup_maybe_add_marker' ) ) {
+				$message = duplicateKiller_modern_popup_maybe_add_marker(
+					$message,
+					'fluentforms',
+					$form_config,
+					$context['form_id'],
+					$context['form_name']
+				);
+			}
 
 			if ( class_exists( 'duplicateKiller_Diagnostics' ) ) {
 				duplicateKiller_Diagnostics::log(
@@ -73,12 +86,12 @@ function duplicateKiller_fluentforms_validation_errors( $errors, $form_data, $fo
 						'form_id'   => $context['form_id'],
 						'form_name' => $context['form_name'],
 						'field_key' => $field_key,
-						'message'   => $field_result['message'],
+						'message'   => $message,
 					)
 				);
 			}
 
-			return duplicateKiller_fluentforms_add_validation_error( $errors, $field_key, $field_result['message'] );
+			return duplicateKiller_fluentforms_add_validation_error( $errors, $field_key, $message );
 		}
 	}
 

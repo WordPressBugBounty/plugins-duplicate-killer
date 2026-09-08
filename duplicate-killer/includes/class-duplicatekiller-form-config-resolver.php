@@ -30,6 +30,8 @@ class DuplicateKiller_Form_Config_Resolver {
 		$reserved_keys = array(
 			'form_id',
 			'error_message',
+			'error_message_type',
+			'modern_error_message',
 			'field_duplicate_block_days',
 			'error_message_limit_ip_option',
 			'user_ip',
@@ -96,6 +98,8 @@ class DuplicateKiller_Form_Config_Resolver {
 			$reserved_keys = array(
 				'form_id',
 				'error_message',
+				'error_message_type',
+				'modern_error_message',
 				'field_duplicate_block_days',
 				'error_message_limit_ip_option',
 				'user_ip',
@@ -195,6 +199,8 @@ class DuplicateKiller_Form_Config_Resolver {
 		$reserved_keys = array(
 			'form_id',
 			'error_message',
+			'error_message_type',
+			'modern_error_message',
 			'field_duplicate_block_days',
 			'error_message_limit_ip_option',
 			'user_ip',
@@ -256,6 +262,8 @@ class DuplicateKiller_Form_Config_Resolver {
 		$reserved_keys = array(
 			'form_id',
 			'error_message',
+			'error_message_type',
+			'modern_error_message',
 			'field_duplicate_block_days',
 			'error_message_limit_ip_option',
 			'user_ip',
@@ -320,6 +328,8 @@ class DuplicateKiller_Form_Config_Resolver {
 		$reserved_keys = array(
 			'form_id',
 			'error_message',
+			'error_message_type',
+			'modern_error_message',
 			'field_duplicate_block_days',
 			'error_message_limit_ip_option',
 			'user_ip',

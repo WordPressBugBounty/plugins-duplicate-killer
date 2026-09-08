@@ -31,6 +31,7 @@ function duplicateKiller_formidable_before_send_email( $errors, $values ) {
 				'values'           => $values,
 			) );
 		}
+		
 		return $errors;
 	}
 
@@ -110,8 +111,21 @@ function duplicateKiller_formidable_before_send_email( $errors, $values ) {
 		);
 
 		if ( $result['blocked'] ) {
-			$errors['form'] = $result['message'];
-			$errors[$result['field_key'] ] = $result['message'];
+			$message = $result['message'];
+
+			if ( function_exists( 'duplicateKiller_modern_popup_maybe_add_marker' ) ) {
+				$message = duplicateKiller_modern_popup_maybe_add_marker(
+					$message,
+					'formidable',
+					$form_config,
+					$form_config['form_id'],
+					$form_name
+				);
+			}
+
+			$errors['form'] = $message;
+			$errors[ $result['field_key'] ] = $message;
+
 			return $errors;
 		}
 	}

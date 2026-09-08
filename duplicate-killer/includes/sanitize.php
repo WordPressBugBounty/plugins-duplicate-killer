@@ -47,6 +47,8 @@ function duplicateKiller_sanitize_forms_option(
     $known_scalar_keys = [
         'form_id',
         'error_message',
+		'error_message_type',
+		'modern_error_message',
 		'field_duplicate_block_days',
         'error_message_limit_ip_option',
         'user_ip_days',
@@ -166,6 +168,22 @@ function duplicateKiller_sanitize_forms_option(
         if ($k === '__dk_field_type' || $k === '__dk_field_order') {
             continue;
         }
+		
+		if ( 'error_message_type' === $k ) {
+				$val = sanitize_text_field( (string) $values[ $k ] );
+				$row[ $k ] = 'modern' === $val ? 'modern' : 'classic';
+				continue;
+			}
+
+		if ( 'modern_error_message' === $k ) {
+			$val = wp_kses_post( (string) $values[ $k ] );
+
+			if ( '' === trim( $val ) ) {
+				continue;
+			}
+			$row[ $k ] = $val;
+			continue;
+		}
 
         $val = sanitize_text_field((string) $values[$k]);
 

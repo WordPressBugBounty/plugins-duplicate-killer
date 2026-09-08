@@ -26,6 +26,15 @@ function duplicateKiller_nf_hotfix_payment_total_type(array $settings, int $acti
     return $settings;
 }
 
+/**
+ * Ninja Forms: block duplicates/IP before submission is saved and before emails/actions run.
+ * Hook: ninja_forms_submit_data
+ *
+ * Structure:
+ * 1) IP check
+ * 2) Duplicate field check (enabled fields are FIELD_ID like 12 => 1)
+ * 3) Save to DB (store by FIELD_ID => value)
+ */
 add_filter('ninja_forms_submit_data', 'duplicateKiller_ninjaforms_before_send_email', 10, 1);
 function duplicateKiller_ninjaforms_before_send_email( $form_data ) {
 	$ninja_page = get_option( 'NinjaForms_page' );
@@ -64,6 +73,10 @@ function duplicateKiller_ninjaforms_before_send_email( $form_data ) {
 	$form_config    = $resolved_form['form_config'];
 	$enabled_fields = $resolved_form['enabled_fields'];
 	$data           = DuplicateKiller_Form_Normalizer::ninjaforms_data( $form_data );
+	
+	$modern_popup_form_name = ! empty( $resolved_form['option_key'] )
+		? (string) $resolved_form['option_key']
+		: (string) $form_name;
 
 	if ( ! isset( $form_data['errors'] ) || ! is_array( $form_data['errors'] ) ) {
 		$form_data['errors'] = array();
@@ -148,6 +161,16 @@ function duplicateKiller_ninjaforms_before_send_email( $form_data ) {
 				$message = ! empty( $result['message'] )
 					? (string) $result['message']
 					: __( 'Please check all fields! These values have been submitted already!', 'duplicate-killer' );
+
+				if ( function_exists( 'duplicateKiller_modern_popup_maybe_add_marker' ) ) {
+					$message = duplicateKiller_modern_popup_maybe_add_marker(
+						$message,
+						'ninjaforms',
+						$form_config,
+						$form_config['form_id'],
+						$modern_popup_form_name
+					);
+				}
 
 				$form_data['errors']['form'] = $message;
 				$form_data['errors']['fields'][ (int) $field_id ] = $message;
