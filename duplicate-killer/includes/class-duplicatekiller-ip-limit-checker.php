@@ -32,32 +32,42 @@ class DuplicateKiller_IP_Limit_Checker {
 			return $result;
 		}
 
-		$form_ip      = self::get_user_ip();
-		$user_ip_days = ! empty( $form_config['user_ip_days'] ) ? (int) $form_config['user_ip_days'] : 7;
+		$form_ip          = self::get_user_ip();
+		$ip_duration     = duplicateKiller_get_ip_limit_duration( $form_config );
+		$user_ip_days    = $ip_duration['days'];
+		$user_ip_hours   = $ip_duration['hours'];
+		$user_ip_minutes = $ip_duration['minutes'];
+		$user_ip_seconds = $ip_duration['seconds'];
 
 		self::log( $form_plugin, 'ip_limit_check_start', array_merge(
 			$debug_context,
-			array(
-				'form_name'    => $form_name,
-				'ip'           => $form_ip,
-				'user_ip_days' => $user_ip_days,
-			)
+				array(
+					'form_name'       => $form_name,
+					'ip'              => $form_ip,
+					'user_ip_days'    => $user_ip_days,
+					'user_ip_hours'   => $user_ip_hours,
+					'user_ip_minutes' => $user_ip_minutes,
+					'duration_seconds' => $user_ip_seconds,
+				)
 		) );
 
 		$is_blocked = self::ip_exists_within_limit(
 			$form_plugin,
 			$form_name,
 			$form_ip,
-			$user_ip_days
+			$user_ip_seconds
 		);
 
 		if ( ! $is_blocked ) {
 			self::log( $form_plugin, 'ip_limit_passed', array_merge(
 				$debug_context,
 				array(
-					'form_name'    => $form_name,
-					'ip'           => $form_ip,
-					'user_ip_days' => $user_ip_days,
+					'form_name'        => $form_name,
+					'ip'               => $form_ip,
+					'user_ip_days'     => $user_ip_days,
+					'user_ip_hours'    => $user_ip_hours,
+					'user_ip_minutes'  => $user_ip_minutes,
+					'duration_seconds' => $user_ip_seconds,
 				)
 			) );
 
@@ -71,10 +81,13 @@ class DuplicateKiller_IP_Limit_Checker {
 		self::log( $form_plugin, 'ip_limit_blocked', array_merge(
 			$debug_context,
 			array(
-				'form_name' => $form_name,
-				'ip'        => $form_ip,
-				'days'      => $user_ip_days,
-				'message'   => $message,
+				'form_name'        => $form_name,
+				'ip'               => $form_ip,
+				'days'             => $user_ip_days,
+				'hours'            => $user_ip_hours,
+				'minutes'          => $user_ip_minutes,
+				'duration_seconds' => $user_ip_seconds,
+				'message'          => $message,
 			)
 		) );
 
@@ -83,6 +96,8 @@ class DuplicateKiller_IP_Limit_Checker {
 			'message' => $message,
 			'ip'      => $form_ip,
 			'days'    => $user_ip_days,
+			'hours'   => $user_ip_hours,
+			'minutes' => $user_ip_minutes,
 		);
 	}
 
@@ -90,7 +105,7 @@ class DuplicateKiller_IP_Limit_Checker {
 		string $form_plugin,
 		string $form_name,
 		string $form_ip,
-		int $user_ip_days = 7
+		int $user_ip_seconds
 	): bool {
 		global $wpdb;
 
@@ -120,11 +135,12 @@ class DuplicateKiller_IP_Limit_Checker {
 		}
 
 		try {
-			$created_at = new DateTime( $result->form_date, new DateTimeZone( 'UTC' ) );
-			$threshold  = new DateTime( "-{$user_ip_days} days", new DateTimeZone( 'UTC' ) );
+			$created_at = new DateTimeImmutable( $result->form_date, wp_timezone() );
 		} catch ( Exception $e ) {
 			return false;
 		}
+
+		return $created_at->getTimestamp() > ( time() - $user_ip_seconds );
 
 		return $created_at > $threshold;
 	}

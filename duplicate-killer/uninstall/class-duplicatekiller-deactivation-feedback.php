@@ -394,8 +394,12 @@ class duplicateKiller_Deactivation_Feedback {
 			'form_id',
 			'error_message',
 			'field_duplicate_block_days',
+			'field_duplicate_block_hours',
+			'field_duplicate_block_minutes',
 			'error_message_limit_ip_option',
 			'user_ip_days',
+			'user_ip_hours',
+			'user_ip_minutes',
 			'cookie_option_days',
 		);
 

@@ -50,8 +50,12 @@ function duplicateKiller_sanitize_forms_option(
 		'error_message_type',
 		'modern_error_message',
 		'field_duplicate_block_days',
+		'field_duplicate_block_hours',
+		'field_duplicate_block_minutes',
         'error_message_limit_ip_option',
         'user_ip_days',
+		'user_ip_hours',
+		'user_ip_minutes',
         'cookie_option_days',
         'cookie_option',
         'user_ip',
@@ -192,6 +196,24 @@ function duplicateKiller_sanitize_forms_option(
             continue;
         }
 
+		if ( 'field_duplicate_block_hours' === $k ) {
+			$row[ $k ] = (string) max( 0, min( 23, (int) $val ) );
+			continue;
+		}
+
+		if ( 'field_duplicate_block_minutes' === $k ) {
+			$row[ $k ] = (string) max( 0, min( 59, (int) $val ) );
+			continue;
+		}
+		if ( 'user_ip_hours' === $k ) {
+			$row[ $k ] = (string) max( 0, min( 23, (int) $val ) );
+			continue;
+		}
+
+		if ( 'user_ip_minutes' === $k ) {
+			$row[ $k ] = (string) max( 0, min( 59, (int) $val ) );
+			continue;
+		}
         // Enforce numeric-only for days
         if (in_array($k, ['user_ip_days', 'cookie_option_days', 'field_duplicate_block_days'], true)) {
                 $val = preg_replace('/[^0-9]/', '', $val);

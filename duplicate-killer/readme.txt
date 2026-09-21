@@ -1,13 +1,13 @@
 === Duplicate Killer – Prevent Duplicate Form Submissions ===
-Version: 1.7.0
+Version: 1.7.1
 Author: NIA
 Author URI: https://profiles.wordpress.org/wpnia/
 Contributors: wpnia
 Tags: woocommerce, duplicate orders, duplicate submissions, elementor forms, contact form 7
 Donate link: https://www.paypal.com/paypalme/wpnia
 Requires at least: 5.3
-Tested up to: 7.1
-Stable tag: 1.7.0
+Tested up to: 7.1.1
+Stable tag: 1.7.1
 Requires PHP: 5.6.20
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -248,22 +248,24 @@ PRO adds enhanced idempotency handling and deeper gateway analytics.
 6. WooCommerce duplicate order protection blocks accidental checkout retries, repeated clicks, and duplicate submissions.
 
 == Upgrade Notice ==
-= 1.7.0 =
-- New: Modern Popup Mode displays duplicate submission messages in a customizable popup.
-- Customize messages with links, colors, and formatted text.
-- Preview your popup directly in the plugin settings.
-- Choose Classic Message or Modern Popup Mode for each form.
-- Existing forms keep Classic Message by default.
+= 1.7.1 =
+* Set duplicate submission and IP block durations in days, hours, and minutes. IP blocks now expire correctly in the site's time zone.
 
 
 == Changelog ==
 
+= 1.7.1 =
+* Added hours and minutes to duplicate submission block duration.
+* Added hours and minutes to IP block duration.
+* Fixed IP block expiry when the site uses a local time zone.
+* Highlighted active duration values in the settings.
+
 = 1.7.0 =
-- New: Modern Popup Mode displays duplicate submission messages in a customizable popup.
-- Customize messages with links, colors, and formatted text.
-- Preview your popup directly in the plugin settings.
-- Choose Classic Message or Modern Popup Mode for each form.
-- Existing forms keep Classic Message by default.
+* New: Modern Popup Mode displays duplicate submission messages in a customizable popup.
+* Customize messages with links, colors, and formatted text.
+* Preview your popup directly in the plugin settings.
+* Choose Classic Message or Modern Popup Mode for each form.
+* Existing forms keep Classic Message by default.
 
 = 1.6.8 =
 * Improved WordPress.org Plugin Check compliance across admin, diagnostics, and database handling.

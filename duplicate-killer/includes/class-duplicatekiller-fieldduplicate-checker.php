@@ -164,11 +164,9 @@ class DuplicateKiller_FieldDuplicate_Checker {
 		// Cache key is based on plugin + form name.
 		static $dk_results_cache = array();
 
-		$field_duplicate_block_days = isset( $form_config['field_duplicate_block_days'] )
-			? absint( $form_config['field_duplicate_block_days'] )
-			: 0;
+		$field_duplicate_block_seconds = duplicateKiller_get_field_duplicate_block_seconds( $form_config );
 
-		$cache_key = $form_plugin . '|' . $form_name . '|' . $field_duplicate_block_days . '|' . ( $checked_cookie ? 'cookie' : 'nocookie' ) . '|' . md5( $form_cookie );
+		$cache_key = $form_plugin . '|' . $form_name . '|' . $field_duplicate_block_seconds . '|' . ( $checked_cookie ? 'cookie' : 'nocookie' ) . '|' . md5( $form_cookie );
 
 		// Load stored submissions only once per plugin + form during this request.
 		if ( ! isset( $dk_results_cache[ $cache_key ] ) ) {
@@ -187,9 +185,9 @@ class DuplicateKiller_FieldDuplicate_Checker {
 			if ( true === $checked_cookie && $form_cookie !== 'NULL' && $form_cookie !== '' ) {
 				$sql .= " AND form_cookie = %s";
 				$params[] = $form_cookie;
-			} elseif ( $field_duplicate_block_days > 0 ) {
-				$sql .= " AND form_date >= DATE_SUB(NOW(), INTERVAL %d DAY)";
-				$params[] = $field_duplicate_block_days;
+			} elseif ( $field_duplicate_block_seconds > 0 ) {
+				$sql .= " AND form_date >= DATE_SUB(NOW(), INTERVAL %d SECOND)";
+				$params[] = $field_duplicate_block_seconds;
 			}
 
 			$sql .= " ORDER BY form_id DESC";

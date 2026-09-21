@@ -2176,7 +2176,21 @@ body.dk-db-modal-open {
 	outline: none;
 	box-shadow: 0 0 3px rgba(176, 42, 31, 0.4) !important;
 }
+.dk-duration-fields {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 12px;
+	width: 100%;
+}
+.dk-duration-fields .dk-input-prefix-group.is-set {
+	border-color: #34c759;
+}
 
+.dk-duration-fields .dk-input-prefix-group.is-set .dk-input-prefix-label {
+	background: #f0fbf2;
+	border-right-color: #34c759;
+	color: #236b34;
+}
 .dk-input-prefix-group {
 	display: flex;
 	align-items: stretch;
@@ -2218,7 +2232,11 @@ body.dk-db-modal-open {
 	box-shadow: none !important;
 	outline: none !important;
 }
-
+@media screen and (max-width: 600px) {
+	.dk-duration-fields {
+		grid-template-columns: 1fr;
+	}
+}
 /* =========================================================
    iOS switches
 ========================================================= */
@@ -2430,10 +2448,6 @@ body.dk-db-modal-open {
 	font-size: 12px;
 	line-height: 1.45;
 	color: #6b7280;
-}
-
-.dk-feature-fields--align-descriptions .dk-feature-field p {
-	min-height: 40px;
 }
 
 .dk-feature-field .dk-error-input {
@@ -4544,10 +4558,6 @@ body.dk-db-modal-open {
 	.dk-feature-field--quarter,
 	.dk-feature-field--three-quarters {
 		grid-column: 1 / -1;
-	}
-
-	.dk-feature-fields--align-descriptions .dk-feature-field p {
-		min-height: 0;
 	}
 
 	.dk-shortcode-control {

@@ -228,14 +228,23 @@ function duplicateKiller_render_forms_overview(array $config) {
 		$field_duplicate_block_days = isset( $form_opts['field_duplicate_block_days'] )
 			? (string) absint( $form_opts['field_duplicate_block_days'] )
 			: '0';
+
+		$field_duplicate_block_hours = isset( $form_opts['field_duplicate_block_hours'] )
+			? (string) min( 23, absint( $form_opts['field_duplicate_block_hours'] ) )
+			: '0';
+
+		$field_duplicate_block_minutes = isset( $form_opts['field_duplicate_block_minutes'] )
+			? (string) min( 59, absint( $form_opts['field_duplicate_block_minutes'] ) )
+			: '0';
 			
 		$ip_err_msg = !empty($form_opts['error_message_limit_ip_option'])
 			? (string)$form_opts['error_message_limit_ip_option']
 			: $defaults['error_message_limit_ip_option'];
 
-		$ip_days = !empty($form_opts['user_ip_days'])
-			? (string)$form_opts['user_ip_days']
-			: $defaults['user_ip_days'];
+		$ip_duration = duplicateKiller_get_ip_limit_duration( $form_opts );
+		$ip_days     = (string) $ip_duration['days'];
+		$ip_hours    = (string) $ip_duration['hours'];
+		$ip_minutes  = (string) $ip_duration['minutes'];
 
 		$cookie_days = !empty($form_opts['cookie_option_days'])
 			? (string)$form_opts['cookie_option_days']
@@ -552,28 +561,64 @@ function duplicateKiller_render_forms_overview(array $config) {
 					<div class="dk-section-header" style="margin-top:15px">
 						<h4 class="dk-section-title-with-link">
 							<span>
-								<?php esc_html_e('Block duration', 'duplicate-killer'); ?>
+								<?php esc_html_e( 'Block duration', 'duplicate-killer' ); ?>
 							</span>
 						</h4>
 
 						<p>
-							<?php esc_html_e('How many days duplicate values should remain blocked. Set 0 to block permanently.', 'duplicate-killer'); ?>
+							<?php esc_html_e( 'How long duplicate values should remain blocked. Set all values to 0 to block permanently.', 'duplicate-killer' ); ?>
 						</p>
 					</div>
 
 					<div class="dk-card-section-inner">
+						<div class="dk-duration-fields">
+							<div class="dk-input-prefix-group">
+								<span class="dk-input-prefix-label">
+									<?php esc_html_e( 'Days', 'duplicate-killer' ); ?>
+								</span>
 
-						<div class="dk-input-prefix-group">
-							<span class="dk-input-prefix-label">
-								<?php esc_html_e('Days', 'duplicate-killer'); ?>
-							</span>
+								<input
+									type="number"
+									class="dk-input-prefix-field"
+									name="<?php echo esc_attr( $option_name . '[' . $form_key . '][field_duplicate_block_days]' ); ?>"
+									value="<?php echo esc_attr( $field_duplicate_block_days ); ?>"
+									min="0"
+									step="1"
+									aria-label="<?php echo esc_attr__( 'Duplicate block duration in days', 'duplicate-killer' ); ?>" />
+							</div>
 
-							<input type="text"
-								class="dk-input-prefix-field"
-								name="<?php echo esc_attr($option_name . '[' . $form_key . '][field_duplicate_block_days]'); ?>"
-								value="<?php echo esc_attr($field_duplicate_block_days); ?>" />
+							<div class="dk-input-prefix-group">
+								<span class="dk-input-prefix-label">
+									<?php esc_html_e( 'Hours', 'duplicate-killer' ); ?>
+								</span>
+
+								<input
+									type="number"
+									class="dk-input-prefix-field"
+									name="<?php echo esc_attr( $option_name . '[' . $form_key . '][field_duplicate_block_hours]' ); ?>"
+									value="<?php echo esc_attr( $field_duplicate_block_hours ); ?>"
+									min="0"
+									max="23"
+									step="1"
+									aria-label="<?php echo esc_attr__( 'Duplicate block duration in hours', 'duplicate-killer' ); ?>" />
+							</div>
+
+							<div class="dk-input-prefix-group">
+								<span class="dk-input-prefix-label">
+									<?php esc_html_e( 'Minutes', 'duplicate-killer' ); ?>
+								</span>
+
+								<input
+									type="number"
+									class="dk-input-prefix-field"
+									name="<?php echo esc_attr( $option_name . '[' . $form_key . '][field_duplicate_block_minutes]' ); ?>"
+									value="<?php echo esc_attr( $field_duplicate_block_minutes ); ?>"
+									min="0"
+									max="59"
+									step="1"
+									aria-label="<?php echo esc_attr__( 'Duplicate block duration in minutes', 'duplicate-killer' ); ?>" />
+							</div>
 						</div>
-
 					</div>
 				</div>
 				<!-- Advanced settings -->
@@ -627,7 +672,7 @@ function duplicateKiller_render_forms_overview(array $config) {
 								</div>
 
 								<div id="<?php echo esc_attr('dk-limit-ip_' . $form_safe); ?>"
-									class="dk-feature-fields dk-feature-fields--align-descriptions dk-toggle-section<?php echo $ip_enabled ? ' is-active' : ''; ?>">
+									class="dk-feature-fields dk-toggle-section<?php echo $ip_enabled ? ' is-active' : ''; ?>">
 
 									<div class="dk-feature-field dk-feature-field--wide">
 										<label><?php esc_html_e('IP warning message', 'duplicate-killer'); ?></label>
@@ -640,22 +685,59 @@ function duplicateKiller_render_forms_overview(array $config) {
 											<?php echo $disabled_attr; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Attribute fragment is generated internally from a boolean lock state. ?> />
 									</div>
 
-									<div class="dk-feature-field dk-feature-field--small">
-										<label><?php esc_html_e('Block duration', 'duplicate-killer'); ?></label>
-										<p><?php esc_html_e('Number of days this IP address should be blocked.', 'duplicate-killer'); ?></p>
+								<div class="dk-feature-field dk-feature-field--full">
+									<label><?php esc_html_e( 'Block duration', 'duplicate-killer' ); ?></label>
+									<p><?php esc_html_e( 'How long this IP address should remain blocked.', 'duplicate-killer' ); ?></p>
+
+									<div class="dk-duration-fields">
+										<div class="dk-input-prefix-group">
+											<span class="dk-input-prefix-label">
+												<?php esc_html_e( 'Days', 'duplicate-killer' ); ?>
+											</span>
+
+											<input
+												type="number"
+												class="dk-input-prefix-field"
+												name="<?php echo esc_attr( $option_name . '[' . $form_key . '][user_ip_days]' ); ?>"
+												value="<?php echo esc_attr( $ip_days ); ?>"
+												min="0"
+												step="1"
+												aria-label="<?php echo esc_attr__( 'IP block duration in days', 'duplicate-killer' ); ?>" />
+										</div>
 
 										<div class="dk-input-prefix-group">
 											<span class="dk-input-prefix-label">
-												<?php esc_html_e('Days', 'duplicate-killer'); ?>
+												<?php esc_html_e( 'Hours', 'duplicate-killer' ); ?>
 											</span>
 
-											<input type="text"
+											<input
+												type="number"
 												class="dk-input-prefix-field"
-												name="<?php echo esc_attr($option_name . '[' . $form_key . '][user_ip_days]'); ?>"
-												value="<?php echo esc_attr($ip_days); ?>"
-												<?php echo $disabled_attr; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Attribute fragment is generated internally from a boolean lock state. ?> />
+												name="<?php echo esc_attr( $option_name . '[' . $form_key . '][user_ip_hours]' ); ?>"
+												value="<?php echo esc_attr( $ip_hours ); ?>"
+												min="0"
+												max="23"
+												step="1"
+												aria-label="<?php echo esc_attr__( 'IP block duration in hours', 'duplicate-killer' ); ?>" />
+										</div>
+
+										<div class="dk-input-prefix-group">
+											<span class="dk-input-prefix-label">
+												<?php esc_html_e( 'Minutes', 'duplicate-killer' ); ?>
+											</span>
+
+											<input
+												type="number"
+												class="dk-input-prefix-field"
+												name="<?php echo esc_attr( $option_name . '[' . $form_key . '][user_ip_minutes]' ); ?>"
+												value="<?php echo esc_attr( $ip_minutes ); ?>"
+												min="0"
+												max="59"
+												step="1"
+												aria-label="<?php echo esc_attr__( 'IP block duration in minutes', 'duplicate-killer' ); ?>" />
 										</div>
 									</div>
+								</div>
 								</div>
 							</div>
 

@@ -32,7 +32,28 @@ function initDuplicateKillerToggles() {
 		});
 	});
 }
+function initDuplicateKillerDurationHighlights() {
+	const inputs = document.querySelectorAll('.dk-duration-fields .dk-input-prefix-group input[type="number"]');
 
+	inputs.forEach(function (input) {
+		const group = input.closest('.dk-input-prefix-group');
+
+		if (!group) {
+			return;
+		}
+
+		function updateHighlight() {
+			group.classList.toggle(
+				'is-set',
+				input.validity.valid && input.valueAsNumber > 0
+			);
+		}
+
+		updateHighlight();
+		input.addEventListener('input', updateHighlight);
+		input.addEventListener('change', updateHighlight);
+	});
+}
 function initDuplicateKillerMessageModes() {
 	const groups = document.querySelectorAll('[data-dk-message-mode]');
 
@@ -188,6 +209,7 @@ document.addEventListener('DOMContentLoaded', function () {
 	toggleSectionOnCheckbox('save_image', 'dk-save-image-path');
 		
 	initDuplicateKillerToggles();
+	initDuplicateKillerDurationHighlights();
 	initDuplicateKillerMessageModes();
 	initDuplicateKillerQuicktags();
 	initDuplicateKillerModernPreview();

@@ -676,13 +676,81 @@ function duplicateKiller_sanitize_id($string) {
 	return preg_replace('/[^a-zA-Z0-9_-]/', '_', $string);
 }
 function duplicateKiller_get_form_defaults(): array {
-    return [
-        'error_message' => 'Please check all fields! These values have been submitted already!',
-        'modern_error_message' => '<strong style="color:#b32d2e;">This entry already exists.</strong>' . "\n" . '<p>Please <a href="/contact">contact us</a> if you need help.</p>',
-        'error_message_limit_ip_option' => 'This IP has been already submitted.',
-        'user_ip_days' => '7',
-        'cookie_option_days' => '7',
-    ];
+	return array(
+		'error_message'                  => 'Please check all fields! These values have been submitted already!',
+		'modern_error_message'           => '<strong style="color:#b32d2e;">This entry already exists.</strong>' . "\n" . '<p>Please <a href="/contact">contact us</a> if you need help.</p>',
+		'error_message_limit_ip_option'  => 'This IP has been already submitted.',
+		'field_duplicate_block_hours'    => '0',
+		'field_duplicate_block_minutes'  => '0',
+		'user_ip_days'                   => '7',
+		'user_ip_hours'                  => '0',
+		'user_ip_minutes'                => '0',
+		'cookie_option_days'             => '7',
+	);
+}
+
+/**
+ * Return the configured duplicate block duration in seconds.
+ *
+ * A duration of zero means that duplicate values remain blocked permanently.
+ *
+ * @param array $form_config Form configuration.
+ * @return int
+ */
+function duplicateKiller_get_field_duplicate_block_seconds( array $form_config ): int {
+	$days = isset( $form_config['field_duplicate_block_days'] )
+		? absint( $form_config['field_duplicate_block_days'] )
+		: 0;
+
+	$hours = isset( $form_config['field_duplicate_block_hours'] )
+		? min( 23, absint( $form_config['field_duplicate_block_hours'] ) )
+		: 0;
+
+	$minutes = isset( $form_config['field_duplicate_block_minutes'] )
+		? min( 59, absint( $form_config['field_duplicate_block_minutes'] ) )
+		: 0;
+
+	return (int) (
+		( $days * DAY_IN_SECONDS )
+		+ ( $hours * HOUR_IN_SECONDS )
+		+ ( $minutes * MINUTE_IN_SECONDS )
+	);
+}
+/**
+ * Return the configured IP block duration.
+ *
+ * The existing seven-day default is preserved when no valid duration is set.
+ *
+ * @param array $form_config Form configuration.
+ * @return array
+ */
+function duplicateKiller_get_ip_limit_duration( array $form_config ): array {
+	$days = isset( $form_config['user_ip_days'] )
+		? absint( $form_config['user_ip_days'] )
+		: 7;
+
+	$hours = isset( $form_config['user_ip_hours'] )
+		? min( 23, absint( $form_config['user_ip_hours'] ) )
+		: 0;
+
+	$minutes = isset( $form_config['user_ip_minutes'] )
+		? min( 59, absint( $form_config['user_ip_minutes'] ) )
+		: 0;
+
+	if ( 0 === $days && 0 === $hours && 0 === $minutes ) {
+		$days = 7;
+	}
+
+	return array(
+		'days'    => $days,
+		'hours'   => $hours,
+		'minutes' => $minutes,
+		'seconds' => (int) (
+			( $days * DAY_IN_SECONDS )
+			+ ( $hours * HOUR_IN_SECONDS )
+			+ ( $minutes * MINUTE_IN_SECONDS )
+		),
+	);
 }
 function duplicateKiller_delete_saved_entries(string $plugin_key, string $form_name): void {
 	global $wpdb;
