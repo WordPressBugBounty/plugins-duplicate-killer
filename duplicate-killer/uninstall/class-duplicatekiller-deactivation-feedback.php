@@ -98,7 +98,32 @@ class duplicateKiller_Deactivation_Feedback {
 				<form id="duplicatekiller-deactivation-form">
 
 					<div class="duplicatekiller-feedback-options">
+						<label class="duplicatekiller-feedback-option duplicatekiller-feedback-option--upgrade">
+							<span class="duplicatekiller-feedback-radio">
+								<input type="radio" name="reason_key" value="free_too_limited">
+							</span>
+							<span class="duplicatekiller-feedback-option-content">
+								<span class="duplicatekiller-feedback-option-title">
+									<?php echo esc_html__( 'Free version is too limited', 'duplicate-killer' ); ?>
+								</span>
+							</span>
+						</label>
 
+						<div class="duplicatekiller-feedback-upgrade-link">
+							<p class="duplicatekiller-feedback-upgrade-title">
+								<?php echo esc_html__( 'Need more than the Free version offers?', 'duplicate-killer' ); ?>
+							</p>
+							<p class="duplicatekiller-feedback-upgrade-description">
+								<?php echo esc_html__( 'Discover the plans and check for a voucher while you’re here.', 'duplicate-killer' ); ?>
+							</p>
+							<a
+								href="<?php echo esc_url( 'https://verselabwp.com/duplicate-killer/?dk_from=deactivate' ); ?>"
+								target="_blank"
+								rel="noopener noreferrer">
+								<?php echo esc_html__( 'View plans & check vouchers', 'duplicate-killer' ); ?>
+								<span aria-hidden="true">&rarr;</span>
+							</a>
+						</div>
 						<label class="duplicatekiller-feedback-option">
 							<span class="duplicatekiller-feedback-radio">
 								<input type="radio" name="reason_key" value="temporary">
@@ -345,6 +370,99 @@ class duplicateKiller_Deactivation_Feedback {
 		));
 	}
 
+	/**
+	 * Returns the Contact Form 7 field types for a configured form.
+	 *
+	 * The saved form ID is preferred. For legacy settings without an ID,
+	 * an exact and unique form-title match is used as a safe fallback.
+	 *
+	 * @param string $form_name Configured form name.
+	 * @param array  $settings  Duplicate Killer form settings.
+	 * @return array<string, string>
+	 */
+	private static function get_cf7_field_types_for_feedback($form_name, array $settings) {
+		if (
+			! class_exists('WPCF7_ContactForm') ||
+			! method_exists('WPCF7_ContactForm', 'get_instance')
+		) {
+			return array();
+		}
+
+		$form_id      = !empty($settings['form_id']) ? absint($settings['form_id']) : 0;
+		$contact_form = $form_id > 0
+			? WPCF7_ContactForm::get_instance($form_id)
+			: null;
+
+		/*
+		 * Legacy settings may not contain form_id.
+		 * Use the title only when it identifies exactly one CF7 form.
+		 */
+		if (!$contact_form && '' !== $form_name) {
+			$matching_ids = get_posts(
+				array(
+					'post_type'              => 'wpcf7_contact_form',
+					'post_status'            => 'any',
+					'title'                  => $form_name,
+					'posts_per_page'         => 2,
+					'fields'                 => 'ids',
+					'no_found_rows'          => true,
+					'orderby'                => 'ID',
+					'order'                  => 'DESC',
+					'suppress_filters'       => true,
+					'update_post_meta_cache' => false,
+					'update_post_term_cache' => false,
+				)
+			);
+
+			if (1 === count($matching_ids)) {
+				$contact_form = WPCF7_ContactForm::get_instance(
+					absint($matching_ids[0])
+				);
+			}
+		}
+
+		if (
+			!is_object($contact_form) ||
+			!method_exists($contact_form, 'scan_form_tags')
+		) {
+			return array();
+		}
+
+		try {
+			$tags = $contact_form->scan_form_tags();
+		} catch (\Throwable $exception) {
+			return array();
+		}
+
+		if (!is_array($tags)) {
+			return array();
+		}
+
+		$field_types = array();
+
+		foreach ($tags as $tag) {
+			if (!is_object($tag) || empty($tag->name)) {
+				continue;
+			}
+
+			$field_name = sanitize_key((string) $tag->name);
+			$field_type = '';
+
+			if (!empty($tag->basetype)) {
+				$field_type = sanitize_key((string) $tag->basetype);
+			} elseif (!empty($tag->type)) {
+				$field_type = sanitize_key(
+					rtrim((string) $tag->type, '*')
+				);
+			}
+
+			if ('' !== $field_name && '' !== $field_type) {
+				$field_types[$field_name] = $field_type;
+			}
+		}
+
+		return $field_types;
+	}
 	private static function get_duplicate_killer_settings_feedback_text() {
 		$option_names = array(
 			'CF7_page',
@@ -355,6 +473,7 @@ class duplicateKiller_Deactivation_Feedback {
 			'Formidable_page',
 			'NinjaForms_page',
 			'FluentForms_page',
+			'MetForm_page',
 			'WooCommerce_page',
 		);
 
@@ -380,6 +499,23 @@ class duplicateKiller_Deactivation_Feedback {
 				$form_id    = isset($settings['form_id']) ? sanitize_text_field((string) $settings['form_id']) : 'unknown';
 
 				$enabled_features = self::extract_enabled_duplicate_killer_features($settings);
+
+				if ('CF7_page' === $option_name && !empty($enabled_features)) {
+					$field_types = self::get_cf7_field_types_for_feedback(
+						(string) $form_name,
+						$settings
+					);
+
+					foreach ($enabled_features as $feature_index => $feature_key) {
+						if (isset($field_types[$feature_key])) {
+							$enabled_features[$feature_index] = sprintf(
+								'%s [type: %s]',
+								$feature_key,
+								$field_types[$feature_key]
+							);
+						}
+					}
+				}
 
 				$lines[] = '- Form: ' . $form_label . ' | ID: ' . $form_id;
 				$lines[] = '  Enabled: ' . (!empty($enabled_features) ? implode(', ', $enabled_features) : 'none detected');
@@ -503,6 +639,7 @@ class duplicateKiller_Deactivation_Feedback {
 		delete_option('Formidable_page');
 		delete_option('NinjaForms_page');
 		delete_option('FluentForms_page');
+		delete_option( 'MetForm_page' );
 		delete_option('DuplicateKillerSettings');
 		delete_option('duplicatekillerpro_license_options');
 		delete_option('duplicate_killer_elementor_debug_logs');

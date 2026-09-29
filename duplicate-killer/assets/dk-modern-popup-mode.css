@@ -151,7 +151,9 @@
 	margin: 0 0 14px 22px;
 	padding: 0;
 }
-
+.mf-form-wrapper.duplicatekiller-metform-response-muted .mf-main-response-wrap {
+	display: none !important;
+}
 @media (max-width: 600px) {
 	.duplicatekiller-modern-modal {
 		padding: 14px;

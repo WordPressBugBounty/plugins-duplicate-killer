@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: Duplicate Killer
- * Version: 1.7.1
+ * Version: 1.7.2
  * Description: Block duplicate form submissions by validating unique email, phone and text fields — without CAPTCHA.
  * Author: NIA
  * Author URI: https://profiles.wordpress.org/wpnia/
@@ -13,7 +13,7 @@
 	defined('ABSPATH') or die('You shall not pass!');
 	
 	define('DUPLICATEKILLER_PLUGIN',__FILE__);
-	define('DUPLICATEKILLER_VERSION','1.7.1');
+	define('DUPLICATEKILLER_VERSION','1.7.2');
 	define('DUPLICATEKILLER_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 	define('DUPLICATEKILLER_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 	
@@ -31,6 +31,7 @@
 	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/functions_formidable.php';
 	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/functions_ninjaforms.php';
 	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/functions_fluentforms.php';
+	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/functions_metform.php';
 	
 	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/database.php';
 	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/pro.php';
@@ -466,6 +467,15 @@ function duplicateKiller_options() {
 				array( 'id' => 'FluentForms_error_message', 'title' => '', 'callback' => 'duplicateKiller_fluentforms_settings_callback' ),
 			),
 		),
+		'MetForm_page' => array(
+			'title'          => 'MetForm',
+			'description_cb' => 'duplicateKiller_metform_description',
+			'validate_cb'    => 'duplicateKiller_metform_validate_input',
+			'fields'         => array(
+				array( 'id' => 'MetForm_forms', 'title' => '', 'callback' => 'duplicateKiller_metform_select_form_tag_callback' ),
+				array( 'id' => 'MetForm_error_message', 'title' => '', 'callback' => 'duplicateKiller_metform_settings_callback' ),
+			),
+		),
 		'WooCommerce_page' => array(
 			'title' => 'WooCommerce',
 			'description_cb' => array( 'duplicateKiller_WooCommerce', 'render_section' ),
@@ -591,6 +601,7 @@ function duplicateKiller_display_page() {
 				'sixth',
 				'seventh',
 				'fluentforms',
+				'metform',
 				'woocommerce',
 				'pro',
 				'support',
@@ -623,6 +634,11 @@ function duplicateKiller_display_page() {
 			<a href="?page=duplicateKiller&tab=fluentforms" class="nav-tab dk-nav-tab-new <?php echo esc_attr( $active_tab === 'fluentforms' ? 'nav-tab-active' : '' ); ?>">
 				<?php esc_html_e( 'Fluent Forms', 'duplicate-killer' ); ?>
 				<span class="dk-new-badge"><?php esc_html_e( 'New', 'duplicate-killer' ); ?></span>
+			</a>
+			
+			<a href="?page=duplicateKiller&tab=metform" class="nav-tab dk-nav-tab-new <?php echo esc_attr( $active_tab === 'metform' ? 'nav-tab-active' : '' ); ?>">
+				<?php esc_html_e( 'MetForm', 'duplicate-killer' ); ?>
+				<span class="dk-new-badge"><?php esc_html_e( 'Beta', 'duplicate-killer' ); ?></span>
 			</a>
 			
 			<a href="?page=duplicateKiller&tab=woocommerce" class="nav-tab <?php echo esc_attr($active_tab == 'woocommerce' ? 'nav-tab-active' : ''); ?>">
@@ -670,6 +686,10 @@ function duplicateKiller_display_page() {
 			}elseif ( $active_tab === 'fluentforms' ) {
 				settings_fields( 'FluentForms_page' );
 				duplicateKiller_do_settings_sections( 'FluentForms_page' );
+				submit_button();
+			} elseif ( $active_tab === 'metform' ) {
+				settings_fields( 'MetForm_page' );
+				duplicateKiller_do_settings_sections( 'MetForm_page' );
 				submit_button();
 			}elseif($active_tab == 'woocommerce') {
 				settings_fields('WooCommerce_page');

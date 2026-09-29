@@ -58,7 +58,7 @@ $active_form_name   = DuplicateKiller_Admin_Submissions_Request::get_form_name()
 					esc_html( $active_search )
 				);
 				?>
-				Ã—
+				&times;
 			</a>
 		<?php endif; ?>
 	</div>

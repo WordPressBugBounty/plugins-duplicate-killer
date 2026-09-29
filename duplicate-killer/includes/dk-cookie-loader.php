@@ -600,6 +600,45 @@ function duplicateKiller_cookie_default_providers() {
 		'cookie_prefix' => 'dk_form_cookie_fluentforms_',
 		'selector'      => 'form.frm-fluent-form, form[id^="fluentform_"], form[class*="fluent_form_"], .fluentform form',
 	);
+	
+	// =========================
+	// METFORM
+	// =========================
+	
+	$metform_page     = get_option( 'MetForm_page', array() );
+	$metform_per_days = array();
+
+	if ( is_array( $metform_page ) ) {
+		foreach ( $metform_page as $cfg ) {
+			if (
+				! is_array( $cfg ) ||
+				empty( $cfg['cookie_option'] ) ||
+				'1' !== (string) $cfg['cookie_option'] ||
+				empty( $cfg['form_id'] )
+			) {
+				continue;
+			}
+
+			$form_id = absint( $cfg['form_id'] );
+
+			if ( $form_id <= 0 ) {
+				continue;
+			}
+
+			$days = isset( $cfg['cookie_option_days'] )
+				? max( 1, absint( $cfg['cookie_option_days'] ) )
+				: 1;
+
+			$metform_per_days[ $form_id ] = $days;
+		}
+	}
+
+	$providers['metform'] = array(
+		'enabled'       => ! empty( $metform_per_days ),
+		'per_form_days' => $metform_per_days,
+		'cookie_prefix' => 'dk_form_cookie_metform_',
+		'selector'      => '.mf-form-wrapper[data-form-id] form.metform-form-content',
+	);
 	/**
 	 * Future providers (placeholders):
 	 * Coming soon

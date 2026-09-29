@@ -449,4 +449,34 @@ class DuplicateKiller_Form_Normalizer {
 
 		return $data;
 	}
+	
+	public static function metform( int $form_id, array $data ): array {
+		return array(
+			'plugin'     => 'MetForm',
+			'form_id'    => $form_id,
+			'field_keys' => array_keys( $data ),
+		);
+	}
+
+	public static function metform_data( array $form_data ): array {
+		$data = array();
+
+		foreach ( $form_data as $key => $value ) {
+			if (
+				! is_string( $key ) ||
+				in_array( $key, array( 'action', 'id', 'form_nonce' ), true ) ||
+				! is_scalar( $value )
+			) {
+				continue;
+			}
+
+			$key = sanitize_key( $key );
+
+			if ( '' !== $key ) {
+				$data[ $key ] = sanitize_text_field( (string) $value );
+			}
+		}
+
+		return $data;
+	}
 }

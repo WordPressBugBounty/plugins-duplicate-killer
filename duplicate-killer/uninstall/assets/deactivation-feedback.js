@@ -15,6 +15,7 @@
 
 		$('.duplicatekiller-feedback-option').removeClass('is-selected');
 		$('.duplicatekiller-feedback-followup').hide();
+		$('.duplicatekiller-feedback-upgrade-link').toggle(selectedReason === 'free_too_limited');
 
 		if (selectedReason) {
 			$('input[name="reason_key"]:checked')
@@ -36,6 +37,7 @@
 
 		$('.duplicatekiller-feedback-option').removeClass('is-selected');
 		$('.duplicatekiller-feedback-followup').hide();
+		$('.duplicatekiller-feedback-upgrade-link').hide();
 
 		$('#duplicatekiller-deactivation-form button[type="submit"]')
 			.prop('disabled', true)
@@ -113,6 +115,7 @@
 
 	$(document).ready(function () {
 		$('.duplicatekiller-feedback-followup').hide();
+		duplicateKillerToggleFollowupInputs();
 		duplicateKillerToggleSubmit();
 	});
 })(jQuery);

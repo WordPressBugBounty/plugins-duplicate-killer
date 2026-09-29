@@ -1094,6 +1094,116 @@
 			});
 		}
 	}
+	
+	// -------------------------------------------------------------------------
+	// Provider: MetForm.
+	// -------------------------------------------------------------------------
+
+	function inspectMetFormResponse(wrapper) {
+		if (!wrapper) {
+			return;
+		}
+
+		var formId = wrapper.getAttribute('data-form-id');
+		var response = wrapper.querySelector('.mf-main-response-wrap');
+		var message = response ? response.querySelector('.mf-response-msg p') : null;
+
+		if (!formId || !response || !message) {
+			return;
+		}
+
+		var item = response.classList.contains('mf-error-res')
+			? findByMarker(message.textContent, 'metform', formId)
+			: null;
+
+		if (!item || normalize(stripMarker(message.textContent, item)) !== normalize(item.plain)) {
+			restoreHiddenElement(response);
+			return;
+		}
+
+		hideElement(response, item);
+	}
+
+	function initMetForm() {
+		if (!getItemsByProvider('metform').length || typeof MutationObserver === 'undefined') {
+			return;
+		}
+
+		var wrappers = document.querySelectorAll('.mf-form-wrapper[data-form-id]');
+
+		for (var i = 0; i < wrappers.length; i++) {
+			(function (wrapper) {
+				var formId = wrapper.getAttribute('data-form-id');
+				var form = wrapper.querySelector('form.metform-form-content');
+				var previousMessage = '';
+				var waiting = false;
+
+				inspectMetFormResponse(wrapper);
+
+				if (form) {
+					form.addEventListener('submit', function () {
+						var response = wrapper.querySelector('.mf-main-response-wrap');
+						var message = response ? response.querySelector('.mf-response-msg p') : null;
+
+						previousMessage = message ? normalize(message.textContent) : '';
+						waiting = true;
+						wrapper.classList.add('duplicatekiller-metform-response-muted');
+					}, true);
+				}
+
+				if (window.jQuery) {
+					window.jQuery(wrapper).on('metform/after_submit', function (event, payload) {
+						var result = payload && payload.response;
+						var errors = result && Array.isArray(result.error)
+							? normalize(result.error.join(' '))
+							: '';
+						var item = result && !result.status
+							? findByMarker(errors, 'metform', formId)
+							: null;
+
+						waiting = false;
+
+						if (item && normalize(stripMarker(errors, item)) === normalize(item.plain)) {
+							wrapper.classList.add('duplicatekiller-metform-response-muted');
+							openModal(item);
+							return;
+						}
+
+						wrapper.classList.remove('duplicatekiller-metform-response-muted');
+						restoreHiddenDescendants(wrapper);
+					});
+				}
+
+				new MutationObserver(function () {
+					inspectMetFormResponse(wrapper);
+
+					if (!waiting) {
+						return;
+					}
+
+					var response = wrapper.querySelector('.mf-main-response-wrap');
+					var message = response ? response.querySelector('.mf-response-msg p') : null;
+					var currentMessage = message ? normalize(message.textContent) : '';
+
+					// Covers a request failure for which MetForm does not emit after_submit.
+					if (
+						currentMessage &&
+						currentMessage !== previousMessage &&
+						response.getAttribute('data-duplicatekiller-modern-hidden') !== '1'
+					) {
+						waiting = false;
+						wrapper.classList.remove('duplicatekiller-metform-response-muted');
+					}
+				}).observe(wrapper, {
+					attributes: true,
+					attributeFilter: ['class', 'data-show'],
+					childList: true,
+					subtree: true,
+					characterData: true
+				});
+			}(wrappers[i]));
+		}
+	}
 
 	// -------------------------------------------------------------------------
 	// Boot.
@@ -1106,6 +1216,7 @@
 		initBreakdance();
 		initElementor();
 		initFluentForms();
+		initMetForm();
 		initNinjaForms();
 		initFormidable();
 	}

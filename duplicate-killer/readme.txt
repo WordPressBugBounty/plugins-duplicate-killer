@@ -1,5 +1,5 @@
 === Duplicate Killer – Prevent Duplicate Form Submissions ===
-Version: 1.7.1
+Version: 1.7.2
 Author: NIA
 Author URI: https://profiles.wordpress.org/wpnia/
 Contributors: wpnia
@@ -7,7 +7,7 @@ Tags: woocommerce, duplicate orders, duplicate submissions, elementor forms, con
 Donate link: https://www.paypal.com/paypalme/wpnia
 Requires at least: 5.3
 Tested up to: 7.1.1
-Stable tag: 1.7.1
+Stable tag: 1.7.2
 Requires PHP: 5.6.20
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -248,11 +248,17 @@ PRO adds enhanced idempotency handling and deeper gateway analytics.
 6. WooCommerce duplicate order protection blocks accidental checkout retries, repeated clicks, and duplicate submissions.
 
 == Upgrade Notice ==
-= 1.7.1 =
-* Set duplicate submission and IP block durations in days, hours, and minutes. IP blocks now expire correctly in the site's time zone.
+= 1.7.2 =
+Added MetForm integration in beta, with duplicate protection, Modern Popup Mode, uploaded file links, and diagnostics. Test MetForm Pro integrations and payment flows on staging before going live.
 
 
 == Changelog ==
+
+= 1.7.2 =
+* Added MetForm support for duplicate submission protection.
+* Added Modern Popup Mode for MetForm.
+* Display uploaded file links in submission details.
+* Added MetForm diagnostics and deactivation feedback.
 
 = 1.7.1 =
 * Added hours and minutes to duplicate submission block duration.

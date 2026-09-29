@@ -33,6 +33,10 @@ class DuplicateKiller_Submission_Value_Renderer {
 		if ( 'FluentForms' === $plugin ) {
 			return $this->render_fluentforms( $form_value );
 		}
+		
+		if ( 'MetForm' === $plugin ) {
+			return $this->render_metform( $form_value );
+		}
 
 		if ( 'WooCommerce' === $plugin ) {
 			return $this->render_woocommerce( $form_value );
@@ -749,6 +753,61 @@ class DuplicateKiller_Submission_Value_Renderer {
 		}
 
 		$out .= '</div>';
+
+		return $out;
+	}
+	
+	private function render_metform( $form_value ): string {
+		if ( ! is_array( $form_value ) || empty( $form_value ) ) {
+			return '';
+		}
+
+		$out = '';
+
+		foreach ( $form_value as $key => $value ) {
+			$links    = array();
+			$is_files = is_array( $value ) && ! empty( $value );
+
+			if ( $is_files ) {
+				foreach ( $value as $file ) {
+					if (
+						! is_array( $file ) ||
+						! isset( $file['name'], $file['url'] ) ||
+						! is_string( $file['name'] ) ||
+						! is_string( $file['url'] )
+					) {
+						$is_files = false;
+						break;
+					}
+
+					$name   = trim( $file['name'] );
+					$url    = esc_url( $file['url'] );
+					$scheme = wp_parse_url( $url, PHP_URL_SCHEME );
+
+					if (
+						'' === $name ||
+						'' === $url ||
+						! in_array( strtolower( (string) $scheme ), array( 'http', 'https' ), true )
+					) {
+						$is_files = false;
+						break;
+					}
+
+					$links[] = '<a href="' . $url . '" target="_blank" rel="noopener noreferrer">' .
+						esc_html( $name ) .
+						'</a>';
+				}
+			}
+
+			if ( $is_files && ! empty( $links ) ) {
+				$out .= '<p><strong>' . esc_html( (string) $key ) . ':</strong> ' .
+					implode( '<br>', $links ) .
+					'</p>';
+				continue;
+			}
+
+			$out .= $this->render_modal_row( (string) $key, $value );
+		}
 
 		return $out;
 	}

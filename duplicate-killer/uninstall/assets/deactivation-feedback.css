@@ -20,6 +20,8 @@
 	border-radius: 8px;
 	box-shadow: 0 18px 45px rgba(0, 0, 0, 0.28);
 	border: 1px solid #dcdcde;
+	max-height: 86vh;
+	overflow-y: auto;
 }
 
 .duplicatekiller-feedback-box h2 {
@@ -80,7 +82,42 @@
 	background: #f0f6fc;
 	box-shadow: 0 0 0 1px #2271b1;
 }
+.duplicatekiller-feedback-option--upgrade {
+	border-color: #b8d5c1;
+	background: #f5faf6;
+}
 
+.duplicatekiller-feedback-option--upgrade:hover,
+.duplicatekiller-feedback-option--upgrade.is-selected {
+	border-color: #438a5b;
+	background: #edf7ef;
+}
+
+.duplicatekiller-feedback-option--upgrade.is-selected {
+	box-shadow: 0 0 0 1px #438a5b;
+}
+
+.duplicatekiller-feedback-upgrade-link {
+	display: none;
+	margin: -2px 0 4px 34px;
+}
+.duplicatekiller-feedback-upgrade-title {
+	margin: 0 0 4px;
+	font-weight: 600;
+	color: #1d2327;
+}
+
+.duplicatekiller-feedback-upgrade-description {
+	margin: 0 0 10px;
+	color: #50575e;
+	line-height: 1.45;
+}
+.duplicatekiller-feedback-upgrade-link a {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	font-weight: 600;
+}
 .duplicatekiller-feedback-radio {
 	padding-top: 2px;
 }

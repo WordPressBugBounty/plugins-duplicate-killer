@@ -160,6 +160,13 @@
 	  var m = cls.match(/fluent_form_(\d+)/);
 	  return m ? intOrNull(m[1]) : null;
 	}
+	
+	if (providerKey === "metform") {
+		  var metformWrapper = formEl.closest(".mf-form-wrapper[data-form-id]");
+		  return metformWrapper
+			? intOrNull(metformWrapper.getAttribute("data-form-id"))
+			: null;
+		}
 
     // Generic fallback: numeric from id, else safe id string
     var generic = formEl.getAttribute("id");
