@@ -173,7 +173,10 @@ function duplicateKiller_ninjaforms_before_send_email( $form_data ) {
 				}
 
 				$form_data['errors']['form'] = $message;
-				$form_data['errors']['fields'][ (int) $field_id ] = $message;
+				$form_data['errors']['fields'][ (int) $field_id ] = array(
+					'slug'    => 'unique_field',
+					'message' => $message,
+				);
 
 				return $form_data;
 			}
@@ -203,7 +206,10 @@ function duplicateKiller_ninjaforms_before_send_email( $form_data ) {
 			$form_data['errors']['form'] = $message;
 
 			if ( '' !== $matched_field_id ) {
-				$form_data['errors']['fields'][ (int) $matched_field_id ] = $message;
+				$form_data['errors']['fields'][ (int) $matched_field_id ] = array(
+					'slug'    => 'unique_field',
+					'message' => $message,
+				);
 			}
 
 			return $form_data;
@@ -335,9 +341,18 @@ function duplicateKiller_ninjaforms_get_forms(): array {
         $name = trim($name);
         if ( $name === '' ) $name = 'Form #' . $form_id;
 
-        // Build stable key + compound id: form_key.id
-        $form_key = sanitize_key($name);
-        if ( $form_key === '' ) $form_key = 'form-' . $form_id;
+        // Match the key used by DuplicateKiller_Form_Normalizer::ninjaforms().
+        $form_key = method_exists( $form_model, 'get_setting' )
+            ? trim( (string) $form_model->get_setting( 'key' ) )
+            : '';
+
+        if ( '' === $form_key ) {
+            $form_key = sanitize_key( $name );
+        }
+
+        if ( '' === $form_key ) {
+            $form_key = 'form-' . $form_id;
+        }
 
         $form_id_compound = $form_key . '.' . $form_id;
         $display_key      = $form_id_compound;

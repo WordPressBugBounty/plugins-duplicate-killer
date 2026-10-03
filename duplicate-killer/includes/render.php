@@ -128,12 +128,107 @@ function duplicateKiller_render_forms_overview(array $config) {
     $counts = duplicateKiller_get_submission_counts($db_plugin_key);
     $forms  = duplicateKiller_normalize_forms($forms_raw, $forms_id_map);
 
+    $saved_key = '';
+
+    foreach ( $options as $option_key => $option_value ) {
+        if ( is_array( $option_value ) && isset( $option_value['form_id'] ) ) {
+            $saved_key = (string) $option_key;
+            break;
+        }
+    }
+
+    $active_key = duplicateKiller_free_active_form_key( $forms, $options, $option_name );
+
+    // Preserve the current first-form behavior only when nothing was saved yet.
+    if ( '' === $saved_key && ! empty( $forms ) ) {
+        reset( $forms );
+        $active_key = (string) key( $forms );
+    }
+
+    // A rename changes the display key, but must not erase settings on page view.
+    if ( '' !== $saved_key && '' !== $active_key && $saved_key !== $active_key ) {
+        $options[ $active_key ] = $options[ $saved_key ];
+    }
+
+    if ( '' !== $active_key && array_key_exists( $active_key, $forms ) ) {
+        $active_form = $forms[ $active_key ];
+        unset( $forms[ $active_key ] );
+        $forms = array( $active_key => $active_form ) + $forms;
+    }
+
     //echo '<h2 class="dk-form-header">' . esc_html($plugin_label) . '</h2>';
     if (!$licensed) {
         echo '<div class="notice notice-warning"><p>' .
             esc_html__('Some features are available in Duplicate Killer PRO.', 'duplicate-killer') .
         '</p></div>';
     }
+
+	if ( ! empty( $forms ) ) : ?>
+		<?php
+		$selection_id = 'dk-free-form-selection-' . duplicateKiller_sanitize_id( $option_name );
+		$notice_id    = $selection_id . '-notice';
+		?>
+		<div class="dk-settings-card dk-card-width-1">
+			<div class="dk-card-section">
+				<label for="<?php echo esc_attr( $selection_id ); ?>">
+					<strong><?php esc_html_e( 'Choose another form to protect', 'duplicate-killer' ); ?></strong>
+				</label>
+
+				<p class="description">
+					<?php esc_html_e( 'Free protects one form per form plugin. Other forms remain visible below.', 'duplicate-killer' ); ?>
+				</p>
+
+				<select
+					id="<?php echo esc_attr( $selection_id ); ?>"
+					name="<?php echo esc_attr( $option_name . '[__dk_free_form_selection]' ); ?>"
+					data-dk-free-form-selection
+					aria-describedby="<?php echo esc_attr( $notice_id ); ?>">
+					<option value="" selected>
+						<?php esc_html_e( 'Choose a different form…', 'duplicate-killer' ); ?>
+					</option>
+
+					<?php foreach ( $forms as $select_key => $select_form ) : ?>
+						<?php
+						$select_key  = (string) $select_key;
+						$select_name = isset( $select_form['form_name'] )
+							? (string) $select_form['form_name']
+							: $select_key;
+						$select_id   = isset( $select_form['form_id'] ) && is_scalar( $select_form['form_id'] )
+							? (string) $select_form['form_id']
+							: '';
+
+						$select_label = '' !== $select_name ? $select_name : $select_key;
+
+						if ( $select_key !== $select_name ) {
+							$select_label .= ' — ' . $select_key;
+						}
+
+						if ( '' !== $select_id ) {
+							$select_label .= ' (ID: ' . $select_id . ')';
+						}
+
+						if ( $select_key === $active_key ) {
+							$select_label .= ' ✓ ' . __( 'Current form', 'duplicate-killer' );
+						}
+						?>
+						<option
+							value="<?php echo esc_attr( $select_key ); ?>"
+							<?php disabled( $select_key === $active_key, true ); ?>>
+							<?php echo esc_html( $select_label ); ?>
+						</option>
+					<?php endforeach; ?>
+				</select>
+
+				<p id="<?php echo esc_attr( $notice_id ); ?>"
+					class="description"
+					data-dk-free-form-selection-notice
+					role="status"
+					hidden>
+					<?php esc_html_e( 'Save changes to unlock the selected form. Settings for the previously selected form will be removed; saved submissions will remain.', 'duplicate-killer' ); ?>
+				</p>
+			</div>
+		</div>
+	<?php endif;
 	
 	// Elementor Group Mode (only for Elementor)
 	if ($db_plugin_key === 'elementor') {
@@ -192,7 +287,6 @@ function duplicateKiller_render_forms_overview(array $config) {
 		<?php
 	}
 
-	$form_index = 0;
 	?>
 	<div class="dk-forms-wrapper">
 	<?php
@@ -205,7 +299,7 @@ function duplicateKiller_render_forms_overview(array $config) {
 
         $form_opts = (isset($options[$form_key]) && is_array($options[$form_key])) ? $options[$form_key] : [];
 
-		$is_locked_form = ($form_index > 0);
+		$is_locked_form = ( $form_key !== $active_key );
 		$disabled_attr  = $is_locked_form ? ' disabled="disabled"' : '';
 
         // Defaults
@@ -948,7 +1042,6 @@ function duplicateKiller_render_forms_overview(array $config) {
 			
         </div>
         <?php
-		$form_index++;
     }
 	?>
 	</div>

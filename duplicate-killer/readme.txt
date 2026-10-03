@@ -1,188 +1,101 @@
 === Duplicate Killer – Prevent Duplicate Form Submissions ===
-Version: 1.7.2
+Version: 1.7.3
 Author: NIA
 Author URI: https://profiles.wordpress.org/wpnia/
 Contributors: wpnia
-Tags: woocommerce, duplicate orders, duplicate submissions, elementor forms, contact form 7
+Tags: woocommerce, duplicate orders, forminator, elementor forms, contact form 7
 Donate link: https://www.paypal.com/paypalme/wpnia
 Requires at least: 5.3
-Tested up to: 7.1.1
-Stable tag: 1.7.2
+Tested up to: 7.1.2
+Stable tag: 1.7.3
 Requires PHP: 5.6.20
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Block duplicate form submissions by validating unique email, phone and text fields without CAPTCHA.
+Prevent duplicate form submissions by email, phone or text. Supports Contact Form 7, Elementor Forms, Forminator, WPForms Lite and more.
 
 == Description ==
+Duplicate Killer prevents repeated submissions in WordPress forms. Choose which supported fields must be unique, such as an email address, phone number or text value. When a matching value has already been saved by Duplicate Killer, the plugin blocks the repeated submission and displays your message.
 
-Duplicate Killer – Block Duplicate Form Submissions in WordPress.
+Use it to reduce duplicate leads, repeated contact requests and multiple registrations with the same email address. No CAPTCHA is required for duplicate checks.
 
-== WooCommerce – Prevent Accidental Duplicate Orders == 
+= Reduce repeated form spam without adding CAPTCHA =
+Some unwanted submissions repeat the same email address, phone number or other field value. Duplicate Killer can block these repeated values in supported WordPress forms. Optional IP-based limits can also restrict further submissions from the same IP address during your chosen protection period.
 
-Duplicate Killer also protects WooCommerce Classic Checkout from accidental duplicate orders.
+Duplicate Killer adds duplicate submission protection, not general bot detection. Spam using new values and different IP addresses may still pass these checks.
 
-WooCommerce already disables the “Place order” button, but duplicate orders can still happen when:
+= When is Duplicate Killer useful? =
+* Contact forms: reduce repeated requests using the same email address or phone number.
+* Registration forms: block another registration with an email address already saved by Duplicate Killer.
+* Lead forms: reduce repeated entries before your team follows up.
+* Time-based restrictions: allow the same value again after a protection period in minutes, hours or days.
+* Multiple forms with PRO: check selected forms within the same supported form plugin.
 
-- Checkout is slow
-- Payment gateways lag or retry
-- Customers refresh the page
-- Multiple tabs are used
-- Network requests are retried
+Duplicate Killer checks submitted values. It does not verify that an email address belongs to the visitor or guarantee one entry per person.
 
-Duplicate Killer FREE adds lightweight server-side duplicate protection for WooCommerce Classic Checkout.
+= Supported form plugins =
+Duplicate Killer adds duplicate submission protection to existing forms. It does not create forms. Available fields depend on the integration. The Free version allows configuration of the most recently created form in each supported form plugin.
 
-If the same customer attempts to submit an identical order within 60 seconds, the duplicate is blocked and a validation message is shown.
-!!! No changes to your checkout design. No impact on performance. No additional configuration required.
+= Contact Form 7: prevent duplicate entries =
+Block repeated Contact Form 7 submissions using selected fields, such as email, phone or text. Show your duplicate message through Classic Message or Modern Popup Mode.
 
-If your forms receive the same email address multiple times, fake leads, or repeated submissions, this plugin blocks them instantly.
+= Elementor Forms: prevent duplicate submissions =
+Add duplicate checks to forms built with the Elementor Pro Form widget. Duplicate Killer PRO also includes Group Mode for forms that share the same Form Name.
 
-Choose which fields must be unique (email, phone, text) and block duplicate entries automatically — without changing your form design or user experience.
+= Forminator: control repeated submissions =
+Choose supported Forminator fields to check for repeated values. Set a protection period when the same value should be allowed again after a certain time.
 
-Duplicate Killer works silently in the background and integrates seamlessly with popular WordPress form plugins and page builders.
+= WPForms Lite: add duplicate-field checks =
+Use Duplicate Killer with WPForms Lite to check selected fields against entries saved by Duplicate Killer. Visitors receive your configured message when a duplicate is blocked.
 
-== Cross-Form Duplicate Protection (PRO) ==
+= Formidable Forms: require unique field values =
+Apply duplicate checks to supported Formidable Forms fields. For example, check an email field to reduce repeated registrations with the same address.
 
-Duplicate Killer PRO introduces Cross-Form Duplicate Protection.
+= Ninja Forms: block repeated form values =
+Add duplicate protection to supported Ninja Forms fields. Choose the values to check and explain blocked submissions with your own duplicate message.
 
-This feature allows duplicate detection across multiple forms on your website.
+= Breakdance Forms: protect your existing forms =
+Check supported fields in forms built with the Breakdance Form Builder. Configure duplicate protection without replacing your existing form.
 
-For example, if a user submits the same email address in two different forms, Duplicate Killer PRO can detect the duplicate and block the second submission.
+= Fluent Forms: reduce duplicate leads =
+Check selected Fluent Forms fields for values already saved by Duplicate Killer. Use this to reduce repeated contact requests or lead submissions.
 
-This is useful when:
-- multiple contact forms exist across different pages
-- marketing forms collect the same email address
-- lead capture forms should only allow one submission per user
-- different form plugins are used on the same site
+= MetForm: duplicate protection in beta =
+Add duplicate checks and Modern Popup Mode to supported MetForm forms. Submission details can include links to uploaded files. Test MetForm Pro payment forms and external integrations on a staging site before use.
 
-This feature is available in Duplicate Killer PRO.
+= WordPress form submission limits and IP protection =
+* Select the fields to check for duplicate values.
+* Set duplicate protection periods in days, hours and minutes.
+* Configure IP-based submission limits separately.
+* Use optional browser cookie protection.
+* Review saved submissions in your WordPress dashboard.
+* Display the saved submission count with a shortcode.
 
-Free: In the free version, duplicate protection can be enabled for one form per supported plugin.
+Field checks and IP limits serve different purposes. Field checks look for repeated values, such as an email address. IP limits restrict submissions from the same IP address, even when the submitted values differ. Configure them separately for your form.
 
-PRO: Duplicate Killer PRO enables multi-form protection with individual rules and messages per form.
+People on a shared network may use the same public IP address. Choose IP restrictions carefully when several visitors may submit from an office, school or household.
 
-== Supported Plugins ==
+= Example: block the same email for 24 hours =
+Select the email field in your protected form and set the duplicate protection period to 1 day. Save your settings, then submit a new email address. Another submission with that email will be blocked during the protection period.
 
-- Elementor Forms
-- Contact Form 7
-- Formidable Forms
-- WPForms Lite
-- Forminator
-- Ninja Forms
-- Breakdance Page Builder Forms
+Other enabled rules, such as IP limits, are checked separately.
 
+= Classic Message or Modern Popup Mode =
+Keep a standard duplicate error message or display a custom popup. Modern Popup Mode supports formatted text, links and colors. Preview your popup in the settings before saving. Existing forms keep Classic Message by default.
 
-== Key Features ==
+= Free and PRO =
+The Free version lets you configure the most recently created form in each supported form plugin, with custom protection settings and messages.
 
-✔ Prevent duplicate form submissions without CAPTCHA
-✔ Works with existing forms – no changes required
-✔ Prevent duplicate submissions by Email, Phone or Text fields  
-✔ Stop duplicate emails and repeated leads  
-✔ One global error message for all forms (Free version)  
-✔ Cross-Form Duplicate Protection (PRO)
-✔ Detect duplicates across multiple forms
-✔ Optional IP-based duplicate protection  
-✔ Store unique entries securely in your WordPress database  
-✔ Automatically store uploaded files from Contact Form 7  
-✔ Lightweight, fast and easy to configure  
+Duplicate Killer PRO lets you protect multiple forms with separate settings. Cross-Form Duplicate Protection checks selected forms within the same supported form plugin. Elementor Group Mode groups forms that share the same Form Name.
 
-✔ WooCommerce Classic Checkout duplicate protection
-✔ Server-side fingerprint validation (Email + Cart + Total + Currency)
-✔ Fixed 60-second protection window (FREE)
-✔ Structured duplicate logging (ready for PRO analytics upgrade)
-✔ No changes to checkout or form design
+Use separate rules when your contact form and registration form have different requirements. Use Cross-Form Duplicate Protection when several forms collect entries for the same campaign and should share duplicate checks.
 
-== Common use cases ==
-- Prevent duplicate leads in contact and lead generation forms
-- Keep CRM and email lists clean
-- Block repeated event registrations with the same email
+For Elementor sites that reuse forms with the same Form Name, Group Mode helps apply protection across those forms.
 
-=== Ninja Forms ===
-- Prevent duplicate submissions by Email, Phone or Text fields
-- Clean validation messages
-- No form design changes required
+[Compare Free and PRO](https://verselabwp.com/duplicate-killer/)
 
-== NEW: Formidable Forms Support ==
-
-Duplicate Killer now fully supports Formidable Forms and helps you stop duplicate form submissions in WordPress.
-
-You can prevent duplicate entries in Formidable Forms contact forms and advanced forms by enforcing unique fields such as email address, phone number, or text fields.
-
-This feature works with Formidable Forms native fields, requires no additional configuration.
-
-Does not affect form design or user experience.
-
-== Elementor Forms Support ==
-
-Duplicate Killer fully supports Elementor Forms.
-
-You can prevent duplicate submissions in Elementor contact forms, lead forms and popups by enforcing unique values such as email or phone number.
-
-NEW in <strong>PRO</strong> version:
-Elementor Group Mode allows you to treat multiple forms with the same Form Name as one unified protected form — even if Elementor generates different form IDs internally.
-
-
-== Plugin Integrations ==
-
-=== Contact Form 7 ===
-- Limit submissions by Email, Phone or Text fields
-- Custom validation message for duplicate entries
-- Automatically store uploaded files locally
-
-=== Elementor Forms ===
-- Prevent duplicate submissions on Elementor native forms
-- Works with contact forms, lead forms and popups
-- Seamless integration without modifying form structure
-
-=== Forminator ===
-- Select unique fields (Email, Phone, Text)
-- Warn users when a value has already been submitted
-
-=== WPForms Lite ===
-- Prevent duplicate entries without changing form layout
-- Clean and simple validation messages
-
-=== Breakdance Page Builder Forms ===
-- Prevent duplicate submissions on Breakdance native forms
-- IP-based validation for cleaner data
-- Fully compatible with Breakdance UI
-
-== Free vs Pro ==
-
-=== Free Version ===
-- Protect one form (per supported plugin)
-- Global duplicate protection rules (for the protected form)
-- One global error message
-- Global IP-based submission limits
-- Unique entries per user (cookie-based)
-
-WooCommerce (FREE):
-- Protect Classic Checkout only
-- Fixed 60-second lock window
-- Basic duplicate detection
-- Stores structured logs for seamless upgrade to PRO analytics
-
-=== Duplicate Killer PRO ===
-- Protect multiple forms
-- Per-form duplicate protection rules
-- Cross-Form Duplicate Protection (detect duplicates across different forms)
-- Custom error message for each form
-- Different IP limits per form
-- Unique entries per user, configurable per form
-- Designed for sites with multiple forms and different submission needs
-- Duplicate Killer PRO is ideal for sites with multiple forms and different audiences.
-
-WooCommerce PRO adds:
-- Checkout Blocks (Store API) support
-- Configurable lock window (30–300 seconds)
-- Advanced fingerprint controls (phone, shipping, IP, customer ID)
-- Order linking (direct link to matching WooCommerce order)
-- Gateway breakdown (Stripe, PayPal, COD, etc.)
-- Trends dashboard (Last 24h, 7 days, 14 days)
-- CSV export for audits and support teams
-- Detailed analytics (top products, domains, checkout types, IPs)
-- Designed for real-world edge cases such as slow hosting, gateway retries, reverse proxies and unstable mobile networks.
-
+= WooCommerce duplicate order protection =
+The Free version also includes duplicate order protection for WooCommerce Classic Checkout, with a 60-second protection window. PRO adds Checkout Blocks support, a configurable protection window and additional reporting tools.
 
 == Installation ==
 
@@ -190,6 +103,7 @@ WooCommerce PRO adds:
 2. Activate the plugin from the Plugins menu.
 3. Open Duplicate Killer from your WordPress admin dashboard.
 4. Select your form plugin and choose which fields must be unique.
+5. Save your settings. Submit a test entry, then try the same protected value again.
 
 == Frequently Asked Questions ==
 
@@ -197,36 +111,35 @@ WooCommerce PRO adds:
 Duplicate Killer focuses on preventing duplicate form submissions and entries. It works alongside spam or CAPTCHA plugins and does not replace them.
 
 = Will this slow down my site? =
-No. Duplicate Killer performs lightweight database checks only on form submission and has no impact on frontend performance.
+Duplicate Killer checks submitted values against saved entries. Performance depends on your hosting, settings and submission history. Modern Popup Mode also uses frontend assets when enabled.
 
 = Why should I use Duplicate Killer? =
-Duplicate Killer prevents duplicate emails and repeated form submissions, helping you keep your leads and contact data clean.
+Duplicate Killer helps reduce duplicate leads and contact requests by checking selected email, phone or text fields. Set a protection period and explain blocked submissions with your own message.
 
 = Does Duplicate Killer support WooCommerce? =
 Yes. The FREE version protects WooCommerce Classic Checkout from accidental duplicate submissions within a 60-second window.
 
 = How does Duplicate Killer work? =
-When a form is submitted, selected field values are stored in the database. If the same value is submitted again, the submission is blocked and a validation message is shown.
+Duplicate Killer compares selected field values with entries it has previously saved. A matching value can block the submission according to your protection settings and duration. Earlier entries stored only by your form plugin are not automatically imported.
 For WooCommerce, a unique order fingerprint is generated from billing email, cart items, order total and currency.
 
-= Can multiple users submit the same value? =
-Yes. In the PRO version, you can enable “Unique entries per user”, allowing multiple users to submit the same value while blocking repeat submissions from the same user.
+= How does cookie-based protection identify visitors? =
+Cookie-based protection uses the visitor's browser. It does not verify a person's identity. Clearing cookies or using another browser can change how the visitor is recognized.
 
 = Does it affect form design or styling? =
-No. Duplicate Killer works in the background and does not change your form appearance.
+Classic Message uses your form plugin's error display. Modern Popup Mode shows a custom popup for Duplicate Killer duplicate-field messages. It does not redesign your form fields.
 
 = Does it work with Elementor Forms? =
-Yes. Duplicate Killer fully supports Elementor Forms.
+Yes. Duplicate Killer supports forms created with the Elementor Pro Form widget. Duplicate Killer PRO also includes Group Mode for Elementor forms that share the same Form Name.
 
-= Does this plugin work with existing spam protection plugins? =
-Yes. Duplicate Killer works alongside spam and CAPTCHA plugins and focuses only on preventing duplicate form submissions.
+= Do I need CAPTCHA to prevent duplicate submissions? =
+No. Duplicate Killer checks repeated values without requiring a CAPTCHA challenge. CAPTCHA and anti-spam tools address different problems and may still be useful alongside duplicate protection. Test the combined setup with your form plugin and extensions.
 
-== When to use Duplicate Killer ==
-Use this plugin if you receive repeated submissions with the same email, phone number or text values.
-If you only need basic spam protection, a CAPTCHA plugin may be enough.
+= Can I block repeated form submissions from the same IP address? =
+Yes. Enable IP-based protection for your protected form and set a duration in days, hours and minutes. This limits form submissions from that IP address; it does not block access to your whole WordPress website.
 
-== When should I use Duplicate Killer PRO? ==
-Use the PRO version if your site has multiple forms with different purposes — for example a contact form, a registration form and a newsletter signup — and each one needs different duplicate submission rules.
+= Why is a new email address being blocked? =
+Check whether IP-based or cookie-based protection is enabled. These rules are separate from duplicate-field checks and may restrict a submission even when the email address is new.
 
 = Does FREE support WooCommerce Checkout Blocks? =
 No. Checkout Blocks use a different system (Store API) and require the PRO version.
@@ -234,9 +147,8 @@ No. Checkout Blocks use a different system (Store API) and require the PRO versi
 = What happens if I upgrade to PRO later? =
 All WooCommerce duplicate logs stored in the FREE version are automatically used by PRO analytics. No database migration is required.
 
-= Does this prevent payment gateway retries? =
-FREE prevents accidental duplicate submissions on Classic Checkout.
-PRO adds enhanced idempotency handling and deeper gateway analytics.
+= Does WooCommerce protection prevent every duplicate payment? =
+No. Duplicate order protection and payment processing are different. Duplicate Killer checks checkout submissions, but payment gateway retries and callbacks also depend on WooCommerce and the gateway integration.
 
 == Screenshots ==
 
@@ -248,11 +160,15 @@ PRO adds enhanced idempotency handling and deeper gateway analytics.
 6. WooCommerce duplicate order protection blocks accidental checkout retries, repeated clicks, and duplicate submissions.
 
 == Upgrade Notice ==
-= 1.7.2 =
-Added MetForm integration in beta, with duplicate protection, Modern Popup Mode, uploaded file links, and diagnostics. Test MetForm Pro integrations and payment flows on staging before going live.
+= 1.7.3 =
+You’re in control! Choose the exact form you want to protect with Duplicate Killer.
 
 
 == Changelog ==
+
+= 1.7.3 =
+* You’re in control! Choose the exact form you want to protect with Duplicate Killer.
+* Switch forms easily from the plugin settings.
 
 = 1.7.2 =
 * Added MetForm support for duplicate submission protection.

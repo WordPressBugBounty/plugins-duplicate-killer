@@ -356,10 +356,14 @@ function duplicateKiller_forminator_get_forms(){
 
 	$output = array();
 
-	foreach($forminator_posts as $form => $value){
+	foreach ( $forminator_posts as $value ) {
+		$form_key = duplicateKiller_free_unique_form_key(
+			$output,
+			(string) $value->post_title,
+			(int) $value->ID
+		);
 
-		// Initialize form structure once
-		$output[$value->post_title] = [
+		$output[ $form_key ] = [
 			'form_id'   => (int) $value->ID,
 			'form_name' => (string) $value->post_title,
 			'fields'    => [],
@@ -379,7 +383,7 @@ function duplicateKiller_forminator_get_forms(){
 								$arr['type'] == "phone" ||
 								$arr['type'] == "number"
 							){
-								$output[$value->post_title]['fields'][] = [
+								$output[ $form_key ]['fields'][] = [
 									'id'    => (string) $arr['id'],
 									'label' => (string) $arr['id'],
 									'type'  => (string) $arr['type'],

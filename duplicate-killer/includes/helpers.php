@@ -840,3 +840,135 @@ function duplicateKiller_get_field_icon_svg( string $type, string $label = '', s
 
 	return $icons['default'];
 }
+/**
+ * Build a unique option key without changing ordinary existing form keys.
+ *
+ * The form ID is added only when a title is empty, cannot be used safely
+ * in an HTML input name, or collides with a form already in the list.
+ *
+ * @param array  $existing Existing form definitions.
+ * @param string $name     Form title.
+ * @param int    $form_id  Provider form ID.
+ * @return string
+ */
+function duplicateKiller_free_unique_form_key( array $existing, $name, $form_id ) {
+	$name    = (string) $name;
+	$form_id = absint( $form_id );
+	$key     = $name;
+
+	if ( '' === trim( $key ) ) {
+		$key = 'Form #' . $form_id;
+	}
+
+	// These names are reserved at the top level of the settings option.
+	if ( in_array( $key, array( '__dk_free_form_selection', 'cf7_save_image' ), true ) ) {
+		$key .= '.' . $form_id;
+	}
+
+	// Brackets would change the structure of the submitted PHP array.
+	if ( false !== strpos( $key, '[' ) || false !== strpos( $key, ']' ) ) {
+		$slug = sanitize_title( $key );
+		$key  = ( '' !== $slug ? $slug : 'form' ) . '.' . $form_id;
+	}
+
+	if ( ! array_key_exists( $key, $existing ) ) {
+		return $key;
+	}
+
+	$base   = $key . '.' . $form_id;
+	$key    = $base;
+	$suffix = 2;
+
+	while ( array_key_exists( $key, $existing ) ) {
+		$key = $base . '-' . $suffix;
+		++$suffix;
+	}
+
+	return $key;
+}
+
+/**
+ * Find the saved Free form in the current list of provider forms.
+ *
+ * An exact key is preferred. A unique ID match keeps a renamed form
+ * selected without writing options merely because an admin opened the page.
+ *
+ * @param array  $forms       Normalized current form definitions.
+ * @param array  $options     Saved integration option.
+ * @param string $option_name Integration option name.
+ * @return string Current form key, or an empty string if it cannot be identified.
+ */
+function duplicateKiller_free_active_form_key( array $forms, array $options, $option_name ) {
+	$saved_key    = '';
+	$saved_id     = '';
+	$saved_config = null;
+
+	foreach ( $options as $option_key => $config ) {
+		if ( is_array( $config ) && isset( $config['form_id'] ) && is_scalar( $config['form_id'] ) ) {
+			$saved_key    = (string) $option_key;
+			$saved_id     = (string) $config['form_id'];
+			$saved_config = $config;
+			break;
+		}
+	}
+
+	if ( null === $saved_config || '' === $saved_id ) {
+		return '';
+	}
+
+	if (
+		isset( $forms[ $saved_key ]['form_id'] )
+		&& (string) $forms[ $saved_key ]['form_id'] === $saved_id
+	) {
+		return $saved_key;
+	}
+
+	$matches = array();
+
+	foreach ( $forms as $form_key => $form ) {
+		if ( ! isset( $form['form_id'] ) || ! is_scalar( $form['form_id'] ) ) {
+			continue;
+		}
+
+		$form_key = (string) $form_key;
+		$form_id  = (string) $form['form_id'];
+
+		if ( 'Breakdance_page' === $option_name ) {
+			$saved_parts  = array();
+			$current_parts = array();
+
+			// Breakdance node IDs alone are not necessarily unique across posts.
+			if (
+				preg_match( '/\.(\d+)\.(\d+)$/', $saved_key, $saved_parts )
+				&& preg_match( '/\.(\d+)\.(\d+)$/', $form_key, $current_parts )
+				&& $saved_parts[1] === $current_parts[1]
+				&& $saved_parts[2] === $current_parts[2]
+			) {
+				$matches[] = $form_key;
+			}
+
+			continue;
+		}
+
+		if ( $form_id === $saved_id ) {
+			$matches[] = $form_key;
+			continue;
+		}
+
+		// These two providers store a compound key ending in the numeric ID.
+		if ( in_array( $option_name, array( 'Formidable_page', 'NinjaForms_page' ), true ) ) {
+			$saved_parts   = array();
+			$current_parts = array();
+
+			if (
+				preg_match( '/\.(\d+)$/', $saved_id, $saved_parts )
+				&& preg_match( '/\.(\d+)$/', $form_id, $current_parts )
+				&& $saved_parts[1] === $current_parts[1]
+			) {
+				$matches[] = $form_key;
+			}
+		}
+	}
+
+	return 1 === count( $matches ) ? $matches[0] : '';
+}

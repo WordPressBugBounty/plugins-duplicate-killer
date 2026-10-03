@@ -204,6 +204,25 @@ function initDuplicateKillerModernPreview() {
 		}
 	});
 }
+
+function initDuplicateKillerFreeFormSelection() {
+	const selectors = document.querySelectorAll('[data-dk-free-form-selection]');
+
+	selectors.forEach(function (selector) {
+		const card = selector.closest('.dk-settings-card');
+		const notice = card
+			? card.querySelector('[data-dk-free-form-selection-notice]')
+			: null;
+
+		if (!notice) {
+			return;
+		}
+
+		selector.addEventListener('change', function () {
+			notice.hidden = selector.value === '';
+		});
+	});
+}
 document.addEventListener('DOMContentLoaded', function () {
 	toggleSectionOnCheckbox('user_ip', 'dk-limit-ip');
 	toggleSectionOnCheckbox('save_image', 'dk-save-image-path');
@@ -213,8 +232,10 @@ document.addEventListener('DOMContentLoaded', function () {
 	initDuplicateKillerMessageModes();
 	initDuplicateKillerQuicktags();
 	initDuplicateKillerModernPreview();
+	initDuplicateKillerFreeFormSelection();
 
 });
+
 function copyDKShortcode(inputId) {
   var input = document.getElementById(inputId);
   input.select();

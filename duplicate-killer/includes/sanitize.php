@@ -36,8 +36,11 @@ function duplicateKiller_sanitize_forms_option(
     string $db_plugin_key = ''
 ): array {
 
-    if (!is_array($input)) {
-        return [];
+    $previous = get_option( $option_name, array() );
+    $previous = is_array( $previous ) ? $previous : array();
+
+    if ( ! current_user_can( 'manage_options' ) || ! is_array( $input ) ) {
+        return $previous;
     }
 
     $defaults   = duplicateKiller_get_form_defaults();
@@ -74,21 +77,100 @@ function duplicateKiller_sanitize_forms_option(
         'cookie_option_days',
     ];
 
-    // ---------------------------------------------------------------------
-    // Pick only the first valid form row from posted input
-    // ---------------------------------------------------------------------
-    $selected_form_name   = null;
-    $selected_form_values = null;
+    // Resolve the submitted choice against real forms, once per settings save.
+    $getters = array(
+        'CF7_page'         => 'duplicateKiller_CF7_get_forms',
+        'Forminator_page'  => 'duplicateKiller_forminator_get_forms',
+        'WPForms_page'     => 'duplicateKiller_wpforms_get_forms',
+        'Breakdance_page'  => 'duplicateKiller_breakdance_get_forms',
+        'Elementor_page'   => 'duplicateKiller_elementor_get_forms',
+        'Formidable_page'  => 'duplicateKiller_formidable_get_forms',
+        'NinjaForms_page'  => 'duplicateKiller_ninjaforms_get_forms',
+        'FluentForms_page' => 'duplicateKiller_fluentforms_get_forms',
+        'MetForm_page'     => 'duplicateKiller_metform_get_forms',
+    );
 
-    foreach ($input as $form_name => $values) {
-        if (!is_array($values)) {
-            continue;
-        }
-
-        $selected_form_name   = (string) $form_name;
-        $selected_form_values = $values;
-        break;
+    if ( ! isset( $getters[ $option_name ] ) || ! function_exists( $getters[ $option_name ] ) ) {
+        return $previous;
     }
+
+    $raw_forms = call_user_func( $getters[ $option_name ] );
+    $forms     = duplicateKiller_normalize_forms(
+        is_array( $raw_forms ) ? $raw_forms : array()
+    );
+
+    $requested_value = isset( $input['__dk_free_form_selection'] )
+        ? $input['__dk_free_form_selection']
+        : '';
+
+    if ( ! is_scalar( $requested_value ) ) {
+        add_settings_error(
+            $settings_group,
+            'dk_invalid_form_selection',
+            __( 'The selected form is invalid. No settings were changed.', 'duplicate-killer' ),
+            'error'
+        );
+        return $previous;
+    }
+
+    // Exact allowlist matching is safer than transforming a provider's key.
+    $requested_key = (string) $requested_value;
+    $current_key   = duplicateKiller_free_active_form_key( $forms, $previous, $option_name );
+    $has_saved_row = false;
+
+    foreach ( $previous as $previous_value ) {
+        if ( is_array( $previous_value ) ) {
+            $has_saved_row = true;
+            break;
+        }
+    }
+
+    if ( '' !== $requested_key && ! array_key_exists( $requested_key, $forms ) ) {
+        add_settings_error(
+            $settings_group,
+            'dk_unknown_form_selection',
+            __( 'The selected form no longer exists. No settings were changed.', 'duplicate-killer' ),
+            'error'
+        );
+        return $previous;
+    }
+
+    $target_key = '' !== $requested_key ? $requested_key : $current_key;
+
+    if ( '' === $target_key && ! $has_saved_row && ! empty( $forms ) ) {
+        reset( $forms );
+        $target_key = (string) key( $forms );
+    }
+
+    if ( '' === $target_key || ! isset( $forms[ $target_key ]['form_id'] ) ) {
+        add_settings_error(
+            $settings_group,
+            'dk_missing_form_selection',
+            __( 'Choose an available form before saving.', 'duplicate-killer' ),
+            'error'
+        );
+        return $previous;
+    }
+
+    $actual_form_id = $forms[ $target_key ]['form_id'];
+
+    if ( ! is_scalar( $actual_form_id ) || '' === (string) $actual_form_id ) {
+        return $previous;
+    }
+
+    $switching = '' !== $requested_key && $requested_key !== $current_key;
+
+    if ( $switching ) {
+        // A newly selected form starts with its ID only; old settings are discarded.
+        $selected_form_values = array( 'form_id' => (string) $actual_form_id );
+    } elseif ( isset( $input[ $target_key ] ) && is_array( $input[ $target_key ] ) ) {
+        $selected_form_values = $input[ $target_key ];
+        $selected_form_values['form_id'] = (string) $actual_form_id;
+    } else {
+        return $previous;
+    }
+
+    $selected_form_name = (string) $target_key;
 
     // ---------------------------------------------------------------------
     // (A) Run delete_records FIRST, but only for the selected form
@@ -131,7 +213,9 @@ function duplicateKiller_sanitize_forms_option(
             continue;
         }
 
-        $clean[$gk] = sanitize_text_field((string) $input[$gk]);
+        $clean[$gk] = is_scalar( $input[ $gk ] )
+            ? sanitize_text_field( (string) $input[ $gk ] )
+            : '0';
         if ($clean[$gk] !== '1') {
             $clean[$gk] = '0';
         }
@@ -163,8 +247,15 @@ function duplicateKiller_sanitize_forms_option(
         }
 
         // Normalize boolean checkboxes
-        if (in_array($k, ['cookie_option', 'user_ip', 'cross_form_option'], true)) {
-            $row[$k] = !empty($values[$k]) ? '1' : '0';
+        if ( 'cross_form_option' === $k ) {
+            $row[ $k ] = '0';
+            continue;
+        }
+
+        if ( in_array( $k, array( 'cookie_option', 'user_ip' ), true ) ) {
+            $row[ $k ] = is_scalar( $values[ $k ] ) && '1' === (string) $values[ $k ]
+                ? '1'
+                : '0';
             continue;
         }
 
@@ -226,6 +317,13 @@ function duplicateKiller_sanitize_forms_option(
         $row[$k] = $val;
     }
 
+    $allowed_field_ids = array();
+
+    foreach ( $forms[ $selected_form_name ]['fields'] as $field ) {
+        if ( isset( $field['id'] ) && is_scalar( $field['id'] ) ) {
+            $allowed_field_ids[] = (string) $field['id'];
+        }
+    }
     // (Formidable + Ninja Forms) Capture posted labels map (field_id => label)
     $supports_labels = (
         $plugin_key === 'Formidable' || $option_name === 'Formidable_page' ||
@@ -241,11 +339,15 @@ function duplicateKiller_sanitize_forms_option(
             }
 
             $fid = (int) $fid;
-            if ($fid <= 0) {
+            if (
+                $fid <= 0
+                || ! in_array( (string) $fid, $allowed_field_ids, true )
+                || ! is_scalar( $lbl )
+            ) {
                 continue;
             }
 
-            $posted_labels[$fid] = sanitize_text_field((string) $lbl);
+            $posted_labels[ $fid ] = sanitize_text_field( (string) $lbl );
         }
     }
 
@@ -255,8 +357,12 @@ function duplicateKiller_sanitize_forms_option(
             continue;
         }
 
-        if (!empty($v) && (string) $v === '1') {
-            $row[$k] = 1;
+        if (
+            in_array( (string) $k, $allowed_field_ids, true )
+            && is_scalar( $v )
+            && '1' === (string) $v
+        ) {
+            $row[ $k ] = 1;
         }
     }
 
@@ -265,7 +371,8 @@ function duplicateKiller_sanitize_forms_option(
         $row['labels'] = $posted_labels;
     }
 
-    $clean[(string) $form_name] = $row;
+    $row['form_id'] = (string) $actual_form_id;
+    $clean[ (string) $form_name ] = $row;
 
     return $clean;
 }

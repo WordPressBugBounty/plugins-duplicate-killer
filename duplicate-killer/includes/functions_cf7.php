@@ -300,8 +300,9 @@ function duplicateKiller_CF7_get_forms() {
 		$post_content = (string) $form['post_content'];
 
 		$tagsArray = explode(' ', $post_content);
+		$form_key  = duplicateKiller_free_unique_form_key( $output, $form_name, $form_id );
 
-		$output[$form_name] = [
+		$output[ $form_key ] = [
 			'form_id'   => $form_id,
 			'form_name' => $form_name,
 			'fields'    => [],
@@ -344,7 +345,7 @@ function duplicateKiller_CF7_get_forms() {
 				continue;
 			}
 
-			$output[$form_name]['fields'][] = [
+			$output[ $form_key ]['fields'][] = [
 				'id'    => $field_id,
 				'label' => $field_id,
 				'type'  => $field_type,

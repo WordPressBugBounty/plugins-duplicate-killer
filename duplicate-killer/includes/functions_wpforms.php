@@ -284,10 +284,15 @@ function duplicateKiller_wpforms_get_forms(){
 
 	$output = array();
 
-	foreach($wpforms_posts as $form){
-		$form_data = json_decode($form->post_content, true);
+	foreach ( $wpforms_posts as $form ) {
+		$form_data = json_decode( $form->post_content, true );
+		$form_key  = duplicateKiller_free_unique_form_key(
+			$output,
+			(string) $form->post_title,
+			(int) $form->ID
+		);
 
-		$output[$form->post_title] = [
+		$output[ $form_key ] = [
 			'form_id'   => (int) $form->ID,
 			'form_name' => (string) $form->post_title,
 			'fields'    => [],
@@ -303,7 +308,7 @@ function duplicateKiller_wpforms_get_forms(){
 					$field['type'] == "number" ||
 					$field['type'] == "textarea"
 				) {
-					$output[$form->post_title]['fields'][] = [
+					$output[ $form_key ]['fields'][] = [
 						'id'    => (string) $field['label'],
 						'label' => (string) $field['label'],
 						'type'  => (string) $field['type'],

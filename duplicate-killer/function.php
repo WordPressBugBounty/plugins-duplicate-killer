@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: Duplicate Killer
- * Version: 1.7.2
+ * Version: 1.7.3
  * Description: Block duplicate form submissions by validating unique email, phone and text fields — without CAPTCHA.
  * Author: NIA
  * Author URI: https://profiles.wordpress.org/wpnia/
@@ -13,7 +13,7 @@
 	defined('ABSPATH') or die('You shall not pass!');
 	
 	define('DUPLICATEKILLER_PLUGIN',__FILE__);
-	define('DUPLICATEKILLER_VERSION','1.7.2');
+	define('DUPLICATEKILLER_VERSION','1.7.3');
 	define('DUPLICATEKILLER_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 	define('DUPLICATEKILLER_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 	
@@ -54,6 +54,60 @@
 	require_once DUPLICATEKILLER_PLUGIN_DIR . '/includes/class-duplicatekiller-submission-storage.php';
 	
 	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/class-duplicateKiller-cross-form.php';
+
+	/**
+	 * Expose only one configured form per integration in the Free plugin.
+	 *
+	 * This is a read-time guard for options left by PRO or external edits.
+	 * It never writes an option merely because a page was viewed.
+	 *
+	 * @param mixed $value Stored option value.
+	 * @return mixed
+	 */
+	function duplicateKiller_free_one_form_option( $value ) {
+		if ( ! is_array( $value ) ) {
+			return $value;
+		}
+
+		$limited  = array();
+		$has_form = false;
+
+		foreach ( $value as $key => $entry ) {
+			if ( is_array( $entry ) ) {
+				if ( $has_form ) {
+					continue;
+				}
+
+				$has_form = true;
+
+				// Cross-Form protection is not available in Free.
+				$entry['cross_form_option'] = '0';
+			}
+
+			$limited[ $key ] = $entry;
+		}
+
+		return $limited;
+	}
+
+	foreach (
+		array(
+			'CF7_page',
+			'Forminator_page',
+			'WPForms_page',
+			'Breakdance_page',
+			'Elementor_page',
+			'Formidable_page',
+			'NinjaForms_page',
+			'FluentForms_page',
+			'MetForm_page',
+		) as $free_option_name
+	) {
+		add_filter( 'option_' . $free_option_name, 'duplicateKiller_free_one_form_option' );
+	}
+
+	// A stale PRO setting must not group several Elementor forms in Free.
+	add_filter( 'option_duplicateKiller_elementor_group_mode', '__return_zero' );
 	
 	//location helpers.php
 	add_action('admin_init', 'duplicateKiller_handle_delete_records_request');

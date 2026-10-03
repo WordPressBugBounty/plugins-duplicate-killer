@@ -13,17 +13,37 @@ class DuplicateKiller_Form_Config_Resolver {
 			? $current_form['field_keys']
 			: array();
 
-		if ( '' === $form_name || empty( $plugin_options[ $form_name ] ) || ! is_array( $plugin_options[ $form_name ] ) ) {
-			return false;
-		}
-
-		$form_config = $plugin_options[ $form_name ];
+		$config_key  = $form_name;
+		$form_config = isset( $plugin_options[ $config_key ] )
+			&& is_array( $plugin_options[ $config_key ] )
+			? $plugin_options[ $config_key ]
+			: null;
 
 		if (
-			$form_id > 0
-			&& ! empty( $form_config['form_id'] )
-			&& (int) $form_config['form_id'] !== $form_id
+			! is_array( $form_config )
+			|| (
+				$form_id > 0
+				&& ! empty( $form_config['form_id'] )
+				&& (int) $form_config['form_id'] !== $form_id
+			)
 		) {
+			$form_config = null;
+
+			foreach ( $plugin_options as $option_key => $candidate ) {
+				if (
+					is_array( $candidate )
+					&& $form_id > 0
+					&& isset( $candidate['form_id'] )
+					&& (int) $candidate['form_id'] === $form_id
+				) {
+					$config_key  = (string) $option_key;
+					$form_config = $candidate;
+					break;
+				}
+			}
+		}
+
+		if ( ! is_array( $form_config ) ) {
 			return false;
 		}
 
@@ -47,12 +67,12 @@ class DuplicateKiller_Form_Config_Resolver {
 
 		$enabled_fields = array();
 
-		foreach ( $form_config as $config_key => $enabled ) {
-			if ( in_array( $config_key, $reserved_keys, true ) ) {
+		foreach ( $form_config as $field_key => $enabled ) {
+			if ( in_array( $field_key, $reserved_keys, true ) ) {
 				continue;
 			}
 
-			if ( false !== strpos( (string) $config_key, '_ck' ) ) {
+			if ( false !== strpos( (string) $field_key, '_ck' ) ) {
 				continue;
 			}
 
@@ -60,16 +80,16 @@ class DuplicateKiller_Form_Config_Resolver {
 				continue;
 			}
 
-			if ( ! in_array( $config_key, $field_keys, true ) ) {
+			if ( ! in_array( $field_key, $field_keys, true ) ) {
 				continue;
 			}
 
-			$enabled_fields[] = $config_key;
+			$enabled_fields[] = $field_key;
 		}
 
 		return array(
 			'form_id'        => $form_id,
-			'form_name'      => $form_name,
+			'form_name'      => $config_key,
 			'form_config'    => $form_config,
 			'enabled_fields' => $enabled_fields,
 			'has_fields'     => ! empty( $enabled_fields ),
@@ -93,6 +113,21 @@ class DuplicateKiller_Form_Config_Resolver {
 
 			if ( (int) $form_config['form_id'] !== $form_id ) {
 				continue;
+			}
+			
+			if ( ! empty( $current_form['post_id'] ) ) {
+				$key_parts = array();
+
+				// Current Breakdance keys include both post ID and node ID.
+				if (
+					preg_match( '/\.(\d+)\.(\d+)$/', (string) $option_key, $key_parts )
+					&& (
+						(int) $key_parts[1] !== (int) $current_form['post_id']
+						|| (int) $key_parts[2] !== $form_id
+					)
+				) {
+					continue;
+				}
 			}
 
 			$field_keys = ! empty( $current_form['field_keys'] ) && is_array( $current_form['field_keys'] )
