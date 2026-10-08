@@ -774,6 +774,7 @@ final class duplicateKiller_Diagnostics {
 			'NinjaForms_page'                  => get_option('NinjaForms_page', []),
 			'FluentForms_page'                 => get_option('FluentForms_page', []),
 			'MetForm_page' 					   => get_option( 'MetForm_page', array() ),
+			'SureForms_page'                   => get_option( 'SureForms_page', array() ),
 			'WooCommerce_page'                 => get_option('WooCommerce_page', []),
 		];
 
@@ -1191,6 +1192,10 @@ final class duplicateKiller_Diagnostics {
 				'plugin_active' => post_type_exists( 'metform-form' ) ? 'yes' : 'no',
 				'option_exists' => get_option( 'MetForm_page', null ) !== null ? 'yes' : 'no',
 			],
+			'sureforms' => array(
+				'plugin_active' => post_type_exists( 'sureforms_form' ) ? 'yes' : 'no',
+				'option_exists' => get_option( 'SureForms_page', null ) !== null ? 'yes' : 'no',
+			),
 			'woocommerce' => [
 				'plugin_active' => class_exists('WooCommerce') ? 'yes' : 'no',
 				'option_exists' => get_option('WooCommerce_page', null) !== null ? 'yes' : 'no',

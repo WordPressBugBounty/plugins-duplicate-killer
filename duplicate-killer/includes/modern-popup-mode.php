@@ -78,6 +78,7 @@ function duplicateKiller_modern_popup_get_frontend_items(): array {
 		'NinjaForms_page'  => 'ninjaforms',
 		'FluentForms_page' => 'fluentforms',
 		'MetForm_page' => 'metform',
+		'SureForms_page' => 'sureforms',
 	);
 
 	$defaults = duplicateKiller_get_form_defaults();

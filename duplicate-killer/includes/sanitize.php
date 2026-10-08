@@ -88,6 +88,7 @@ function duplicateKiller_sanitize_forms_option(
         'NinjaForms_page'  => 'duplicateKiller_ninjaforms_get_forms',
         'FluentForms_page' => 'duplicateKiller_fluentforms_get_forms',
         'MetForm_page'     => 'duplicateKiller_metform_get_forms',
+		'SureForms_page'   => 'duplicateKiller_sureforms_get_forms',
     );
 
     if ( ! isset( $getters[ $option_name ] ) || ! function_exists( $getters[ $option_name ] ) ) {

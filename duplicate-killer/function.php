@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: Duplicate Killer
- * Version: 1.7.3
+ * Version: 1.7.4
  * Description: Block duplicate form submissions by validating unique email, phone and text fields — without CAPTCHA.
  * Author: NIA
  * Author URI: https://profiles.wordpress.org/wpnia/
@@ -13,7 +13,7 @@
 	defined('ABSPATH') or die('You shall not pass!');
 	
 	define('DUPLICATEKILLER_PLUGIN',__FILE__);
-	define('DUPLICATEKILLER_VERSION','1.7.3');
+	define('DUPLICATEKILLER_VERSION','1.7.4');
 	define('DUPLICATEKILLER_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 	define('DUPLICATEKILLER_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 	
@@ -32,6 +32,7 @@
 	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/functions_ninjaforms.php';
 	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/functions_fluentforms.php';
 	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/functions_metform.php';
+	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/functions_sureforms.php';
 	
 	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/database.php';
 	require_once DUPLICATEKILLER_PLUGIN_DIR.'/includes/pro.php';
@@ -101,6 +102,7 @@
 			'NinjaForms_page',
 			'FluentForms_page',
 			'MetForm_page',
+			'SureForms_page',
 		) as $free_option_name
 	) {
 		add_filter( 'option_' . $free_option_name, 'duplicateKiller_free_one_form_option' );
@@ -124,7 +126,7 @@ function duplicateKiller_create_table(){
         $sql = "CREATE TABLE $table_name (
             form_id bigint(20) NOT NULL AUTO_INCREMENT,
 			form_plugin varchar(50) NOT NULL,
-			form_name varchar(50) NOT NULL,
+			form_name varchar(128) NOT NULL,
             form_value longtext NOT NULL,
 			form_cookie longtext NOT NULL,
 			form_ip varchar(50) NOT NULL,
@@ -530,6 +532,18 @@ function duplicateKiller_options() {
 				array( 'id' => 'MetForm_error_message', 'title' => '', 'callback' => 'duplicateKiller_metform_settings_callback' ),
 			),
 		),
+		'SureForms_page' => array(
+			'title'          => 'SureForms',
+			'description_cb' => 'duplicateKiller_sureforms_description',
+			'validate_cb'    => 'duplicateKiller_sureforms_validate_input',
+			'fields'         => array(
+				array(
+					'id'       => 'SureForms_forms',
+					'title'    => '',
+					'callback' => 'duplicateKiller_sureforms_select_form_tag_callback',
+				),
+			),
+		),
 		'WooCommerce_page' => array(
 			'title' => 'WooCommerce',
 			'description_cb' => array( 'duplicateKiller_WooCommerce', 'render_section' ),
@@ -656,6 +670,7 @@ function duplicateKiller_display_page() {
 				'seventh',
 				'fluentforms',
 				'metform',
+				'sureforms',
 				'woocommerce',
 				'pro',
 				'support',
@@ -692,6 +707,11 @@ function duplicateKiller_display_page() {
 			
 			<a href="?page=duplicateKiller&tab=metform" class="nav-tab dk-nav-tab-new <?php echo esc_attr( $active_tab === 'metform' ? 'nav-tab-active' : '' ); ?>">
 				<?php esc_html_e( 'MetForm', 'duplicate-killer' ); ?>
+				<span class="dk-new-badge"><?php esc_html_e( 'Beta', 'duplicate-killer' ); ?></span>
+			</a>
+			
+			<a href="?page=duplicateKiller&tab=sureforms" class="nav-tab dk-nav-tab-new <?php echo esc_attr( $active_tab === 'sureforms' ? 'nav-tab-active' : '' ); ?>">
+				<?php esc_html_e( 'SureForms', 'duplicate-killer' ); ?>
 				<span class="dk-new-badge"><?php esc_html_e( 'Beta', 'duplicate-killer' ); ?></span>
 			</a>
 			
@@ -744,6 +764,10 @@ function duplicateKiller_display_page() {
 			} elseif ( $active_tab === 'metform' ) {
 				settings_fields( 'MetForm_page' );
 				duplicateKiller_do_settings_sections( 'MetForm_page' );
+				submit_button();
+			}elseif ( $active_tab === 'sureforms' ) {
+				settings_fields( 'SureForms_page' );
+				duplicateKiller_do_settings_sections( 'SureForms_page' );
 				submit_button();
 			}elseif($active_tab == 'woocommerce') {
 				settings_fields('WooCommerce_page');

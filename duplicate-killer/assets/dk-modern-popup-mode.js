@@ -1204,6 +1204,92 @@
 			}(wrappers[i]));
 		}
 	}
+	// -------------------------------------------------------------------------
+	// Provider: SureForms.
+	// -------------------------------------------------------------------------
+
+	function initSureForms() {
+		if (!getItemsByProvider('sureforms').length ||
+			typeof MutationObserver === 'undefined') {
+			return;
+		}
+
+		var forms = document.querySelectorAll('form.srfm-form');
+
+		for (var i = 0; i < forms.length; i++) {
+			(function (form) {
+				var field = form.querySelector('input[name="form-id"]');
+				var formId = field ? String(field.value) : '';
+				var activeMarker = '';
+				var outputs = form.querySelectorAll('.srfm-common-error-message');
+
+				if (!formId || !getItemsByProvider('sureforms').some(function (item) {
+					return String(item.formId) === formId;
+				})) {
+					return;
+				}
+
+				function inspect() {
+					for (var j = 0; j < outputs.length; j++) {
+						var output = outputs[j];
+						var content = output.querySelector('.srfm-error-content');
+						var item = content
+							? findByMarker(content.textContent, 'sureforms', formId)
+							: null;
+
+						// Restore only DK-owned hiding when the native message changes.
+						if (!item) {
+							restoreHiddenElement(output);
+							continue;
+						}
+
+						// Native hidden messages are not a new submission result.
+						if (output.hidden) {
+							continue;
+						}
+
+						hideElement(output, item);
+
+						if (activeMarker !== item.marker) {
+							activeMarker = item.marker;
+							openModal(item);
+						}
+					}
+				}
+
+				form.addEventListener('submit', function () {
+					activeMarker = '';
+
+					for (var j = 0; j < outputs.length; j++) {
+						var output = outputs[j];
+
+						if (output.getAttribute('data-duplicatekiller-modern-hidden') !== '1') {
+							continue;
+						}
+
+						// Clear only our previous response, never fields or native errors.
+						var content = output.querySelector('.srfm-error-content');
+						if (content) {
+							content.textContent = '';
+						}
+
+						output.hidden = true;
+						restoreHiddenElement(output);
+					}
+				}, true);
+
+				for (var j = 0; j < outputs.length; j++) {
+					new MutationObserver(inspect).observe(outputs[j], {
+						childList: true,
+						characterData: true,
+						subtree: true,
+						attributes: true,
+						attributeFilter: ['hidden']
+					});
+				}
+			})(forms[i]);
+		}
+	}
 
 	// -------------------------------------------------------------------------
 	// Boot.
@@ -1219,6 +1305,7 @@
 		initMetForm();
 		initNinjaForms();
 		initFormidable();
+		initSureForms();
 	}
 
 	if (document.readyState === 'loading') {

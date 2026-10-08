@@ -479,4 +479,40 @@ class DuplicateKiller_Form_Normalizer {
 
 		return $data;
 	}
+	public static function sureforms_data( array $form_data ): array {
+		$data = array();
+
+		foreach ( $form_data as $key => $value ) {
+			if ( ! is_string( $key ) || ! is_scalar( $value ) ) {
+				continue;
+			}
+
+			// Exclude labels and slugs from the stored field identifier.
+			$parts    = explode( '-lbl-', $key, 2 );
+			$field_id = $parts[0];
+
+			if (
+				2 !== count( $parts )
+				|| ! preg_match(
+					'/^srfm-(?:input|email|url|textarea|number)-[a-zA-Z0-9]+$/D',
+					$field_id
+				)
+			) {
+				continue;
+			}
+
+			// SureForms has already sanitized the REST submission.
+			$data[ $field_id ] = sanitize_text_field( (string) $value );
+		}
+
+		return $data;
+	}
+
+	public static function sureforms( int $form_id, array $data ): array {
+		return array(
+			'plugin'     => 'SureForms',
+			'form_id'    => $form_id,
+			'field_keys' => array_keys( $data ),
+		);
+	}
 }

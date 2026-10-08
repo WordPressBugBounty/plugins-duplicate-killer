@@ -37,6 +37,18 @@ class DuplicateKiller_Submission_Value_Renderer {
 		if ( 'MetForm' === $plugin ) {
 			return $this->render_metform( $form_value );
 		}
+		
+		if ( 'SureForms' === $plugin ) {
+			$labels = $this->get_sureforms_labels( $form_name );
+			$out    = '';
+
+			foreach ( (array) $form_value as $key => $value ) {
+				$label = $labels[ $key ] ?? (string) $key;
+				$out  .= $this->render_modal_row( $label, $value );
+			}
+
+			return $out;
+		}
 
 		if ( 'WooCommerce' === $plugin ) {
 			return $this->render_woocommerce( $form_value );
@@ -48,6 +60,9 @@ class DuplicateKiller_Submission_Value_Renderer {
 	}
 	public function render_preview( string $plugin, string $form_name, $form_value ): string {
 		$form_value = maybe_unserialize( $form_value );
+		
+		$sureforms_labels = 'SureForms' === $plugin
+			? $this->get_sureforms_labels( $form_name ) : array();
 
 		if ( ! is_array( $form_value ) || empty( $form_value ) ) {
 			return '<span class="dk-db-muted">No preview</span>';
@@ -140,6 +155,7 @@ class DuplicateKiller_Submission_Value_Renderer {
 			$url   = isset( $item['url'] ) ? (string) $item['url'] : '';
 
 			$out .= '<span class="dk-db-preview__row dk-db-preview__row--' . esc_attr( $type ) . '">';
+			$display_label = $sureforms_labels[ $key ] ?? (string) $key;
 			$out .= '<em>' . esc_html( $key ) . ':</em>';
 
 			if ( 'url' === $type && '' !== $url ) {
@@ -446,6 +462,34 @@ class DuplicateKiller_Submission_Value_Renderer {
 		}
 
 		return strlen( $value );
+	}
+	
+	private function get_sureforms_labels( string $form_name ): array {
+		static $labels_by_id = null;
+
+		if ( ! function_exists( 'duplicateKiller_sureforms_get_forms' ) ) {
+			return array();
+		}
+
+		// Load display labels once per request, shared by previews and details.
+		if ( null === $labels_by_id ) {
+			$labels_by_id = array();
+
+			foreach ( duplicateKiller_sureforms_get_forms() as $form ) {
+				$labels_by_id[ (int) $form['form_id'] ] = array_column(
+					$form['fields'],
+					'label',
+					'id'
+				);
+			}
+		}
+
+		// SureForms storage names use the existing "title.form_id" format.
+		if ( ! preg_match( '/\.([0-9]+)$/D', $form_name, $matches ) ) {
+			return array();
+		}
+
+		return $labels_by_id[ (int) $matches[1] ] ?? array();
 	}
 
 	private function render_cf7( $form_value ): string {

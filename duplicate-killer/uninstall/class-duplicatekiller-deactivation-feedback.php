@@ -474,6 +474,7 @@ class duplicateKiller_Deactivation_Feedback {
 			'NinjaForms_page',
 			'FluentForms_page',
 			'MetForm_page',
+			'SureForms_page',
 			'WooCommerce_page',
 		);
 
@@ -640,6 +641,7 @@ class duplicateKiller_Deactivation_Feedback {
 		delete_option('NinjaForms_page');
 		delete_option('FluentForms_page');
 		delete_option( 'MetForm_page' );
+		delete_option( 'SureForms_page' );
 		delete_option('DuplicateKillerSettings');
 		delete_option('duplicatekillerpro_license_options');
 		delete_option('duplicate_killer_elementor_debug_logs');
