@@ -123,6 +123,31 @@ function duplicateKiller_cf7_before_send_email( $contact_form, &$abort, $object 
 			'checked_cookie'   => $checked_cookie ? 1 : 0,
 		] );
 	}
+	
+		// Detect only the native CF7 Stripe payment flow.
+	$is_native_stripe_form     = false;
+	$stripe_payment_confirmed = false;
+
+	if (
+		class_exists( 'WPCF7_Stripe' )
+		&& is_callable( array( 'WPCF7_Stripe', 'get_instance' ) )
+		&& function_exists( 'wpcf7_stripe_before_send_mail' )
+		&& is_object( $contact_form )
+		&& method_exists( $contact_form, 'scan_form_tags' )
+	) {
+		$stripe_service = WPCF7_Stripe::get_instance();
+
+		$is_native_stripe_form = is_object( $stripe_service )
+			&& is_callable( array( $stripe_service, 'is_active' ) )
+			&& $stripe_service->is_active()
+			&& ! empty( $contact_form->scan_form_tags( array( 'type' => 'stripe' ) ) );
+
+		// CF7 sets this internal value after retrieving a succeeded payment.
+		$stripe_payment_confirmed = $is_native_stripe_form
+			&& is_object( $submission )
+			&& method_exists( $submission, 'pull' )
+			&& ! empty( $submission->pull( 'payment_intent' ) );
+	}
 
 	$abort = false;
 
@@ -156,6 +181,11 @@ function duplicateKiller_cf7_before_send_email( $contact_form, &$abort, $object 
 			
 			remove_action( 'wpcf7_before_send_mail', 'cfdb7_before_send_mail' );
 			remove_action( 'wpcf7_before_send_mail', 'vsz_cf7_before_send_email' );
+			
+			// Prevent Stripe from replacing the DK error or creating an intent.
+			if ( $is_native_stripe_form ) {
+				remove_action( 'wpcf7_before_send_mail', 'wpcf7_stripe_before_send_mail', 10 );
+			}
 
 			return;
 		}
@@ -196,7 +226,10 @@ function duplicateKiller_cf7_before_send_email( $contact_form, &$abort, $object 
 
 			remove_action( 'wpcf7_before_send_mail', 'cfdb7_before_send_mail' );
 			remove_action( 'wpcf7_before_send_mail', 'vsz_cf7_before_send_email' );
-
+			// Prevent Stripe from replacing the DK error or creating an intent.
+			if ( $is_native_stripe_form ) {
+				remove_action( 'wpcf7_before_send_mail', 'wpcf7_stripe_before_send_mail', 10 );
+			}
 			return;
 		}
 	}
@@ -228,7 +261,11 @@ function duplicateKiller_cf7_before_send_email( $contact_form, &$abort, $object 
 
 			remove_action( 'wpcf7_before_send_mail', 'cfdb7_before_send_mail' );
 			remove_action( 'wpcf7_before_send_mail', 'vsz_cf7_before_send_email' );
-
+			// Prevent Stripe from replacing the DK error or creating an intent.
+			if ( $is_native_stripe_form ) {
+				remove_action( 'wpcf7_before_send_mail', 'wpcf7_stripe_before_send_mail', 10 );
+			}
+			
 			if ( $dk_enabled ) {
 				duplicateKiller_Diagnostics::log( 'cf7', 'cross_form_duplicate_found', [
 					'request_debug_id' => $request_debug_id,
@@ -242,6 +279,17 @@ function duplicateKiller_cf7_before_send_email( $contact_form, &$abort, $object 
 		}
 	}
 
+	// An initial Stripe submission is not a completed payment.
+	if ( $is_native_stripe_form && ! $stripe_payment_confirmed ) {
+		if ( $dk_enabled ) {
+			duplicateKiller_Diagnostics::log( 'cf7', 'save_skipped_stripe_payment_not_confirmed', array(
+				'request_debug_id' => $request_debug_id,
+				'form_name'        => $form_name,
+			) );
+		}
+
+		return;
+	}
 	// 4. Save to DB only if at least one Duplicate Killer feature is active.
 	$should_save_submission = (
 		! $abort

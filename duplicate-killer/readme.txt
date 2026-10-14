@@ -1,5 +1,5 @@
 === Duplicate Killer – Prevent Duplicate Form Submissions ===
-Version: 1.7.4
+Version: 1.7.5
 Author: NIA
 Author URI: https://profiles.wordpress.org/wpnia/
 Contributors: wpnia
@@ -7,7 +7,7 @@ Tags: woocommerce, duplicate orders, forminator, elementor forms, contact form 7
 Donate link: https://www.paypal.com/paypalme/wpnia
 Requires at least: 5.3
 Tested up to: 7.1.3
-Stable tag: 1.7.4
+Stable tag: 1.7.5
 Requires PHP: 5.6.20
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -160,11 +160,18 @@ No. Duplicate order protection and payment processing are different. Duplicate K
 6. WooCommerce duplicate order protection blocks accidental checkout retries, repeated clicks, and duplicate submissions.
 
 == Upgrade Notice ==
-= 1.7.4 =
-Added SureForms duplicate protection, Modern Popup Mode, and early email checks for Stripe payments. Improved diagnostics and support for longer form names.
+= 1.7.5 =
+* Fixed duplicate submission handling for Contact Form 7 native Stripe payments.
+* Payment forms now save Duplicate Killer records only after payment is confirmed.
+* Prevented Stripe checkout from replacing duplicate protection messages.
 
 
 == Changelog ==
+
+= 1.7.5 =
+* Fixed duplicate submission handling for Contact Form 7 native Stripe payments.
+* Payment forms now save Duplicate Killer records only after payment is confirmed.
+* Prevented Stripe checkout from replacing duplicate protection messages.
 
 = 1.7.4 =
 * New: Added SureForms support for duplicate submission protection.
