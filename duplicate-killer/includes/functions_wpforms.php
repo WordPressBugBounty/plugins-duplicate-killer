@@ -1,7 +1,7 @@
 <?php
 defined( 'ABSPATH' ) or die( 'You shall not pass!' );
 
-add_action('wpforms_process', 'duplicateKiller_wpforms_before_send_email', 10, 3);
+add_action( 'wpforms_process', 'duplicateKiller_wpforms_before_send_email', 1, 3 );
 function duplicateKiller_wpforms_before_send_email( $fields, $entry, $form_data ) {
 	$wpforms_page = get_option( 'WPForms_page' );
 	$wpforms_page = duplicateKiller_convert_option_architecture( $wpforms_page, 'wpforms_' );
@@ -242,6 +242,72 @@ function duplicateKiller_wpforms_before_send_email( $fields, $entry, $form_data 
 			|| $cross_form_enabled
 		)
 	);
+	
+	// Stripe submissions are stored only after server-side payment confirmation.
+	$is_stripe_form = is_callable(
+		array( '\WPForms\Integrations\Stripe\Helpers', 'has_stripe_enabled' )
+	) && \WPForms\Integrations\Stripe\Helpers::has_stripe_enabled( array( $form_data ) );
+
+	if ( $is_stripe_form ) {
+		add_action(
+			'wpforms_stripe_process_complete',
+			static function ( $paid_fields, $paid_form_data, $payment_id, $payment ) use (
+				$form_id,
+				$form_name,
+				$form_cookie,
+				$should_save_submission,
+				$ip_limit_enabled,
+				$request_debug_id
+			) {
+				static $saved = false;
+
+				if (
+					$saved
+					|| ! is_array( $paid_fields )
+					|| ! is_array( $paid_form_data )
+					|| ! isset( $paid_form_data['id'] )
+					|| (int) $paid_form_data['id'] !== (int) $form_id
+					|| ! is_object( $payment )
+					|| empty( $payment->id )
+					|| 'payment_intent' !== ( $payment->object ?? '' )
+					|| 'succeeded' !== ( $payment->status ?? '' )
+				) {
+					return;
+				}
+
+				// Use sanitized WPForms fields, never the payment object or raw request.
+				$result = DuplicateKiller_Submission_Storage::save(
+					'WPForms',
+					$form_name,
+					DuplicateKiller_Form_Normalizer::wpforms_storage_fields( $paid_fields ),
+					$form_cookie,
+					$should_save_submission,
+					$ip_limit_enabled,
+					array(),
+					array(),
+					array(
+						'request_debug_id' => $request_debug_id,
+						'form_name'        => $form_name,
+						'payment_id'       => absint( $payment_id ),
+						'payment_status'   => 'succeeded',
+					)
+				);
+
+				$saved = ! empty( $result['saved'] );
+			},
+			20,
+			4
+		);
+
+		if ( $dk_enabled ) {
+			duplicateKiller_Diagnostics::log( 'wpforms', 'stripe_storage_deferred', array(
+				'request_debug_id' => $request_debug_id,
+				'form_name'        => $form_name,
+			) );
+		}
+
+		return;
+	}
 
 	DuplicateKiller_Submission_Storage::save(
 		'WPForms',
