@@ -188,6 +188,10 @@ class DuplicateKiller_Submission_Value_Renderer {
 		
 		$flat = array();
 
+		$formidable_labels = 'Formidable' === $plugin
+			? $this->get_formidable_labels( $form_name )
+			: array();
+
 		foreach ( $form_value as $key => $value ) {
 			$label = (string) $key;
 			$final = '';
@@ -205,17 +209,8 @@ class DuplicateKiller_Submission_Value_Renderer {
 				}
 			}
 
-			if (
-				'Formidable' === $plugin
-				&& is_numeric( $key )
-			) {
-				$formidable_page = get_option( 'Formidable_page', array() );
-
-				if (
-					isset( $formidable_page[ $form_name ]['labels'][ (int) $key ] )
-				) {
-					$label = (string) $formidable_page[ $form_name ]['labels'][ (int) $key ];
-				}
+			if ( 'Formidable' === $plugin && is_numeric( $key ) ) {
+				$label = $formidable_labels[ (int) $key ] ?? ( 'Field ' . (int) $key );
 			}
 			if ( is_array( $value ) ) {
 				if ( isset( $value['name'], $value['value'] ) ) {
@@ -652,33 +647,62 @@ class DuplicateKiller_Submission_Value_Renderer {
 		return $store;
 	}
 
-	private function render_formidable( $form_value, string $form_name ): string {
-		// Accept legacy stored values (string) safely
-		$form_value = maybe_unserialize($form_value);
-		$formidable_page = get_option( 'Formidable_page', array() );
+	/**
+	 * Resolve display labels without changing the supported duplicate-check fields.
+	 */
+	private function get_formidable_labels( string $form_name ): array {
+		static $cache = array();
 
-		if ( ! is_array( $formidable_page ) ) {
-			$formidable_page = array();
+		$form_name = trim( $form_name );
+		$cache_key = get_current_blog_id() . ':' . $form_name;
+
+		if ( isset( $cache[ $cache_key ] ) ) {
+			return $cache[ $cache_key ];
 		}
 
-		if (!is_array($form_value) || empty($form_value)) {
-			return '';
-		}
+		$options = get_option( 'Formidable_page', array() );
+		$labels  = array();
 
-		// Fetch config and labels map (new structure: Formidable_page[$form_name]['labels'])
-		$cfg = array();
-		if (isset($formidable_page[$form_name]) && is_array($formidable_page[$form_name])) {
-			$cfg = $formidable_page[$form_name];
-		} else {
-			// Fallback: sometimes DB has "contact-us.2" but option key might be different
-			// Try to match by normalizing whitespace
-			$normalized = trim((string)$form_name);
-			if ($normalized !== $form_name && isset($formidable_page[$normalized]) && is_array($formidable_page[$normalized])) {
-				$cfg = $formidable_page[$normalized];
+		if ( is_array( $options ) && isset( $options[ $form_name ]['labels'] ) && is_array( $options[ $form_name ]['labels'] ) ) {
+			foreach ( $options[ $form_name ]['labels'] as $field_id => $label ) {
+				if ( is_numeric( $field_id ) && (int) $field_id > 0 && is_scalar( $label ) && '' !== trim( (string) $label ) ) {
+					$labels[ (int) $field_id ] = trim( (string) $label );
+				}
 			}
 		}
 
-		$labels = (isset($cfg['labels']) && is_array($cfg['labels'])) ? $cfg['labels'] : array();
+		// Stored Formidable names use the existing "form_key.form_id" format.
+		if ( is_callable( array( 'FrmField', 'get_all_for_form' ) ) && preg_match( '/\.([0-9]+)$/D', $form_name, $matches ) && (int) $matches[1] > 0 ) {
+			$fields = FrmField::get_all_for_form( (int) $matches[1], '', 'include' );
+
+			foreach ( (array) $fields as $field ) {
+				if ( ! is_object( $field ) || empty( $field->id ) || ! isset( $field->name ) || ! is_scalar( $field->name ) ) {
+					continue;
+				}
+
+				$field_id = (int) $field->id;
+				$label    = trim( (string) $field->name );
+
+				// Saved labels take precedence; native fields fill only missing labels.
+				if ( $field_id > 0 && ! isset( $labels[ $field_id ] ) && '' !== $label ) {
+					$labels[ $field_id ] = $label;
+				}
+			}
+		}
+
+		$cache[ $cache_key ] = $labels;
+
+		return $labels;
+	}
+	private function render_formidable( $form_value, string $form_name ): string {
+		// Accept legacy stored values safely.
+		$form_value = maybe_unserialize( $form_value );
+
+		if ( ! is_array( $form_value ) || empty( $form_value ) ) {
+			return '';
+		}
+
+		$labels = $this->get_formidable_labels( $form_name );
 
 		$out = '<div class="dk-form-values dk-form-values--formidable">';
 

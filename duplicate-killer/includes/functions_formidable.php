@@ -3,8 +3,21 @@ defined( 'ABSPATH' ) or die( 'You shall not pass!' );
 
 add_filter('frm_validate_entry', 'duplicateKiller_formidable_before_send_email', 10, 2);
 function duplicateKiller_formidable_before_send_email( $errors, $values ) {
+	static $pending_submissions = array();
+	static $save_hook_registered = false;
+
+	if ( ! empty( $values['form_id'] ) ) {
+		unset( $pending_submissions[ absint( $values['form_id'] ) ] );
+	}
+
+	// Validation must never persist a rejected submission.
+	if ( ! empty( $errors ) ) {
+		return $errors;
+	}
+
 	$formidable_page = get_option( 'Formidable_page' );
 	$formidable_page = duplicateKiller_convert_option_architecture( $formidable_page, 'formidable_' );
+
 	if ( ! is_array( $formidable_page ) ) {
 		return $errors;
 	}
@@ -159,30 +172,198 @@ function duplicateKiller_formidable_before_send_email( $errors, $values ) {
 		}
 	}
 
-	$should_save_submission = (
-		$ip_limit_enabled
-		|| $field_check_enabled
-		|| $cross_form_enabled
+	$pending_submissions[ $current_form['form_id'] ] = array(
+		'form_id'          => $current_form['form_id'],
+		'form_name'        => $form_name,
+		'data'             => $data,
+		'form_cookie'      => $form_cookie,
+		'ip_limit_enabled' => $ip_limit_enabled,
+		'form_ip'          => $ip_limit_enabled ? DuplicateKiller_IP_Limit_Checker::get_user_ip() : 'NULL',
+		'request_debug_id' => $request_debug_id,
 	);
 
-	DuplicateKiller_Submission_Storage::save(
-		'Formidable',
-		$form_name,
-		$data,
-		$form_cookie,
-		$should_save_submission,
-		$ip_limit_enabled,
-		array(),
-		array(),
-		array(
-			'request_debug_id' => $request_debug_id,
-			'form_name'        => $form_name,
-		)
-	);
+	if ( ! $save_hook_registered ) {
+		$save_hook_registered = true;
+
+		// Capture only entries belonging to a request that passed the DK guard.
+		add_action(
+			'frm_after_create_entry',
+			static function ( $entry_id, $form_id ) use ( &$pending_submissions ) {
+				$form_id = absint( $form_id );
+
+				if ( ! isset( $pending_submissions[ $form_id ] ) ) {
+					return;
+				}
+
+				$context = $pending_submissions[ $form_id ];
+				unset( $pending_submissions[ $form_id ] );
+
+				$entry = FrmEntry::getOne( $entry_id );
+
+				if ( ! is_object( $entry ) || (int) $entry->form_id !== $form_id || ! empty( $entry->is_draft ) ) {
+					return;
+				}
+
+				$payment_started = false;
+
+				// Observe the actual action, after Formidable has evaluated its conditions.
+				$payment_callback = static function ( $action, $payment_entry, $form, $event = 'create' ) use ( $entry_id, $context, &$payment_started ) {
+					if ( 'create' !== $event || ! is_object( $payment_entry ) || (int) $payment_entry->id !== (int) $entry_id ) {
+						return;
+					}
+
+					$payment_started = true;
+
+					if ( false !== get_option( 'duplicateKiller_formidable_saved_' . absint( $entry_id ), false ) ) {
+						return;
+					}
+
+					$key     = 'duplicateKiller_formidable_pending_' . absint( $entry_id );
+					$pending = get_option( $key, false );
+
+					if ( false === $pending ) {
+						$pending                       = $context;
+						$pending['payment_action_ids'] = array( absint( $action->ID ) );
+						add_option( $key, $pending, '', false );
+					} elseif ( is_array( $pending ) && ! in_array( absint( $action->ID ), $pending['payment_action_ids'], true ) ) {
+						$pending['payment_action_ids'][] = absint( $action->ID );
+						update_option( $key, $pending, false );
+					}
+				};
+
+				add_action( 'frm_trigger_payment_action', $payment_callback, 1, 4 );
+
+				// Native create actions run at priority 20; decide only after they finish.
+				add_action(
+					'frm_after_create_entry',
+					static function ( $created_id ) use ( $entry_id, $context, $payment_callback, &$payment_started ) {
+						static $handled = false;
+
+						if ( $handled || (int) $created_id !== (int) $entry_id ) {
+							return;
+						}
+
+						$handled = true;
+						remove_action( 'frm_trigger_payment_action', $payment_callback, 1 );
+
+						if ( ! $payment_started ) {
+							duplicateKiller_formidable_store_confirmed_submission( $context, $entry_id );
+						} elseif ( false === get_option( 'duplicateKiller_formidable_saved_' . absint( $entry_id ), false ) && class_exists( 'duplicateKiller_Diagnostics' ) ) {
+							duplicateKiller_Diagnostics::log( 'formidable', 'save_deferred_until_payment', array(
+								'request_debug_id' => $context['request_debug_id'],
+								'entry_id'         => absint( $entry_id ),
+							) );
+						}
+					},
+					PHP_INT_MAX
+				);
+			},
+			1,
+			2
+		);
+	}
 
 	return $errors;
 }
 
+add_action( 'frm_payment_status_complete', 'duplicateKiller_formidable_payment_complete', 20 );
+add_action( 'frm_after_destroy_entry', 'duplicateKiller_formidable_cleanup_payment_state' );
+
+/**
+ * Store the original submission context, including the visitor IP on webhooks.
+ */
+function duplicateKiller_formidable_store_confirmed_submission( array $context, $entry_id ): array {
+	$ip_callback = static function ( $ip ) use ( $context ) {
+		return $context['form_ip'];
+	};
+
+	if ( $context['ip_limit_enabled'] ) {
+		add_filter( 'duplicateKiller_get_user_ip', $ip_callback, PHP_INT_MAX );
+	}
+
+	try {
+		return DuplicateKiller_Submission_Storage::save(
+			'Formidable',
+			$context['form_name'],
+			$context['data'],
+			$context['form_cookie'],
+			true,
+			$context['ip_limit_enabled'],
+			array(),
+			array(),
+			array(
+				'request_debug_id' => $context['request_debug_id'],
+				'form_name'        => $context['form_name'],
+				'entry_id'         => absint( $entry_id ),
+			)
+		);
+	} finally {
+		if ( $context['ip_limit_enabled'] ) {
+			remove_filter( 'duplicateKiller_get_user_ip', $ip_callback, PHP_INT_MAX );
+		}
+	}
+}
+
+/**
+ * Native payment notifications may arrive in another request or more than once.
+ */
+function duplicateKiller_formidable_payment_complete( $atts ) {
+	if ( ! is_array( $atts ) || empty( $atts['payment']->id ) || ! class_exists( 'FrmTransLitePayment' ) ) {
+		return;
+	}
+
+	$payments = new FrmTransLitePayment();
+	$payment  = $payments->get_one( absint( $atts['payment']->id ) );
+
+	if ( ! is_object( $payment ) || 'complete' !== $payment->status || (float) $payment->amount <= 0 ) {
+		return;
+	}
+
+	$entry_id    = absint( $payment->item_id );
+	$pending_key = 'duplicateKiller_formidable_pending_' . $entry_id;
+	$saved_key   = 'duplicateKiller_formidable_saved_' . $entry_id;
+	$context     = get_option( $pending_key, false );
+
+	if ( ! is_array( $context ) || empty( $context['payment_action_ids'] ) || ! in_array( absint( $payment->action_id ), $context['payment_action_ids'], true ) ) {
+		return;
+	}
+
+	$entry = FrmEntry::getOne( $entry_id );
+
+	if ( ! is_object( $entry ) || (int) $entry->form_id !== (int) $context['form_id'] || ! empty( $entry->is_draft ) ) {
+		return;
+	}
+
+	// Claim this entry atomically before writing to the DK table.
+	if ( ! add_option( $saved_key, 'processing', '', false ) ) {
+		return;
+	}
+
+	$saved = false;
+
+	try {
+		$result = duplicateKiller_formidable_store_confirmed_submission( $context, $entry_id );
+		$saved  = ! empty( $result['saved'] );
+
+		if ( $saved ) {
+			update_option( $saved_key, absint( $result['insert_id'] ), false );
+			delete_option( $pending_key );
+		}
+	} finally {
+		if ( ! $saved ) {
+			delete_option( $saved_key );
+		}
+	}
+}
+
+/**
+ * Remove internal payment state when its Formidable entry is deleted.
+ */
+function duplicateKiller_formidable_cleanup_payment_state( $entry_id ) {
+	$entry_id = absint( $entry_id );
+	delete_option( 'duplicateKiller_formidable_pending_' . $entry_id );
+	delete_option( 'duplicateKiller_formidable_saved_' . $entry_id );
+}
 function duplicateKiller_formidable_get_forms(): array {
     $out = [];
 
