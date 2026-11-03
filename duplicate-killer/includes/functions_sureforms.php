@@ -1,7 +1,8 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
-add_filter( 'srfm_form_submit_data', 'duplicateKiller_sureforms_before_send_email', 10, 1 );
+// Run DK checks before native payment processing at priority 5.
+add_filter( 'srfm_form_submit_data', 'duplicateKiller_sureforms_before_send_email', 4, 1 );
 add_filter( 'duplicateKiller_cookie_providers', 'duplicateKiller_sureforms_cookie_provider' );
 
 // Check the mapped payment email before SureForms creates a Stripe intent.
@@ -535,8 +536,13 @@ function duplicateKiller_sureforms_before_send_email( $form_data ) {
 			);
 		}
 
-		$form_data['error'] = sanitize_text_field( (string) $ip_result['message'] );
-		return $form_data;
+		// Stop the request before native payment filters can continue.
+		wp_send_json_error(
+			array(
+				'message'  => sanitize_text_field( (string) $ip_result['message'] ),
+				'position' => 'header',
+			)
+		);
 	}
 
 	// 2. Reuse the existing field checker and duration/cookie rules.
@@ -612,8 +618,13 @@ function duplicateKiller_sureforms_before_send_email( $form_data ) {
 			);
 		}
 
-		$form_data['error'] = $message;
-		return $form_data;
+		// Keep the existing message and Modern Popup marker, when present.
+		wp_send_json_error(
+			array(
+				'message'  => $message,
+				'position' => 'header',
+			)
+		);
 	}
 
 	// Preserve this submission's canonical data until native success is confirmed.
