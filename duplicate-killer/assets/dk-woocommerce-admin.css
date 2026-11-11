@@ -1,0 +1,358 @@
+/* WooCommerce settings: scoped colors and layout. */
+.dk-wc-settings {
+	--dk-wc-accent: #7c3aad;
+	--dk-wc-accent-soft: #f8f4ff;
+	--dk-wc-accent-border: #e6daf5;
+	--dk-wc-surface: #fff;
+	--dk-wc-border: #e5e7eb;
+	--dk-wc-text: #1d2327;
+	--dk-wc-muted: #646970;
+	--dk-wc-success: #16783e;
+	--dk-wc-success-soft: #eaf7ee;
+	--dk-wc-danger: #b42318;
+	--dk-wc-danger-soft: #fff1f0;
+	--dk-wc-warning: #8a5700;
+	--dk-wc-warning-soft: #fff8e8;
+
+	box-sizing: border-box;
+	width: 100%;
+	max-width: 900px;
+	margin-top: 20px;
+	border: 1px solid var(--dk-wc-accent-border);
+	border-radius: 8px;
+	background: var(--dk-wc-surface);
+	color: var(--dk-wc-text);
+	letter-spacing: 0;
+}
+
+.dk-wc-settings *,
+.dk-wc-settings *::before,
+.dk-wc-settings *::after {
+	box-sizing: border-box;
+}
+
+.dk-wc-settings .settings-form-wrapper {
+	margin: 0;
+	padding: 0;
+}
+
+/* Header and saved protection status. */
+.dk-wc-settings .dk-wc-header {
+	display: grid;
+	grid-template-columns: 48px minmax(0, 1fr) auto;
+	align-items: start;
+	gap: 16px;
+	padding: 20px;
+	border-radius: 8px 8px 0 0;
+	background: var(--dk-wc-accent-soft);
+}
+
+.dk-wc-settings .dk-wc-brand {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 48px;
+	height: 44px;
+	border-radius: 8px;
+	background: var(--dk-wc-accent);
+	color: var(--dk-wc-surface);
+	font-size: 19px;
+	font-weight: 800;
+	font-style: italic;
+	line-height: 1;
+}
+
+.dk-wc-settings .dk-wc-title {
+	margin: 0 0 6px;
+	color: var(--dk-wc-text);
+	font-size: 18px;
+	font-weight: 700;
+	line-height: 1.35;
+}
+
+.dk-wc-settings .dk-wc-heading {
+	margin: 0 0 5px;
+	color: var(--dk-wc-text);
+	font-size: 15px;
+	font-weight: 700;
+	line-height: 1.4;
+}
+
+.dk-wc-settings .dk-wc-description {
+	margin: 0;
+	color: var(--dk-wc-muted);
+	font-size: 13px;
+	line-height: 1.55;
+}
+
+.dk-wc-settings .dk-wc-header-copy,
+.dk-wc-settings .dk-wc-detection-copy,
+.dk-wc-settings .dk-wc-field,
+.dk-wc-settings .dk-wc-fingerprint-header > div {
+	min-width: 0;
+}
+
+.dk-wc-settings .dk-wc-status {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	max-width: 180px;
+	padding: 6px 10px;
+	border-radius: 20px;
+	font-size: 12px;
+	font-weight: 600;
+	line-height: 1.4;
+}
+
+.dk-wc-settings .dk-wc-status.is-active {
+	background: var(--dk-wc-success-soft);
+	color: var(--dk-wc-success);
+}
+
+.dk-wc-settings .dk-wc-status.is-inactive {
+	background: var(--dk-wc-danger-soft);
+	color: var(--dk-wc-danger);
+}
+
+.dk-wc-settings .dk-wc-status-dot {
+	flex: 0 0 6px;
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: currentColor;
+}
+
+/* Checkout compatibility. */
+.dk-wc-settings .dk-wc-detection {
+	display: grid;
+	grid-template-columns: 48px minmax(0, 1fr);
+	align-items: center;
+	gap: 14px;
+	margin: 18px 20px 0;
+	padding: 16px;
+	border: 1px solid var(--dk-wc-accent-border);
+	border-radius: 8px;
+}
+
+.dk-wc-settings .dk-wc-icon {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 48px;
+	height: 48px;
+	border-radius: 8px;
+	background: var(--dk-wc-accent-soft);
+	color: var(--dk-wc-accent);
+}
+
+.dk-wc-settings .dk-wc-icon svg {
+	display: block;
+	width: 28px;
+	height: 28px;
+}
+
+.dk-wc-settings .dk-wc-link {
+	display: inline-block;
+	margin-top: 6px;
+	color: var(--dk-wc-accent);
+	font-weight: 600;
+	text-decoration: none;
+}
+
+.dk-wc-settings .dk-wc-link:hover {
+	text-decoration: underline;
+}
+
+/* Settings fields. */
+.dk-wc-settings .dk-wc-fields {
+	padding: 18px 20px 20px;
+}
+
+.dk-wc-settings .dk-wc-summary {
+	margin: 0 0 16px;
+	padding: 12px 14px;
+	border-radius: 8px;
+	background: var(--dk-wc-accent-soft);
+	font-size: 13px;
+	line-height: 1.6;
+}
+
+.dk-wc-settings .dk-wc-enable,
+.dk-wc-settings .dk-wc-check {
+	display: flex;
+	align-items: center;
+	gap: 9px;
+	line-height: 1.5;
+	cursor: pointer;
+}
+
+.dk-wc-settings .dk-wc-enable {
+	margin-bottom: 16px;
+	font-weight: 600;
+}
+
+.dk-wc-settings input[type="checkbox"] {
+	flex-shrink: 0;
+	margin: 0;
+	accent-color: var(--dk-wc-accent);
+}
+
+.dk-wc-settings .dk-wc-enable input:checked {
+	border-color: var(--dk-wc-accent);
+	background: var(--dk-wc-accent);
+}
+
+.dk-wc-settings .dk-wc-enable input:checked::before {
+	filter: brightness(0) invert(1);
+}
+
+.dk-wc-settings .dk-wc-grid {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+	gap: 14px;
+}
+
+.dk-wc-settings .dk-wc-field {
+	padding: 14px;
+	border: 1px solid var(--dk-wc-border);
+	border-radius: 8px;
+}
+
+.dk-wc-settings .dk-wc-label {
+	display: block;
+	margin-bottom: 8px;
+	font-weight: 600;
+}
+
+.dk-wc-settings .dk-wc-field input[type="text"] {
+	width: 100%;
+	max-width: 100%;
+	min-width: 0;
+}
+
+.dk-wc-settings .dk-wc-field input[type="number"] {
+	width: 90px;
+	max-width: 100%;
+}
+
+.dk-wc-settings .dk-wc-field .dk-wc-description {
+	margin-top: 8px;
+}
+
+/* Fingerprint controls. */
+.dk-wc-settings .dk-wc-fingerprint {
+	min-width: 0;
+	margin: 16px 0 0;
+	padding: 16px;
+	border: 1px solid var(--dk-wc-accent-border);
+	border-radius: 8px;
+	background: var(--dk-wc-accent-soft);
+}
+
+.dk-wc-settings .dk-wc-fingerprint-header {
+	display: flex;
+	align-items: flex-start;
+	gap: 12px;
+	margin-bottom: 12px;
+}
+
+.dk-wc-settings .dk-wc-fingerprint-icon {
+	flex: 0 0 28px;
+	color: var(--dk-wc-accent);
+}
+
+.dk-wc-settings .dk-wc-fingerprint-icon svg {
+	display: block;
+	width: 28px;
+	height: 32px;
+}
+
+.dk-wc-settings .dk-wc-checkboxes {
+	display: grid;
+	gap: 8px;
+}
+
+.dk-wc-settings .dk-wc-check {
+	margin: 0;
+}
+
+/* Existing warning and submit button. */
+.dk-wc-settings .dk-wc-warning {
+	margin: 16px 20px 0;
+	padding: 12px 14px;
+	border-inline-start: 3px solid var(--dk-wc-warning);
+	border-radius: 4px;
+	background: var(--dk-wc-warning-soft);
+}
+
+.dk-wc-settings .dk-wc-warning p {
+	margin: 4px 0 0;
+}
+
+.dk-wc-settings > .submit {
+	margin: 0;
+	padding: 0 20px 20px;
+}
+
+.dk-wc-settings a:focus-visible,
+.dk-wc-settings input:focus-visible {
+	outline: 2px solid var(--dk-wc-accent);
+	outline-offset: 2px;
+}
+
+.dk-wc-settings .dk-wc-title,
+.dk-wc-settings .dk-wc-heading,
+.dk-wc-settings .dk-wc-description,
+.dk-wc-settings .dk-wc-check span,
+.dk-wc-settings .dk-wc-enable span,
+.dk-wc-settings .dk-wc-status {
+	overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+	.dk-wc-settings .dk-wc-header {
+		grid-template-columns: 44px minmax(0, 1fr);
+		gap: 12px;
+		padding: 16px;
+	}
+
+	.dk-wc-settings .dk-wc-brand {
+		width: 44px;
+		height: 42px;
+	}
+
+	.dk-wc-settings .dk-wc-status {
+		grid-column: 2;
+		justify-self: start;
+		max-width: 100%;
+	}
+
+	.dk-wc-settings .dk-wc-detection {
+		grid-template-columns: 40px minmax(0, 1fr);
+		gap: 12px;
+		margin: 16px 16px 0;
+		padding: 12px;
+	}
+
+	.dk-wc-settings .dk-wc-icon {
+		width: 40px;
+		height: 40px;
+	}
+
+	.dk-wc-settings .dk-wc-fields {
+		padding: 16px;
+	}
+
+	.dk-wc-settings .dk-wc-grid {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.dk-wc-settings .dk-wc-warning {
+		margin-inline: 16px;
+	}
+
+	.dk-wc-settings > .submit {
+		padding: 0 16px 16px;
+	}
+}

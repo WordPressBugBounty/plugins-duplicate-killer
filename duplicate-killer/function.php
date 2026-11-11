@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: Duplicate Killer
- * Version: 1.7.8
+ * Version: 1.7.9
  * Description: Block duplicate form submissions by validating unique email, phone and text fields — without CAPTCHA.
  * Author: NIA
  * Author URI: https://profiles.wordpress.org/wpnia/
@@ -13,7 +13,7 @@
 	defined('ABSPATH') or die('You shall not pass!');
 	
 	define('DUPLICATEKILLER_PLUGIN',__FILE__);
-	define('DUPLICATEKILLER_VERSION','1.7.8');
+	define('DUPLICATEKILLER_VERSION','1.7.9');
 	define('DUPLICATEKILLER_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 	define('DUPLICATEKILLER_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 	
@@ -306,6 +306,20 @@ function duplicateKiller_callback_for_setting_up_scripts() {
 		array(),
 		DUPLICATEKILLER_VERSION
 	);
+	
+	// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only admin tab selection.
+	$tab = isset( $_GET['tab'] ) && is_string( $_GET['tab'] )
+		? sanitize_key( wp_unslash( $_GET['tab'] ) )
+		: '';
+
+	if ( 'duplicateKiller' === $page && 'woocommerce' === $tab ) {
+		wp_enqueue_style(
+			'duplicateKiller-woocommerce-admin',
+			plugins_url( 'assets/dk-woocommerce-admin.css', DUPLICATEKILLER_PLUGIN ),
+			array( 'duplicateKillerStyle' ),
+			DUPLICATEKILLER_VERSION
+		);
+	}
 
 	wp_enqueue_script( 'quicktags' );
 
@@ -612,7 +626,7 @@ function duplicateKiller_do_settings_sections( $page ) {
 	}
 
 	foreach ( (array) $wp_settings_sections[ $page ] as $section ) {
-		if ( ! empty( $section['title'] ) ) {
+		if ( ! empty( $section['title'] ) && 'WooCommerce_page' !== $page ) {
 			echo '<h3>' . esc_html( $section['title'] ) . "</h3>\n";
 		}
 
@@ -640,6 +654,11 @@ function duplicateKiller_do_settings_fields( $page, $section ) {
 	}
 
 	foreach ( (array) $wp_settings_fields[ $page ][ $section ] as $field ) {
+		if ( 'WooCommerce_page' === $page && 'dk_wc_settings' === ( $field['id'] ?? '' ) ) {
+			call_user_func( $field['callback'], $field['args'] );
+			continue;
+		}
+
 		echo '<div class="dk-settings-form-row flex-tab">';
 
 		echo '<p>';
@@ -769,10 +788,13 @@ function duplicateKiller_display_page() {
 				settings_fields( 'SureForms_page' );
 				duplicateKiller_do_settings_sections( 'SureForms_page' );
 				submit_button();
-			}elseif($active_tab == 'woocommerce') {
-				settings_fields('WooCommerce_page');
-				duplicateKiller_do_settings_sections('WooCommerce_page');
+			} elseif ( $active_tab === 'woocommerce' ) {
+				settings_fields( 'WooCommerce_page' );
+
+				echo '<div class="dk-wc-settings">';
+				duplicateKiller_do_settings_sections( 'WooCommerce_page' );
 				submit_button();
+				echo '</div>';
             }elseif($active_tab == 'pro') {
                 settings_fields('Pro_page');
 				duplicateKiller_do_settings_sections('Pro_page');

@@ -106,7 +106,7 @@ function duplicateKiller_pro_plugin() {
 					<li><?php echo esc_html__( 'Protect 1 form from duplicate submissions.', 'duplicate-killer' ); ?></li>
 					<li><?php echo esc_html__( 'One global rule shared by protected entries.', 'duplicate-killer' ); ?></li>
 					<li><?php echo esc_html__( 'Best for simple sites with a single main form.', 'duplicate-killer' ); ?></li>
-					<li><?php echo esc_html__( 'Basic protection for Classic Checkout.', 'duplicate-killer' ); ?></li>
+					<li><?php echo esc_html__( 'Basic protection for Classic Checkout and Checkout Blocks.', 'duplicate-killer' ); ?></li>
 					<li><?php echo esc_html__( 'Fixed 60-second WooCommerce lock window.', 'duplicate-killer' ); ?></li>
 				</ul>
 			</div>
@@ -124,7 +124,7 @@ function duplicateKiller_pro_plugin() {
 					<li><?php echo esc_html__( 'Custom error message for each form.', 'duplicate-killer' ); ?></li>
 					<li><?php echo esc_html__( 'Optional per-form limits for cleaner data.', 'duplicate-killer' ); ?></li>
 					<li><?php echo esc_html__( 'Cross-Form Duplicate Protection.', 'duplicate-killer' ); ?></li>
-					<li><?php echo esc_html__( 'WooCommerce Checkout Blocks support and analytics.', 'duplicate-killer' ); ?></li>
+					<li><?php echo esc_html__( 'Configurable WooCommerce lock window and fingerprint controls.', 'duplicate-killer' ); ?></li>
 				</ul>
 			</div>
 		</section>
@@ -182,7 +182,6 @@ function duplicateKiller_pro_plugin() {
 				</p>
 
 				<ul class="dk-pro-checklist">
-					<li><?php echo esc_html__( 'Checkout Blocks support through Store API.', 'duplicate-killer' ); ?></li>
 					<li><?php echo esc_html__( 'Configurable lock window and fingerprint controls.', 'duplicate-killer' ); ?></li>
 					<li><?php echo esc_html__( 'Order linking, gateway breakdown, trends, and export.', 'duplicate-killer' ); ?></li>
 				</ul>

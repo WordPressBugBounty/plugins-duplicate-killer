@@ -96,34 +96,12 @@ final class duplicateKiller_WooCommerce {
 	 * Admin section description.
 	 */
 	public static function render_section(): void {
+		$dk_wc_view         = 'header';
+		$woocommerce_active = self::is_woocommerce_active();
+		$enabled            = $woocommerce_active && 1 === (int) self::get_setting( 'enabled', 0 );
+		$others             = $woocommerce_active ? self::get_other_checkout_shortcode_pages() : array();
 
-		if ( ! self::is_woocommerce_active() ) {
-
-			echo '<h3 style="color:red"><strong>';
-			echo esc_html__( 'WooCommerce plugin is not activated! Please activate it in order to continue.', 'duplicate-killer' );
-			echo '</strong></h3>';
-
-			return;
-		}
-
-		echo '<h3 style="color:green"><strong>';
-		echo esc_html__( 'WooCommerce plugin is activated!', 'duplicate-killer' );
-		echo '</strong></h3>';
-
-		echo '<p style="margin-top:8px;">';
-		echo esc_html__( 'Protect your checkout from accidental duplicate orders caused by slow checkout, repeated clicks, or retries.', 'duplicate-killer' );
-		echo '</p>';
-		
-		self::render_checkout_compat_notice();
-		
-		$others = self::get_other_checkout_shortcode_pages();
-		if ( ! empty( $others ) ) {
-			echo '<div style="margin:12px 0 10px;padding:10px 12px;border-radius:6px;border:1px solid #dcdcde;background:#fffbf0;border-left:4px solid #dba617;">';
-			echo '<p style="margin:0;"><strong>' . esc_html__( 'Multiple Checkout pages detected', 'duplicate-killer' ) . '</strong><br>';
-			echo esc_html__( 'FREE is designed around the default WooCommerce Checkout page. If you use multiple checkout pages/funnels, PRO can protect selected pages or all checkout pages.', 'duplicate-killer' );
-			echo '</p></div>';
-		}
-		$checkout_id = wc_get_page_id( 'checkout' );
+		require DUPLICATEKILLER_PLUGIN_DIR . '/admin/database/views/woocommerce-settings.php';
 	}
 	public static function get_db_notice_summary(): array {
 		return self::get_stats();
@@ -132,51 +110,25 @@ final class duplicateKiller_WooCommerce {
 	 * Render the Woo settings UI.
 	 */
 	public static function render_settings_field(): void {
-		
-		// Do not render settings UI if WooCommerce is not active
 		if ( ! self::is_woocommerce_active() ) {
 			return;
 		}
-		$enabled = (int) self::get_setting( 'enabled', 0 );
 
-		echo '<div class="dk-settings-form-wrapper">';
+		$dk_wc_view = 'fields';
+		$enabled    = (int) self::get_setting( 'enabled', 0 );
+		$message    = (string) self::get_setting( 'message', '' );
 
-		echo '<label style="display:flex;align-items:center;gap:8px;font-weight:600;">';
-		echo '<input type="checkbox" name="' . esc_attr( self::OPTION_KEY ) . '[enabled]" value="1" ' . checked( 1, $enabled, false ) . ' />';
-		echo esc_html__( 'Activate WooCommerce duplicate order protection', 'duplicate-killer' );
-		echo '</label>';
-
-		echo '<p style="margin-top:8px;opacity:0.85;">';
-		echo esc_html__( 'FREE: Prevents identical checkout submissions within 60 seconds (Classic Checkout).', 'duplicate-killer' );
-		echo '</p>';
-
-		echo '<ul style="margin:8px 0 0 18px; list-style:disc; opacity:0.85;">';
-		echo '<li>' . esc_html__( 'Fingerprint: Billing Email + Cart Items + Order Total + Currency', 'duplicate-killer' ) . '</li>';
-		echo '<li>' . esc_html__( 'Lock window: 60 seconds (fixed)', 'duplicate-killer' ) . '</li>';
-		echo '<li>' . esc_html__( 'Blocks only accidental duplicates (server-side).', 'duplicate-killer' ) . '</li>';
-		echo '</ul>';
-		$message = (string) self::get_setting( 'message', '' );
-		if ( $message === '' ) {
+		if ( '' === $message ) {
 			$message = __( 'It looks like your order was already submitted. Please wait a moment and check your email for confirmation.', 'duplicate-killer' );
 		}
 
-		echo '<div style="margin-top:10px;max-width:720px;">';
-		echo '<label style="display:block;font-weight:600;margin-bottom:6px;">' . esc_html__( 'Duplicate message', 'duplicate-killer' ) . '</label>';
-		echo '<input type="text" class="regular-text" style="width:100%;" name="' . esc_attr( self::OPTION_KEY ) . '[message]" value="' . esc_attr( $message ) . '" />';
-		echo '<p class="description" style="margin-top:6px;">' . esc_html__( 'Shown on checkout when an accidental duplicate order is detected.', 'duplicate-killer' ) . '</p>';
-		echo '</div>';
-		// PRO teaser (doesn't require PRO code)
-		echo '<div class="dk-locked" style="margin-top:14px;padding:12px 15px;background:#f8f9fa;border-left:4px solid #2271b1;">';
-		echo '<strong>' . esc_html__( 'PRO unlocks:', 'duplicate-killer' ) . '</strong>';
-		echo '<ul style="margin:8px 0 0 18px; list-style:disc;">';
-		echo '<li>' . esc_html__( 'Custom lock window (30–300s)', 'duplicate-killer' ) . '</li>';
-		echo '<li>' . esc_html__( 'Advanced fingerprint controls (phone, shipping, IP, customer ID)', 'duplicate-killer' ) . '</li>';
-		echo '<li>' . esc_html__( 'Checkout Blocks support', 'duplicate-killer' ) . '</li>';
-		echo '<li>' . esc_html__( 'Logs, analytics, and smart redirect to existing order', 'duplicate-killer' ) . '</li>';
-		echo '</ul>';
-		echo '</div>';
+		$required_fields = array(
+			__( 'Billing email - required', 'duplicate-killer' ),
+			__( 'Cart items, variations and quantities - required', 'duplicate-killer' ),
+			__( 'Currency - required', 'duplicate-killer' ),
+		);
 
-		echo '</div>';
+		require DUPLICATEKILLER_PLUGIN_DIR . '/admin/database/views/woocommerce-settings.php';
 	}
 
 	/**
@@ -191,11 +143,136 @@ final class duplicateKiller_WooCommerce {
 			return;
 		}
 
-		// Classic checkout validation stage
+		// Classic checkout validation stage.
 		add_action( 'woocommerce_after_checkout_validation', array( __CLASS__, 'check_duplicate_checkout' ), 10, 2 );
+
+		// Blocks checkout uses the Store API.
+		add_action( 'woocommerce_store_api_checkout_update_order_from_request', array( __CLASS__, 'check_duplicate_checkout_blocks' ), 10, 2 );
 
 		// Save order_id + received URL into the same lock transient so duplicates can link to the real order.
 		add_action( 'woocommerce_checkout_order_processed', array( __CLASS__, 'duplicateKiller_wc_record_successful_order' ), 10, 3 );
+	}
+	
+	/**
+	 * Check Store API place-order requests using the PRO Blocks flow.
+	 */
+	public static function check_duplicate_checkout_blocks( $order, $request ): void {
+		if (
+			! $request instanceof \WP_REST_Request
+			|| 'POST' !== $request->get_method()
+			|| ! $order instanceof \WC_Order
+			|| $order->get_id() <= 0
+			|| ! class_exists( '\Automattic\WooCommerce\StoreApi\Exceptions\RouteException' )
+		) {
+			return;
+		}
+
+		self::duplicateKiller_debug_log(
+			'blocks_check_start',
+			array(
+				'request_debug_id' => uniqid( 'duplicateKiller_wc_blocks_', true ),
+				'order_id'         => $order->get_id(),
+			)
+		);
+
+		if ( ! function_exists( 'WC' ) || ! WC()->cart ) {
+			return;
+		}
+
+		$data = self::extract_store_api_checkout_data( $request );
+		$pm   = self::extract_store_api_payment_method( $request );
+
+		if ( empty( $data['billing_email'] ) ) {
+			$data['billing_email'] = (string) $order->get_billing_email();
+		}
+
+		if ( '' !== $pm ) {
+			$data['payment_method'] = $pm;
+		}
+
+		if ( ! is_email( $data['billing_email'] ?? '' ) ) {
+			return;
+		}
+
+		$fingerprint = self::build_fingerprint( $data );
+
+		if ( '' === $fingerprint ) {
+			return;
+		}
+
+		// FREE retains its fixed default and existing developer filter.
+		$window = (int) apply_filters(
+			'duplicateKiller_wc_lock_window_seconds',
+			self::LOCK_WINDOW_SECONDS,
+			$data
+		);
+		$window   = max( 10, $window );
+		$key      = 'duplicateKiller_wc_' . $fingerprint;
+		$existing = get_transient( $key );
+
+		self::duplicateKiller_debug_log(
+			'blocks_transient_loaded',
+			array(
+				'transient_key' => $key,
+				'lock_exists'   => ! empty( $existing ),
+				'lock_window'   => $window,
+			)
+		);
+
+		if ( ! empty( $existing ) ) {
+			self::log_duplicate_event( $fingerprint, $data );
+			self::increment_blocked_counter();
+
+			$custom_message = (string) self::get_setting( 'message', '' );
+
+			if ( '' === $custom_message ) {
+				$custom_message = __( 'It looks like your order was already submitted. Please wait a moment and check your email for confirmation.', 'duplicate-killer' );
+			}
+
+			$custom_message = apply_filters(
+				'duplicateKiller_wc_duplicate_message',
+				$custom_message,
+				$data
+			);
+
+			self::duplicateKiller_debug_log(
+				'blocks_duplicate_throw_route_exception',
+				array( 'fingerprint' => $fingerprint )
+			);
+
+			throw new \Automattic\WooCommerce\StoreApi\Exceptions\RouteException(
+				'duplicate_killer_duplicate_order',
+				esc_html( wp_strip_all_tags( (string) $custom_message ) ),
+				409
+			);
+		}
+
+		set_transient(
+			$key,
+			array(
+				'created_at' => time(),
+				'order_id'   => 0,
+				'received'   => '',
+			),
+			$window
+		);
+
+		// Preserve the existing FREE order-linking method and public signature.
+		// A known order is not proof that payment has succeeded.
+		self::duplicateKiller_wc_record_successful_order(
+			$order->get_id(),
+			$data,
+			$order
+		);
+
+		self::duplicateKiller_debug_log(
+			'blocks_lock_created',
+			array(
+				'transient_key' => $key,
+				'fingerprint'   => $fingerprint,
+				'lock_window'   => $window,
+			)
+		);
 	}
 	/**
 	 * Store the created order details in the lock transient so subsequent duplicates
@@ -396,21 +473,20 @@ final class duplicateKiller_WooCommerce {
 	 * Build a stable fingerprint for the current checkout attempt.
 	 */
 	private static function build_fingerprint( array $data ): string {
-		$email = '';
-		if ( isset( $data['billing_email'] ) ) {
-			$email = sanitize_email( (string) $data['billing_email'] );
-			$email = strtolower( trim( $email ) );
-		}
+		$email = isset( $data['billing_email'] ) && is_scalar( $data['billing_email'] )
+			? strtolower( trim( sanitize_email( (string) $data['billing_email'] ) ) )
+			: '';
 
-		if ( '' === $email ) {
+		if ( '' === $email || ! function_exists( 'WC' ) || ! WC()->cart ) {
 			return '';
 		}
 
-		$currency = function_exists( 'get_woocommerce_currency' ) ? (string) get_woocommerce_currency() : '';
-		$currency = sanitize_text_field( $currency );
+		$currency = function_exists( 'get_woocommerce_currency' )
+			? sanitize_text_field( (string) get_woocommerce_currency() )
+			: '';
 
-		// Cart items hash: product_id:variation_id:qty
 		$items = array();
+
 		foreach ( WC()->cart->get_cart() as $cart_item ) {
 			$product_id   = isset( $cart_item['product_id'] ) ? (int) $cart_item['product_id'] : 0;
 			$variation_id = isset( $cart_item['variation_id'] ) ? (int) $cart_item['variation_id'] : 0;
@@ -420,25 +496,16 @@ final class duplicateKiller_WooCommerce {
 				$items[] = $product_id . ':' . $variation_id . ':' . $qty;
 			}
 		}
+
 		sort( $items );
-		
+
 		if ( empty( $items ) ) {
 			return '';
 		}
+
 		$items_hash = hash( 'sha256', implode( '|', $items ) );
-		
-		// Total (string normalized)
-		$total = '';
-		if ( WC()->cart ) {
-			// get_total returns formatted HTML sometimes; use numeric total
-			$total = (string) WC()->cart->get_total( 'edit' );
-		}
-		$total = preg_replace( '/\s+/', '', (string) $total );
-		$total = sanitize_text_field( $total );
+		$raw        = $email . '|' . $items_hash . '|' . $currency;
 
-		$raw = $email . '|' . $items_hash . '|' . $total . '|' . $currency;
-
-		// Final key hash (short)
 		return substr( hash( 'sha256', $raw ), 0, 32 );
 	}
 	private static function log_duplicate_event( string $fingerprint, array $data ): void {
@@ -626,58 +693,30 @@ final class duplicateKiller_WooCommerce {
 	}
 
 	private static function render_checkout_compat_notice(): void {
+		$dk_wc_view = 'checkout';
+		$mode       = self::get_checkout_mode();
 
-		$mode = self::get_checkout_mode();
+		// No documentation link is configured for the FREE view.
+		$article_url = '';
 
-		// Keep it visually similar to WP admin notices, but simple.
-		$box_style = 'margin:12px 0 10px;padding:10px 12px;border-radius:6px;border:1px solid #dcdcde;background:#fff;';
+		switch ( $mode ) {
+			case 'shortcode':
+				$checkout_description = __( 'Your Checkout page uses Classic Checkout. FREE supports this checkout type.', 'duplicate-killer' );
+				break;
 
-		if ( 'shortcode' === $mode ) {
-			echo '<div style="' . esc_attr( $box_style ) . 'border-left:4px solid #00a32a;">';
-			echo '<p style="margin:0;"><strong>' . esc_html__( 'Compatibility: OK', 'duplicate-killer' ) . '</strong> — ';
-			echo esc_html__( 'Your Checkout page uses the classic shortcode, so FREE protection works.', 'duplicate-killer' );
-			echo '</p></div>';
-			return;
+			case 'blocks':
+				$checkout_description = __( 'Your Checkout page uses Checkout Blocks. FREE supports this checkout type.', 'duplicate-killer' );
+				break;
+
+			case 'missing':
+				$checkout_description = __( 'WooCommerce Checkout page is missing. Configure it in WooCommerce settings to use this feature.', 'duplicate-killer' );
+				break;
+
+			default:
+				$checkout_description = __( 'FREE supports WooCommerce Classic Checkout and Checkout Blocks. Test custom checkout pages before going live.', 'duplicate-killer' );
 		}
 
-		if ( 'blocks' === $mode ) {
-
-			$article_url = 'https://verselabwp.com/woocommerce-checkout-blocks-vs-classic-checkout-why-duplicate-killer-free-works-only-with-shortcodes/';
-
-			echo '<div style="margin:12px 0 10px;padding:12px 14px;border-radius:6px;border:1px solid #dcdcde;background:#fff8f8;border-left:4px solid #d63638;">';
-
-			echo '<p style="margin:0 0 6px 0;"><strong>';
-			echo esc_html__( 'WooCommerce Checkout Blocks detected', 'duplicate-killer' );
-			echo '</strong></p>';
-
-			echo '<p style="margin:0 0 8px 0;line-height:1.5;">';
-			echo esc_html__( 'Duplicate Killer FREE works only with the Classic Checkout shortcode. Checkout Blocks use a different system and require PRO support.', 'duplicate-killer' );
-			echo '</p>';
-
-			echo '<p style="margin:0;">';
-			echo '<a href="' . esc_url( $article_url ) . '" target="_blank" style="font-weight:600;text-decoration:none;">';
-			echo esc_html__( 'Learn why FREE does not support Checkout Blocks →', 'duplicate-killer' );
-			echo '</a>';
-			echo '</p>';
-
-			echo '</div>';
-
-			return;
-		}
-
-		if ( 'missing' === $mode ) {
-			echo '<div style="' . esc_attr( $box_style ) . 'border-left:4px solid #d63638;background:#fff8f8;">';
-			echo '<p style="margin:0;"><strong>' . esc_html__( 'Checkout page not configured', 'duplicate-killer' ) . '</strong><br>';
-			echo esc_html__( 'WooCommerce Checkout page is missing. Configure it in WooCommerce settings to use this feature.', 'duplicate-killer' );
-			echo '</p></div>';
-			return;
-		}
-
-		// custom / unknown
-		echo '<div style="' . esc_attr( $box_style ) . 'border-left:4px solid #dba617;background:#fffbf0;">';
-		echo '<p style="margin:0;"><strong>' . esc_html__( 'Compatibility: uncertain', 'duplicate-killer' ) . '</strong><br>';
-		echo esc_html__( 'FREE is designed for Classic Checkout shortcode. If your checkout is custom or block-based, results may vary. PRO supports Blocks.', 'duplicate-killer' );
-		echo '</p></div>';
+		require DUPLICATEKILLER_PLUGIN_DIR . '/admin/database/views/woocommerce-settings.php';
 	}
 	private static function get_other_checkout_shortcode_pages(): array {
 
@@ -719,6 +758,33 @@ final class duplicateKiller_WooCommerce {
 		}
 
 		return array_values( array_unique( $others ) );
+	}
+		/**
+	 * Read the native Store API payment method without inspecting payment data.
+	 */
+	private static function extract_store_api_payment_method( $request ): string {
+		$value = $request->get_param( 'payment_method' );
+
+		return is_string( $value ) ? sanitize_key( $value ) : '';
+	}
+
+	/**
+	 * Map native Store API addresses to the same keys used by PRO.
+	 */
+	private static function extract_store_api_checkout_data( $request ): array {
+		$billing = $request->get_param( 'billing_address' );
+		$billing = is_array( $billing ) ? $billing : array();
+		$email   = $billing['email'] ?? $request->get_param( 'billing_email' );
+
+		return is_string( $email )
+			? array( 'billing_email' => sanitize_email( $email ) )
+			: array();
+	}
+
+	private static function duplicateKiller_debug_log( string $stage, array $payload = array() ): void {
+		if ( class_exists( 'duplicateKiller_Diagnostics' ) ) {
+			duplicateKiller_Diagnostics::log( 'woocommerce', $stage, $payload );
+		}
 	}
 	private static function get_user_ip(): string {
 
